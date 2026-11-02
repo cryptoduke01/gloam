@@ -35,8 +35,8 @@ published.
 
 What to know before you use mainnet:
 
-- **Beta.** Gloam is beta software. Deposits are capped at 500 USDG per deposit
-  and 25,000 USDG in total for now. The SDK checks the per-deposit limit before
+- **Beta.** Gloam is beta software. Deposits are capped at 50,000 USDG per deposit
+  and 2,500,000 USDG in total. The SDK checks the per-deposit limit before
   it proves (`assertDepositAllowed`).
 - **Fees.** Deposits and private payments are free. Cashing out costs 0.25%
   (`cashOutFee(amount)`).

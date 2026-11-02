@@ -117,7 +117,7 @@ const LIVE_FACTS: Fact[] = [
   ...FACTS,
   {
     title: "Beta deposit limits",
-    body: "On mainnet each stablecoin takes up to 500 per deposit and 25,000 in total, and $GLOAM 25,000 and 250,000. Cash outs and private payments are never limited. Raising a limit waits the same three days; lowering one is instant.",
+    body: "On mainnet each stablecoin takes up to 50,000 per deposit and 2,500,000 in total, and $GLOAM 2,500,000 and 25,000,000. Cash outs and private payments are never limited. Raising a limit waits the same three days; lowering one is instant.",
   },
 ];
 

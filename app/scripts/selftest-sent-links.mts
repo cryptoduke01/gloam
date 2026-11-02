@@ -229,4 +229,15 @@ await test("nullifier matches the app's own note derivation", async () => {
   }
 });
 
+await test("a send that fails drops only what it kept itself, and a code it can't keep stops it", async () => {
+  const { readFileSync } = await import("node:fs");
+  const view = readFileSync(new URL("../src/components/app/MoveView.tsx", import.meta.url), "utf8");
+  const send = view.slice(view.indexOf("async function onPrivateSend()"), view.indexOf("async function scanInbox()"));
+  assert.ok(send.length > 0);
+  // a landed send leaves its ids here, and a later failure must not act on them
+  assert.ok(send.indexOf("keptBeforeSend.current = null") < send.indexOf("if (!selected"), "cleared before anything can fail");
+  assert.ok(!/saveSentLink\([^)]*\)\.catch/.test(send), "a failed save is not swallowed");
+  assert.ok(send.indexOf("await saveSentLink") < send.indexOf("relayTransfer("), "kept before it is sent");
+});
+
 console.log(`sent links: ${passed} passed`);

@@ -16,6 +16,7 @@
  * without a deposit address, which needs an API key). Logos are kept in
  * public/brand so a browser never calls a third party to draw them.
  */
+import { formatUnits } from "viem";
 import type { ChainFamily, GloamNetwork } from "./networks";
 
 export type BridgeChainKind = "evm" | "svm" | "tvm" | "bvm";
@@ -238,13 +239,70 @@ export type PrivateBridgeQuote = {
   sameChain: boolean;
   send: { amount: string; symbol: string; chain: string; chainId: number; logo: string; usd: number | null };
   receive: { amount: string; symbol: string; chain: string; logo: string };
-  /** The swap's price buffer, back to the wallet as the stablecoin. */
+  /** What's left of the swap after the deposit, back to the wallet as the stablecoin (swapLeftover). */
   extra: string | null;
   feeUsd: number;
   /** The paying chain's own network fee, when Relay prices it. */
   gasUsd: number | null;
   timeSec: number;
 };
+
+/**
+ * The slippage asked of Relay on a same-chain swap into the private balance,
+ * in basis points. Its default is 100. Over 54 live quotes in the real order
+ * shape on 2026-11-02, 30 paid in a median 0.59% over the amount against 1.51%,
+ * and every size still got a route. A swap that misses reverts whole, for the
+ * network fee only.
+ */
+export const SWAP_SLIPPAGE_BPS = "30";
+
+/**
+ * The most of what's paid a buffer takes, as far as a leftover is estimated.
+ * The widest in those quotes when Relay named no leftover was 1.22%. Past
+ * this share the gap is treated as the route's cost, not as money coming back.
+ */
+export const SWAP_BUFFER_MAX_SHARE = 0.015;
+
+/**
+ * What comes back to the wallet from a same-chain swap, as the stablecoin:
+ * the swap sells all the ETH sent, the deposit takes `amount` and the rest is
+ * returned. Relay answers two ways. Some routes state the swap's output above
+ * the amount, and that is the answer. Others (0x) state exactly the amount
+ * while the input is just as padded, so the leftover is what's paid in dollars
+ * less the amount and Relay's fee.
+ *
+ * An estimate stops at SWAP_BUFFER_MAX_SHARE, because routeCost counts this as
+ * money coming out: uncapped it would cancel the very gap a bad route shows up
+ * as, and leaving it out would count an ordinary buffer as a cost. Null when
+ * nothing comes back or it can't be told.
+ */
+export function swapLeftover(q: { out: bigint; amount: bigint; decimals: number; paidUsd: number | null; feeUsd: number }): string | null {
+  if (q.out > q.amount) return formatUnits(q.out - q.amount, q.decimals);
+  if (q.paidUsd === null || !Number.isFinite(q.paidUsd) || !Number.isFinite(q.feeUsd)) return null;
+  const gap = q.paidUsd - Number(formatUnits(q.amount, q.decimals)) - q.feeUsd;
+  const left = Math.min(gap, q.paidUsd * SWAP_BUFFER_MAX_SHARE).toFixed(q.decimals);
+  return Number(left) > 0 ? left : null;
+}
+
+/** "about 11 USDG", or null under a cent. Whole above ten: the figure moves with the price until the swap lands. */
+export function leftoverLabel(q: { extra: string | null; receive: { symbol: string } }): string | null {
+  const n = Number(q.extra ?? 0);
+  if (!(n >= 0.01)) return null;
+  const shown = n < 10 ? n.toFixed(2) : Math.round(n).toLocaleString("en-US");
+  return `about ${shown} ${q.receive.symbol}`;
+}
+
+/**
+ * What the wallet's confirm screen will show for a same-chain swap, said before
+ * it opens. The wallet sees the ETH go out and the leftover come back, and can
+ * never see the deposit. Without a figure, it still may show some.
+ */
+export function swapWalletNote(q: { extra: string | null; receive: { amount: string; symbol: string } }): string {
+  const n = Number(q.receive.amount);
+  const amount = n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+  const back = leftoverLabel(q);
+  return `Your wallet ${back ? `will show ${back}` : `may show a little ${q.receive.symbol}`} coming back. That's the leftover from the swap. The ${amount} ${q.receive.symbol} goes straight into your private balance, so your wallet won't list it.`;
+}
 
 export type BridgeStage = "waiting" | "moving" | "done" | "failed" | "refunded";
 

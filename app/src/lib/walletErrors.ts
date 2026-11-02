@@ -50,6 +50,23 @@ export function surelyNotSent(e: unknown): boolean {
   return walletDeclined(e) || failedBeforeSend(e);
 }
 
+/**
+ * A Solana wallet asked to sign and send. These errors carry no code to lean on,
+ * so this goes by the words, and only ones that can't come after a send. A
+ * channel or connection that closed says nothing about the transaction: an
+ * extension's worker can stop after it sent, so that keeps what was kept.
+ */
+const SOLANA_DECLINED = /reject|denied|declin|cancel|(?:plugin|popup|window|wallet|extension)(?: was| is)? closed/i;
+const SOLANA_NOT_SENT = /simulat|blockhash|insufficient|not enough/i;
+
+export function solanaDeclined(message: string): boolean {
+  return SOLANA_DECLINED.test(message);
+}
+
+export function solanaSurelyNotSent(message: string): boolean {
+  return solanaDeclined(message) || SOLANA_NOT_SENT.test(message);
+}
+
 /** The short, human part of a wallet or viem error (viem's long message lists the chain and call). */
 export function walletErrorText(e: unknown): string {
   const first = chain(e)[0];

@@ -6,7 +6,7 @@
  * address whatever CoinGecko doesn't answer for, and the last good price stands
  * in for a while when neither does. Server only.
  */
-import { COINGECKO_MARKED, MARKED_BY_CHAIN } from "./markedTokens";
+import { COINGECKO_MARKED, MARKED_BY_CHAIN, STOCK_FALLBACK_MARKED } from "./markedTokens";
 import { cacheGetJson, cacheSetJson } from "./tractionStore";
 
 const FRESH_MS = 60_000;
@@ -50,14 +50,15 @@ export function dexPrices(pairs: readonly DexPair[], chain: string, addresses: r
 
 async function readCoingecko(): Promise<Map<string, number>> {
   const out = new Map<string, number>();
-  const ids = [...new Set(COINGECKO_MARKED.map((t) => t.coingecko!))].join(",");
+  const listed = [...COINGECKO_MARKED, ...STOCK_FALLBACK_MARKED];
+  const ids = [...new Set(listed.map((t) => t.coingecko!))].join(",");
   const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`, {
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     cache: "no-store",
   }).catch(() => null);
   if (!res?.ok) return out;
   const prices = (await res.json().catch(() => null)) as Record<string, { usd?: unknown }> | null;
-  for (const t of COINGECKO_MARKED) {
+  for (const t of listed) {
     const usd = prices?.[t.coingecko!]?.usd;
     if (validUsd(usd)) out.set(t.address.toLowerCase(), usd);
   }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Relay's quote JSON is read field by field and checked below */
 import { NextResponse } from "next/server";
 import { formatUnits, isAddress, parseUnits } from "viem";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";

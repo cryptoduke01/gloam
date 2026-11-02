@@ -21,9 +21,11 @@ import {
   BRIDGE_DESTINATIONS,
   BRIDGE_MIN_USD,
   RELAY_REFERRER,
+  SWAP_SLIPPAGE_BPS,
   bridgeChain,
   bridgeToken,
   privateBridgeable,
+  swapLeftover,
   swapSource,
   validRefundAddress,
   type PrivateBridgeQuote,
@@ -101,7 +103,8 @@ function evmSteps(steps: any[], chainId: number, sender: string): PrivateBridgeT
  *   - an EVM wallet on another chain: an approve (for a token) and a deposit,
  *     which the wallet signs on that chain;
  *   - this chain's own coin (ETH on Robinhood Chain): one swap that also makes
- *     the deposit, simulated here; the price buffer comes back to the wallet.
+ *     the deposit, simulated here; what's left of the swap comes back to the
+ *     wallet as the stablecoin.
  * If the call can't run, Relay sends the stablecoin to `recipient` instead.
  * Nothing here holds money or a secret: the commitment and proof are public.
  */
@@ -158,7 +161,7 @@ export async function POST(req: Request) {
 
   // The vault's own checks, read before anyone pays: room under the beta
   // limits, a commitment it hasn't seen, and a proof its verifier accepts.
-  const client = createPublicClient({ chain: network.chain, transport: serverTransport(network, { retryCount: 2 }) });
+  const client = createPublicClient({ chain: network.chain, ccipRead: false, transport: serverTransport(network, { retryCount: 2 }) });
   const pool = network.pool as Address;
   try {
     const [limitsOn, limit, deposited, seen, verifier] = await Promise.all([
@@ -217,6 +220,7 @@ export async function POST(req: Request) {
         amount: amount.toString(),
         tradeType: "EXACT_OUTPUT",
         useDepositAddress: false,
+        ...(sameChain ? { slippageTolerance: SWAP_SLIPPAGE_BPS } : {}),
         txs: [
           { to: asset, value: "0", data: approveData },
           { to: pool, value: "0", data: shieldData },
@@ -335,7 +339,7 @@ export async function POST(req: Request) {
     // The wallet must hold enough on that chain. The same-chain swap is
     // simulated whole (swap, approve and deposit); a cross-chain payment is
     // checked by balance, since its deposit needs the approve to land first.
-    const origin = createPublicClient({ chain: evmChain!, transport: http(evmChain!.rpcUrls.default.http[0], { timeout: 10_000 }) });
+    const origin = createPublicClient({ chain: evmChain!, ccipRead: false, transport: http(evmChain!.rpcUrls.default.http[0], { timeout: 10_000 }) });
     if (sameChain) {
       try {
         await origin.call({ account: sender as Address, to: deposit.to as Address, data: deposit.data as Hex, value: BigInt(deposit.value) });
@@ -355,6 +359,7 @@ export async function POST(req: Request) {
 
   const feeUsd = ["relayer", "app"].reduce((sum, k) => sum + Number(data?.fees?.[k]?.amountUsd ?? 0), 0);
   const gasUsd = Number(data?.fees?.gas?.amountUsd ?? NaN);
+  const paidUsd = Number.isFinite(usdIn) ? Math.round(usdIn * 100) / 100 : null;
   const quote: PrivateBridgeQuote = {
     requestId,
     solanaTx,
@@ -366,10 +371,10 @@ export async function POST(req: Request) {
       chain: chain.name,
       chainId: chain.id,
       logo: token.logo,
-      usd: Number.isFinite(usdIn) ? Math.round(usdIn * 100) / 100 : null,
+      usd: paidUsd,
     },
     receive: { amount: amountText, symbol: dest.token.symbol, chain: dest.chain, logo: dest.token.logo },
-    extra: sameChain && outAmount > amount ? formatUnits(outAmount - amount, dest.token.decimals) : null,
+    extra: sameChain ? swapLeftover({ out: outAmount, amount, decimals: dest.token.decimals, paidUsd, feeUsd }) : null,
     feeUsd: Math.round(feeUsd * 100) / 100,
     gasUsd: Number.isFinite(gasUsd) ? Math.round(gasUsd * 100) / 100 : null,
     timeSec: Number(data?.details?.timeEstimate ?? 0),

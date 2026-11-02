@@ -14,6 +14,7 @@ import { robinhood } from "../chain";
 import { serverTransport } from "../serverRpc";
 import type { VoteConfig } from "./config";
 import {
+  ContractCheckDown,
   MAX_SIGNATURE_HEX,
   SIGNED_MAX_AGE_SEC,
   SIGNED_MAX_AHEAD_SEC,
@@ -69,14 +70,27 @@ export function parseBallotInput(raw: unknown, v: VoteConfig): BallotInput {
 let rhClient: PublicClient | null = null;
 
 /** ERC-1271 and ERC-6492 checks for smart wallets, over Robinhood Chain mainnet. */
-export async function smartWalletCheck(message: VoteMessage, signature: Hex): Promise<boolean> {
+async function verifySmartWallet(message: VoteMessage, signature: Hex): Promise<boolean> {
   rhClient ??= createPublicClient({
     chain: robinhood,
+    ccipRead: false,
     transport: serverTransport({ chainId: robinhood.id, chain: robinhood, historyRpc: null }, { timeout: 8_000, retryCount: 1 }),
   }) as PublicClient;
   // a smart wallet may have signed the typed data or, on the fallback, the plain-text form
-  if (await rhClient.verifyTypedData({ address: message.voter, ...voteTypedData(message), signature }).catch(() => false)) return true;
-  return rhClient.verifyMessage({ address: message.voter, message: voteText(message), signature }).catch(() => false);
+  if (await rhClient.verifyTypedData({ address: message.voter, ...voteTypedData(message), signature })) return true;
+  return rhClient.verifyMessage({ address: message.voter, message: voteText(message), signature });
+}
+
+/** For a ballot coming in: no answer from the node reads as no, and the voter signs again. */
+export function smartWalletCheck(message: VoteMessage, signature: Hex): Promise<boolean> {
+  return verifySmartWallet(message, signature).catch(() => false);
+}
+
+/** For the final count, which is stored once: no answer stops the count, and it runs again later. */
+export function smartWalletFinalCheck(message: VoteMessage, signature: Hex): Promise<boolean> {
+  return verifySmartWallet(message, signature).catch(() => {
+    throw new ContractCheckDown(message.voter);
+  });
 }
 
 export type SubmitContext = {
@@ -105,6 +119,10 @@ export async function submitBallot(raw: unknown, ctx: SubmitContext): Promise<{ 
   const nowSec = Math.floor(now / 1000);
   if (input.timestamp < nowSec - SIGNED_MAX_AGE_SEC || input.timestamp > nowSec + SIGNED_MAX_AHEAD_SEC) {
     throw new VoteError(400, "stale", "That signature is too old. Sign again.");
+  }
+  // A fast device clock can sign past the close. The count would throw that out, and with it the earlier vote this replaces.
+  if (input.timestamp >= Date.parse(v.end) / 1000) {
+    throw new VoteError(400, "stale", "Your device's clock is ahead of the vote's close. Set it right and sign again.");
   }
 
   const message = voteMessage(v, input.option, input.voter, input.timestamp);

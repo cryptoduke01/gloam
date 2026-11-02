@@ -527,8 +527,8 @@ GLOAM_LIMITS_FILE=./limits.json
       </div>
       <ul>
         <li>
-          <strong>Beta limits on mainnet:</strong> 500 of a stablecoin per
-          deposit and 25,000 in total per stablecoin.
+          <strong>Beta limits on mainnet:</strong> 50,000 of a stablecoin per
+          deposit and 2,500,000 in total per stablecoin.
         </li>
         <li>
           <strong>ACP and the vault take the same money.</strong> ACP pays in

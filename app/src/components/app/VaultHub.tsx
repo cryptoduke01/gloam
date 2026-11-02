@@ -149,7 +149,7 @@ export function VaultHub() {
 
   return (
     <div className="space-y-6">
-      <StocksLiveNote chainId={network.chainId} where="vault" />
+      <StocksLiveNote chainId={network.chainId} where="vault" alone={current.id === "swap"} />
       <ActionRow actions={actions} current={current.id} onSelect={select} />
 
       <div id="vault-panel" role="tabpanel" aria-labelledby={`vault-tab-${current.id}`} className="min-w-0">
@@ -238,7 +238,7 @@ function ActionRow({
               title={a.line}
               onClick={() => onSelect(a.id)}
               onKeyDown={onKey}
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-[12px] leading-tight transition-colors duration-200 max-sm:h-[60px] sm:h-10 sm:flex-row sm:whitespace-nowrap sm:rounded-full sm:px-4 sm:text-[14px] ${
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-[12px] leading-tight transition-colors duration-200 max-sm:h-[60px] max-sm:px-0 sm:h-10 sm:flex-row sm:whitespace-nowrap sm:rounded-full sm:px-4 sm:text-[14px] ${
                 a.extra && !active ? "max-sm:hidden" : ""
               } ${extraStart ? "sm:ml-2" : ""} ${
                 active
@@ -249,7 +249,7 @@ function ActionRow({
               <span className="sm:hidden">
                 <VaultActionIcon id={a.id} size={18} />
               </span>
-              <span className="max-w-full truncate md:hidden">{a.short}</span>
+              <span className="max-w-full text-center md:hidden">{a.short}</span>
               <span className="hidden md:inline">{a.label}</span>
             </button>
           );

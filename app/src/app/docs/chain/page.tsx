@@ -285,16 +285,11 @@ export default function DocsNetworksPage() {
       </div>
       <ul>
         <li>
-          <strong>Beta deposit limits.</strong> Each stablecoin: 500 per deposit
-          and 25,000 in total. ETH on Base and Ethereum: 0.2 per deposit and 10
-          in total. $GLOAM: 25,000 per deposit and 250,000 in total. PONS: 3,900
-          and 98,000. CASHCAT: 9,600 and 240,000. The app shows the room left
-          before you sign.
-        </li>
-        <li>
-          <strong>Higher limits queued.</strong> A 100x raise of the beta
-          deposit limits is queued behind the public 3-day timelock and applies
-          around 1 November 2026. Until then the limits above hold.
+          <strong>Beta deposit limits.</strong> Each stablecoin: 50,000 per
+          deposit and 2,500,000 in total. ETH on Base and Ethereum: 20 per
+          deposit and 1,000 in total. $GLOAM: 2,500,000 per deposit and
+          25,000,000 in total. PONS: 390,000 and 9,800,000. CASHCAT: 960,000 and
+          24,000,000. The app shows the room left before you sign.
         </li>
         <li>
           <strong>Never limited:</strong> private payments and cash outs.
@@ -378,8 +373,8 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Mainnet assets</strong>, USDG, $GLOAM, PONS and CASHCAT to add
-          privately, with beta limits of 3,900 PONS per deposit and 98,000 in
-          total, and 9,600 CASHCAT per deposit and 240,000 in total, the limits
+          privately, with beta limits of 390,000 PONS per deposit and 9,800,000 in
+          total, and 960,000 CASHCAT per deposit and 24,000,000 in total, the limits
           live now. Stock tokens, WETH and the other swap tokens come in through a
           private swap.
         </li>
@@ -582,7 +577,11 @@ export default function DocsNetworksPage() {
           not on Robinhood Chain mainnet)
         </li>
         <li>
-          <strong>Beta limits, both networks</strong>, each stablecoin 500 per
+          <strong>Beta limits on Base mainnet</strong>, each stablecoin 50,000
+          per deposit and 2,500,000 in total; ETH 20 per deposit and 1,000 in total
+        </li>
+        <li>
+          <strong>Beta limits on Base Sepolia</strong>, each stablecoin 500 per
           deposit and 25,000 in total; ETH 0.2 per deposit and 10 in total
         </li>
         <li>
@@ -595,7 +594,7 @@ export default function DocsNetworksPage() {
       <ul>
         <li>
           <strong>Base Sepolia runs the mainnet keys.</strong> It is a testnet,
-          but the same contract, keys, limits and cash-out fee as Base mainnet,
+          but the same contract, keys and cash-out fee as Base mainnet,
           so proofs for chain 84532 use the final keys, not the dev keys the
           other testnets use.
         </li>
@@ -657,8 +656,8 @@ export default function DocsNetworksPage() {
           Tether&apos;s, USDG and PYUSD are issued by Paxos.
         </li>
         <li>
-          <strong>Beta limits</strong>, each stablecoin 500 per deposit and
-          25,000 in total; ETH 0.2 per deposit and 10 in total
+          <strong>Beta limits</strong>, each stablecoin 50,000 per deposit and
+          2,500,000 in total; ETH 20 per deposit and 1,000 in total
         </li>
         <li>
           <strong>BDX</strong>, 100,000 per deposit and 2,000,000 in total, set through the

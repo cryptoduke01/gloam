@@ -58,10 +58,14 @@ for (const [, url] of wagmi.matchAll(/http\("([^"]+)"/g)) {
 }
 
 // WalletConnect relay and the services read from the browser
-for (const url of ["wss://relay.walletconnect.org", "https://pulse.walletconnect.org", "https://api.coingecko.com/api/v3/simple/price", "https://api.relay.link/quote"]) {
+for (const url of ["wss://relay.walletconnect.org", "https://pulse.walletconnect.org", "https://api.relay.link/quote"]) {
   assert.ok(allowed(url), url);
   n++;
 }
+
+// prices come from the app's own server, so the browser reads no price API
+assert.ok(!allowed("https://api.coingecko.com/api/v3/simple/price"), "no browser price API");
+n++;
 
 // nothing that would break the app if enforced by mistake, and nothing wide open
 assert.ok(CSP_REPORT_ONLY.includes("'wasm-unsafe-eval'"), "the prover's WebAssembly is allowed");

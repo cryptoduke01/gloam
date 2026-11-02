@@ -117,7 +117,7 @@ async function signatureValid(address: Address, message: string, signature: Hex,
   const net = NETWORK_KEYS.map(getNetwork).find((n) => n.chainId === chainId);
   if (!net) return false;
   try {
-    const client = createPublicClient({ chain: net.chain, transport: serverTransport(net, { timeout: 15_000 }) });
+    const client = createPublicClient({ chain: net.chain, ccipRead: false, transport: serverTransport(net, { timeout: 15_000 }) });
     return await client.verifyMessage({ address, message, signature });
   } catch {
     return false;

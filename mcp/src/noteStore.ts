@@ -92,6 +92,40 @@ export type StoredNote = {
 
 export type NewNote = Omit<StoredNote, "handle" | "createdAt" | "updatedAt">;
 
+/** One send for a purchase: its payment note, the note that funds it, and the sealed payment that presents it. */
+export type PaymentSend = { note: string; input: string | null; header: string };
+
+/** A send with its notes as they stand. The notes hold secrets: this stays inside the server. */
+export type PaymentSendState = PaymentSend & { payment: StoredNote; funding?: StoredNote };
+
+/**
+ * A purchase this server set out to pay, from before anything is spent until its answer reached whoever asked,
+ * so that a retry presents this payment instead of making another.
+ */
+export type PaymentAttempt = {
+  /** When it was first claimed. A retry doesn't change this, so being asked again never keeps a record alive. */
+  at: string;
+  /** Who holds it: "pid:server:call", and when that call took it over, if it did. */
+  by: string;
+  takenAt?: string;
+  /** Paid once however often it is asked, as a challenge is: an answer that arrived does not clear it. */
+  once?: boolean;
+  /** Every send made for it, oldest first, each from just before it goes out. */
+  sends?: PaymentSend[];
+  /** The MPP credential, once there is one. */
+  authorization?: string;
+  /** The call that held it has ended. */
+  closed?: boolean;
+  /** Another call for this purchase came while it ran, so the first caller may have given up. */
+  retried?: boolean;
+};
+
+/**
+ * Claimed: nothing went out for this purchase, so pay. Otherwise `running` says another call holds it. If not,
+ * this call now does, and finds out from `sends` what became of them.
+ */
+export type PaymentClaim = { claimed: true } | { claimed: false; running: boolean; attempt: PaymentAttempt; sends: PaymentSendState[] };
+
 type StoreData = {
   notes: StoredNote[];
   receiveKey: ReceiveKey | null;
@@ -99,6 +133,8 @@ type StoreData = {
   pulls?: Record<string, { challenge: string; at: string }>;
   /** Payments a verify is settling right now, in any process: payment nullifier (lowercase) to when and by whom ("pid:server"). */
   settling?: Record<string, { at: string; by: string }>;
+  /** Purchases being paid, or whose answer may not have reached the caller, by purchase key. */
+  payments?: Record<string, PaymentAttempt>;
 };
 
 type StoreFile = {
@@ -190,6 +226,7 @@ export class NoteStore {
         receiveKey: data.receiveKey ?? null,
         ...(data.pulls && typeof data.pulls === "object" ? { pulls: data.pulls } : {}),
         ...(data.settling && typeof data.settling === "object" ? { settling: data.settling } : {}),
+        ...(data.payments && typeof data.payments === "object" ? { payments: data.payments } : {}),
       };
     } catch {
       const hint =
@@ -380,6 +417,90 @@ export class NoteStore {
     });
   }
 
+  /**
+   * Take a purchase for paying, under the lock and before anything is spent, as `by` ("pid:server:call"). Of any
+   * calls at once, one holds it. A call that ended, or whose process is gone, or that has held it `staleMs`, gives
+   * way (one that had not sent then refuses to: see markSend). A record goes a day after its payment last changed,
+   * or 30 days while a payment is not known to have landed or not: a retry then could pay twice.
+   */
+  claimPayment(key: string, staleMs: number, by: string, once = false): PaymentClaim {
+    return this.mutate((d) => {
+      const all = (d.payments ??= {});
+      for (const [k, v] of Object.entries(all)) {
+        const sends = sendsOf(d, v);
+        const last = Math.max(Date.parse(v.at), ...sends.map((s) => Date.parse(s.payment.updatedAt)));
+        if (Date.now() - last > (sends.some((s) => s.payment.status === "pending") ? PULL_KEEP_MS : DAY_MS)) delete all[k];
+      }
+      const held = all[key];
+      if (held) {
+        const sends = sendsOf(d, held);
+        if (!held.closed && processAlive(held.by) && Date.now() - Date.parse(held.takenAt ?? held.at) < staleMs) {
+          held.retried = true;
+          return { claimed: false, running: true, attempt: { ...held }, sends };
+        }
+        if (sends.length) {
+          const taken: PaymentAttempt = { ...held, by, takenAt: stamp() };
+          delete taken.closed;
+          delete taken.retried;
+          all[key] = taken;
+          return { claimed: false, running: false, attempt: taken, sends };
+        }
+      }
+      all[key] = { at: stamp(), by, ...(once ? { once } : {}) };
+      return { claimed: true };
+    });
+  }
+
+  /** Record a send just before it goes out. False when `by` no longer holds the purchase: a call that gave way must not send. */
+  markSend(key: string, by: string, send: PaymentSend): boolean {
+    return this.mutate((d) => {
+      const held = d.payments?.[key];
+      if (held?.by !== by) return false;
+      held.sends = [...(held.sends ?? []), send];
+      return true;
+    });
+  }
+
+  /** Keep what presents the payment that `by` made or found: the final header of `note`, and the credential. */
+  markPresented(key: string, by: string, note: string, presented: { header?: string; authorization?: string }) {
+    this.mutate((d) => {
+      const held = d.payments?.[key];
+      if (held?.by !== by) return;
+      const send = held.sends?.find((s) => s.note === note);
+      if (send && presented.header) send.header = presented.header;
+      if (presented.authorization) held.authorization = presented.authorization;
+    });
+  }
+
+  /**
+   * The call `by` has ended. `heard` means its caller got a finished answer, so a landed payment's record goes and
+   * the same call again is a new purchase. Otherwise anything that went out stays for a retry. Returns the record if
+   * it stays, with the payment note that landed, if one did.
+   */
+  closePayment(key: string, by: string, heard: boolean): { landed: string | null } | null {
+    return this.mutate((d) => {
+      const held = d.payments?.[key];
+      if (held?.by !== by) return null;
+      const sends = sendsOf(d, held);
+      const landed = sends.find((s) => s.payment.status === "spent")?.note ?? null;
+      if (!sends.length || (landed && heard && !held.retried && !held.once)) {
+        delete d.payments![key];
+        return null;
+      }
+      held.closed = true;
+      return { landed };
+    });
+  }
+
+  /** A payment that was presented by hand and served is finished: the same call again is a new purchase. */
+  dropPresented(presented: string) {
+    this.mutate((d) => {
+      for (const [k, v] of Object.entries(d.payments ?? {})) {
+        if (!v.once && (v.authorization === presented || v.sends?.some((s) => s.header === presented))) delete d.payments![k];
+      }
+    });
+  }
+
   receiveKey(): ReceiveKey | null {
     return this.read().receiveKey;
   }
@@ -391,6 +512,14 @@ export class NoteStore {
       return d.receiveKey;
     });
   }
+}
+
+/** A purchase's sends whose payment note is still there. One that surely never went out has had its note removed. */
+function sendsOf(d: StoreData, a: PaymentAttempt): PaymentSendState[] {
+  return (a.sends ?? []).flatMap((s) => {
+    const payment = d.notes.find((n) => n.handle === s.note);
+    return payment ? [{ ...s, payment, funding: s.input ? d.notes.find((n) => n.handle === s.input) : undefined }] : [];
+  });
 }
 
 /** A received note that gloam_verify_payment granted access for. One from before the served flag counts once it confirmed. */

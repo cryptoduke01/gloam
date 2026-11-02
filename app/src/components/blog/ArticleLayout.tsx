@@ -133,7 +133,7 @@ export function ArticleLayout({
               <h2 id="more-research" className="t-display-m">
                 More research
               </h2>
-              <Link href="/research" className="text-[15px] text-soft transition-colors hover:text-foreground">
+              <Link href="/research" className="gl-tap text-[15px] text-soft transition-colors hover:text-foreground">
                 All posts
               </Link>
             </div>

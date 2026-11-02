@@ -80,7 +80,6 @@ const SERVICES = [
   "https://wallet.tempo.xyz",
   "https://tokenlist.tempo.xyz",
   "https://api.relay.link",
-  "https://api.coingecko.com",
   "https://api.dexscreener.com",
   "https://va.vercel-scripts.com",
 ];

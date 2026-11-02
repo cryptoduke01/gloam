@@ -275,10 +275,19 @@ export async function recoverVoter(message: VoteMessage, signature: Hex): Promis
   return all.find((a) => a.toLowerCase() === want) ?? all[0] ?? null;
 }
 
+/** A contract check that got no answer, which says nothing about the signature. */
+export class ContractCheckDown extends Error {
+  constructor(voter: string) {
+    super(`no answer checking the signature of ${voter}`);
+    this.name = "ContractCheckDown";
+  }
+}
+
 /**
  * Checks a signature for `message.voter`. An ordinary wallet (an EOA, EIP-7702
  * ones included) is checked here, offline. A smart wallet goes to `contractCheck`
- * (ERC-1271 or ERC-6492 through an RPC) when one is given.
+ * (ERC-1271 or ERC-6492 through an RPC) when one is given. ContractCheckDown
+ * comes through: the final count stops on it rather than drop the vote for good.
  */
 export async function signatureValid(
   message: VoteMessage,
@@ -290,7 +299,8 @@ export async function signatureValid(
   if (!contractCheck) return false;
   try {
     return await contractCheck(message, signature);
-  } catch {
+  } catch (e) {
+    if (e instanceof ContractCheckDown) throw e;
     return false;
   }
 }

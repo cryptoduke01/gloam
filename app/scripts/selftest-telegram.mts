@@ -590,7 +590,7 @@ await test("mainnet live: Glim says so, still never another date, and its facts 
   assert.ok(!after.includes("never say mainnet is live until the team announces it"), "the countdown line is replaced");
   assert.ok(!after.includes("The app itself is still on testnet"));
   assert.ok(after.includes("gloam.trade/app (the app: mainnet and testnet)"));
-  assert.ok(after.includes("500 per deposit and 25,000 in total"));
+  assert.ok(after.includes("50,000 per deposit and 2,500,000 in total"));
   // private swaps on mainnet: what shows, what it costs, and the old sealed trade retired
   assert.ok(after.includes("PRIVATE SWAPS") && after.includes("Vault > Swap"));
   assert.ok(after.includes("Public: the two tokens and the two amounts"), "swap amounts are public");
@@ -637,10 +637,10 @@ await test("facts: live on four mainnets, with USDC, and none of the old two-cha
   assert.ok(k.includes("Gloam is live on four mainnets: Robinhood Chain and Tempo since 21 October 2026, and Base and Ethereum since 26 October 2026."));
   assert.ok(k.includes("USDC is in the vault: on Base and Ethereum mainnet as USDC"));
   assert.ok(k.includes("Never say Gloam has no USDC."));
-  assert.ok(k.includes("raised 100x"), "the limit raise behind the timelock");
+  assert.ok(k.includes("$GLOAM 2,500,000 per deposit and 25,000,000 in total"), "the limits in force");
   assert.ok(k.includes("The mainnets: Robinhood Chain 4663, Tempo 4217, Base 8453 and Ethereum 1."));
   assert.ok(k.includes('On mainnet it shows "You get"'), "the cash-out line reads as now");
-  for (const stale of ["Mainnet is coming", "Next (mainnet): Gloam goes live", "Its two testnets", "the other mainnet (Robinhood Chain or Tempo)", "which joined later"]) {
+  for (const stale of ["Mainnet is coming", "Next (mainnet): Gloam goes live", "Its two testnets", "the other mainnet (Robinhood Chain or Tempo)", "which joined later", "raised 100x", "25,000 per deposit, 250,000 in total"]) {
     assert.ok(!k.includes(stale), stale);
   }
 });
@@ -1188,6 +1188,15 @@ await test("moderation: look-alike Gloam accounts, DM lures, and the team's dele
   assert.deepEqual(moderationAsk("", "spam", false), { remove: true });
   assert.deepEqual(moderationAsk("", "del", false), { remove: false });
   assert.equal(moderationAsk("delete and kick him", null, false), null, "untagged words do nothing");
+  // an order opens with the verb; anything else an admin says while tagging the helper is not one
+  for (const [said, remove] of [["kick him", true], ["please ban this guy", true], ["block him", true], ["boot them", true], ["take it down", false], ["could you please remove this", false], ["remove him", true], ["go ahead and ban him", true]] as const) {
+    assert.deepEqual(moderationAsk(said, null, true), { remove }, said);
+  }
+  for (const said of ["which block was the snapshot?", "don't ban him", "please don't ban him", "how do they remove the passkey?", "why did you delete that?", "kick off the call at 5", "block height is what here?", "is he a scammer, should we ban him?"]) {
+    assert.equal(moderationAsk(said, null, true), null, said);
+  }
+  assert.deepEqual(moderationAsk("Glim, delete this", null, true, "Glim"), { remove: false }, "by name");
+  assert.deepEqual(moderationAsk("hey glim kick him", null, true, "Glim"), { remove: true }, "by name, with a greeting");
 
   // a look-alike posts a bare GIF: deleted, banned, one notice
   reset();

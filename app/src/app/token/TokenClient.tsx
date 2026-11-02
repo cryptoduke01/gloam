@@ -58,7 +58,7 @@ export function CopyAddress({ address }: { address: string }) {
     >
       <span className="tnum min-w-0 flex-1 py-1 leading-snug [overflow-wrap:anywhere]">{address}</span>
       <span
-        className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium transition-colors ${
+        className={`gl-tap inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium transition-colors ${
           copied ? "text-sealed" : "text-mute group-hover:bg-surface group-hover:text-foreground"
         }`}
       >

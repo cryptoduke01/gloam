@@ -239,7 +239,7 @@ export default function DocsPrivateSwapsPage() {
       </p>
       <p>
         Beta deposit limits apply to what lands, because the new note is a
-        deposit. One swap brings in at most 500 of a stablecoin, or 25,000
+        deposit. One swap brings in at most 50,000 of a stablecoin, or 2,500,000
         $GLOAM, and only while the vault has room under its total.
         {V2 &&
           " Every other token has its own limits, and a token the vault does not take yet can't be swapped into. A swap also spends no more than its refund could bring back in one deposit, so a larger part of your balance is split first."}

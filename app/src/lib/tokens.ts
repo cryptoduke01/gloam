@@ -179,7 +179,7 @@ export const RH_MAINNET_SWAP_TOKENS: OnchainToken[] = [
 
 /**
  * Tempo mainnet (4217): the four TIP-20 stablecoins the mainnet pool lists, 6
- * decimals each. Beta limits: 500 per deposit / 25,000 in total for each.
+ * decimals each. Beta limits: 50,000 per deposit / 2,500,000 in total for each.
  */
 export const TEMPO_MAINNET_TOKENS: OnchainToken[] = [
   { id: "usdce", symbol: "USDC.e", name: "Bridged USDC", address: "0x20c000000000000000000000b9537d11c60e8b50", decimals: 6, yahoo: "", kind: "stablecoin" },
@@ -214,7 +214,7 @@ const BDX: OnchainToken = {
  * checked on chain 2026-10-24. USDC and EURC are Circle's own (Circle can
  * blacklist an address); USDT is Tether bridged from Ethereum over Base's
  * standard bridge. Native ETH is listed too (supportsNativeShield). Beta limits:
- * 500 per deposit / 25,000 in total for each stablecoin, 0.2 / 10 ETH. Then BDX,
+ * 50,000 per deposit / 2,500,000 in total for each stablecoin, 20 / 1,000 ETH. Then BDX,
  * taken once its limit lands.
  */
 export const BASE_MAINNET_TOKENS: OnchainToken[] = [
@@ -226,8 +226,8 @@ export const BASE_MAINNET_TOKENS: OnchainToken[] = [
 
 /**
  * Base Sepolia (84532): Circle's test USDC and EURC (faucet.circle.com), 6
- * decimals, checked on chain 2026-10-24. Same limits as Base mainnet. There is
- * no USDT on Base Sepolia to list.
+ * decimals, checked on chain 2026-10-24. Beta limits: 500 per deposit / 25,000 in
+ * total for each, 0.2 / 10 ETH. There is no USDT on Base Sepolia to list.
  */
 export const BASE_SEPOLIA_TOKENS: OnchainToken[] = [
   { id: "usdc", symbol: "USDC", name: "USD Coin", address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", decimals: 6, yahoo: "", kind: "stablecoin" },
@@ -240,8 +240,8 @@ export const BASE_SEPOLIA_TOKENS: OnchainToken[] = [
  * Circle's, USDT is Tether's, USDG and PYUSD are Paxos's (PYUSD for PayPal); every
  * issuer can freeze an address. USDT's approve() and transfer() return nothing,
  * and approve() refuses to change one non-zero allowance into another. Native ETH
- * is listed too (supportsNativeShield). Beta limits: 500 per deposit / 25,000 in
- * total for each stablecoin, 0.2 / 10 ETH. Then BDX (9 decimals), taken once its
+ * is listed too (supportsNativeShield). Beta limits: 50,000 per deposit / 2,500,000 in
+ * total for each stablecoin, 20 / 1,000 ETH. Then BDX (9 decimals), taken once its
  * limit lands.
  */
 export const ETHEREUM_MAINNET_TOKENS: OnchainToken[] = [
@@ -288,7 +288,7 @@ export const CIRCLE_FAUCET_URL = "https://faucet.circle.com/";
  * Ethereum Sepolia (11155111): Circle's test USDC and EURC (faucet.circle.com)
  * and Paxos's test USDG and PYUSD (faucet.paxos.com, listed in Paxos's testnet
  * docs), 6 decimals each, checked on chain 2026-10-25 (symbol, name, decimals,
- * code). The same limits as the mainnets. Tether issues no USDT on Sepolia, so
+ * code). The same limits as Base Sepolia. Tether issues no USDT on Sepolia, so
  * none is listed. Native ETH is listed too (supportsNativeShield).
  */
 export const ETHEREUM_SEPOLIA_TOKENS: OnchainToken[] = [

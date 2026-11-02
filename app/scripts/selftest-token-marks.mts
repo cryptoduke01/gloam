@@ -12,7 +12,7 @@ process.env.GLOAM_PARTNERS_STORE = "memory";
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
 
-const { COINGECKO_MARKED, MARKED_BY_CHAIN, hasCoingeckoMarks } = await import("../src/lib/markedTokens");
+const { COINGECKO_MARKED, MARKED_BY_CHAIN, STOCK_FALLBACK_MARKED, hasCoingeckoMarks } = await import("../src/lib/markedTokens");
 const { dexPrices, loadTokenMarks } = await import("../src/lib/tokenMarksServer");
 const { GET } = await import("../src/app/api/token-marks/route");
 
@@ -22,6 +22,9 @@ const symbols = COINGECKO_MARKED.map((t) => t.symbol);
 // ---- The fixed list.
 for (const s of ["PONS", "CASHCAT", "GLOAM", "AI", "ORBIO"]) assert.ok(symbols.includes(s), `${s} is on the list`);
 for (const s of ["EURC", "USDC", "USDG", "WETH", "NVDA"]) assert.ok(!symbols.includes(s), `${s} is not priced here`);
+// Stocks are priced by the markets feed; the server's price is only the swap and transparency pages' fallback.
+assert.ok(STOCK_FALLBACK_MARKED.some((t) => t.symbol === "NVDA"), "a stock has a fallback price");
+assert.ok(STOCK_FALLBACK_MARKED.every((t) => t.kind === "stock"), "only stocks are on the fallback list");
 assert.ok(hasCoingeckoMarks(4663) && hasCoingeckoMarks(8453) && hasCoingeckoMarks(1) && !hasCoingeckoMarks(4217));
 assert.ok(
   MARKED_BY_CHAIN.find((c) => c.chainId === 8453)!.tokens.some((t) => t.symbol === "BDX") &&

@@ -21,17 +21,18 @@
  * when any other site asks for it. Turning on and restoring use version 2. A
  * version 1 signature is only asked for when the person says they have an older
  * backup (restoreOlderBackup), or to update the key in Settings; either way the
- * backup moves across (see moveBackup). A browser still on version 1 saves to it
- * until VERSION1_SAVES_UNTIL. Version 1 backups stay on the server after that,
- * and can always be opened.
+ * backup moves across (see moveBackup). A browser still on version 1 saves to the
+ * backup it has until VERSION1_SAVES_UNTIL, and starts none. The server holds both
+ * rules. Version 1 backups stay on the server after that, and can always be opened.
  */
 import { getAddress, hexToBytes, keccak256, type Address, type Hex } from "viem";
 import { readDemo } from "./demoFlag";
-import { getAllNotes, onNotesSaved, openJson, sealJson, setAllNotes } from "./noteVault";
+import { getAllNotes, onNotesSaved, openJson, sealJson, setAllNotes, storedNotesOpen, syncFromDisk, unlockNoteVault } from "./noteVault";
 import { PROMPT_DID_NOT_OPEN } from "./passkey";
 import type { PayrollBatch } from "./payroll";
 import { PAYROLL_SAVED_EVENT, pendingPayrollRuns, restorePayrollRuns } from "./payrollStore";
 import { RECEIVE_IDENTITY_EVENT, exportReceiveKeys, importReceiveKeys } from "./receiveTag";
+import { NEWER_KEY, VERSION1_SAVES_UNTIL } from "./recoveryEnd";
 import type { SentLink } from "./sentLinks";
 import { openSentLinks, restoreSentLinks, subscribeSentLinks } from "./sentLinksStore";
 import type { LocalNote } from "./shield";
@@ -50,11 +51,7 @@ export const RECOVERY_MESSAGE = [
   "Version 1",
 ].join("\n");
 
-/**
- * When a browser still on version 1 stops saving. Nothing is deleted then, and
- * updating the key works the same after this as before it.
- */
-export const VERSION1_SAVES_UNTIL = Date.parse("2026-12-01T00:00:00Z");
+export { VERSION1_SAVES_UNTIL };
 
 /**
  * The one host version 2 of the message names, in its domain and its URI.
@@ -389,7 +386,22 @@ function carriedOver(old: Payload, next: Payload): boolean {
   return old.notes.filter(restorable).every((n) => notes.has(noteKey(n))) && receiveIds(old.receive).every((k) => receive.has(k));
 }
 
+/**
+ * This tab's copy of the notes brought up to the store. A page without the notes
+ * hook holds nothing until the vault is unlocked, and a tab left open holds what
+ * it read last, so neither can stand for what this browser has. A vault behind
+ * its passkey waits here for the unlock, and this never asks for it.
+ */
+async function readNotesNow(): Promise<void> {
+  if (readDemo()) return;
+  await unlockNoteVault();
+  await syncFromDisk();
+}
+
 async function collect(): Promise<Payload> {
+  await readNotesNow();
+  // A save replaces the backup, so an empty list from notes that didn't open must never be one.
+  if (!(await storedNotesOpen())) throw new RecoveryError("This browser can't open its private balance, so the backup stays as it is.");
   return {
     v: 1,
     savedAt: Date.now(),
@@ -398,6 +410,13 @@ async function collect(): Promise<Payload> {
     links: await openSentLinks(),
     payroll: await pendingPayrollRuns(),
   };
+}
+
+/** What a save holds, leaving out when it was made: the same unless something changed. */
+async function contentMark(p: Payload): Promise<string> {
+  const held: Partial<Payload> = { ...p };
+  delete held.savedAt;
+  return toB64(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(JSON.stringify(held)))));
 }
 
 async function aesKey(keys: RecoveryKeys): Promise<CryptoKey> {
@@ -459,6 +478,7 @@ function mergeNotes(restored: LocalNote[], owner?: string | null): number {
  * where this browser does not have it yet. Returns how many notes were added.
  */
 async function mergePayload(p: Payload, owner?: string | null): Promise<number> {
+  await readNotesNow();
   const added = mergeNotes(p.notes, owner);
   await restoreSentLinks(p.links);
   await restorePayrollRuns(p.payroll, owner);
@@ -504,13 +524,17 @@ async function fetchRemote(id: string): Promise<Remote | null> {
   return json.data;
 }
 
-/** With `mustExist`, the server answers 410 and writes nothing when no backup is there. */
-async function putBackup(keys: RecoveryKeys, c: string, n: number, mustExist = false): Promise<Response> {
+/**
+ * A newer key says so on every save. A version 1 key says nothing and must find
+ * a backup there: with none, or past the end date, the server answers 410 and
+ * writes nothing.
+ */
+async function putBackup(keys: RecoveryKeys, c: string, n: number): Promise<Response> {
   try {
     return await fetch("/api/recovery", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: keys.id, write: keys.write, c, n, ...(mustExist ? { mustExist } : {}) }),
+      body: JSON.stringify({ id: keys.id, write: keys.write, c, n, ...(isVersion1(keys) ? { mustExist: true } : { v: NEWER_KEY }) }),
     });
   } catch {
     throw new RecoveryError("No connection. Your balance is safe here and backs up when you're back online.");
@@ -529,6 +553,8 @@ function deleteRemote(backup: { id: string; write: string }): Promise<Response |
 /* ------------------------------------------------------------ state */
 
 const CONFIG_KEY = "gloam.recovery.v1";
+/** contentMark of the last save, to tell on a page load whether something since never went up. */
+const MARK_KEY = "gloam.recovery.mark.v1";
 
 /**
  * What this browser keeps, sealed by the note vault. Settings saved before
@@ -546,20 +572,22 @@ type Config = RecoveryKeys & {
   retire?: { id: string; write: string };
   /** This version 1 backup vanished from the server: another device moved or deleted it. */
   gone?: boolean;
+  /** The server refused this version 1 backup for the end date, whatever this browser's clock says. */
+  ended?: boolean;
 };
 
 /** A wallet key from the version 1 message. */
-function isVersion1(c: Config): boolean {
+function isVersion1(c: Pick<RecoveryKeys, "source" | "wallet">): boolean {
   return c.source === "wallet" && !c.wallet;
 }
 
 /**
- * This browser no longer saves to its version 1 backup: the backup left the
- * server, or the end date passed. Everything stays here, and updating the key
- * starts saving again.
+ * This browser no longer saves under its version 1 key: it never made a backup,
+ * and the server starts no new ones; the backup left the server; or the end date
+ * passed. Everything stays here, and updating the key starts saving again.
  */
 function savesPaused(c: Config): boolean {
-  return isVersion1(c) && (Boolean(c.gone) || Date.now() >= VERSION1_SAVES_UNTIL);
+  return isVersion1(c) && (c.n === 0 || Boolean(c.gone || c.ended) || Date.now() >= VERSION1_SAVES_UNTIL);
 }
 
 export type RecoveryState = {
@@ -579,9 +607,9 @@ export type RecoveryState = {
   newerKey: boolean;
   /** A version 1 backup is moving to the newer key, and needs no more signatures. */
   moving: boolean;
-  /** Another device moved or deleted this version 1 backup. */
+  /** Another device moved or deleted this version 1 backup. Never true on a browser that didn't save to it. */
   gone: boolean;
-  /** On with a version 1 wallet key that no longer saves, until it is updated. */
+  /** On with a version 1 wallet key that no longer saves, until it is updated. With savedAt null, it never did. */
   paused: boolean;
 };
 
@@ -635,7 +663,7 @@ function shownState(c: Config | null): Partial<RecoveryState> {
     olderKey: c ? isVersion1(c) : false,
     newerKey: Boolean(c?.wallet),
     moving: Boolean(c?.next),
-    gone: Boolean(c?.gone),
+    gone: Boolean(c && c.gone && isVersion1(c) && c.n > 0),
     paused: c ? savesPaused(c) : false,
   };
 }
@@ -653,7 +681,10 @@ async function saveConfig(next: Config | null) {
   // a later loadConfig() reads this, not the settings as they were first read
   loading = Promise.resolve(next);
   if (next) localStorage.setItem(CONFIG_KEY, await sealJson(next));
-  else localStorage.removeItem(CONFIG_KEY);
+  else {
+    localStorage.removeItem(CONFIG_KEY);
+    localStorage.removeItem(MARK_KEY);
+  }
   setState(shownState(next));
 }
 
@@ -715,19 +746,26 @@ async function upload(c: Config): Promise<void> {
   let current = c;
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!stillOn(current) || savesPaused(current)) return;
-    const blob = await seal(current, await collect());
+    const payload = await collect();
+    const blob = await seal(current, payload);
     if (!stillOn(current)) return;
-    const res = await putBackup(current, blob, current.n + 1, isVersion1(current) && current.n > 0);
+    const res = await putBackup(current, blob, current.n + 1);
     if (res.ok) {
       const { data } = (await res.json()) as { data: { n: number; t: number } };
+      const mark = await contentMark(payload);
       // Turned off while this was saving: it stays off.
-      if (stillOn(current)) await saveConfig({ ...config!, n: data.n, savedAt: data.t, retryAt: undefined });
+      if (stillOn(current)) {
+        await saveConfig({ ...config!, n: data.n, savedAt: data.t, retryAt: undefined });
+        localStorage.setItem(MARK_KEY, mark);
+      }
       return;
     }
     if (res.status === 410) {
-      // Saved to before, yet the server holds nothing, and nothing was written.
-      // This browser keeps its copy, and the panel asks to bring the devices back together.
-      if (stillOn(current)) await saveConfig({ ...config!, retryAt: undefined, gone: true });
+      // Nothing was written, and this browser keeps its copy. A backup still there
+      // means the end date passed on the server's clock, whatever this one says. One
+      // that isn't left the server. Either way the panel asks to update.
+      const held = await fetchRemote(current.id);
+      if (stillOn(current)) await saveConfig({ ...config!, retryAt: undefined, ...(held ? { ended: true } : { gone: true }) });
       return;
     }
     if (res.status === 409 && attempt === 0) {
@@ -933,6 +971,20 @@ function resume() {
   if (unfinished(config) && !config.retryAt && !config.next) schedule();
 }
 
+/**
+ * Saves what the last save didn't hold: a change made while no backup was
+ * running, or on a page that closed before its save. Nothing else would start
+ * one, since a page load changes no note. A browser that can't read its notes
+ * yet, or at all, saves nothing here.
+ */
+async function catchUp(): Promise<void> {
+  const c = config;
+  // Work already waiting (resume) saves everything anyway.
+  if (!c || stopping || unfinished(c)) return;
+  const current = await collect().catch(() => null);
+  if (current && stillOn(c) && localStorage.getItem(MARK_KEY) !== (await contentMark(current))) schedule();
+}
+
 let started = false;
 
 /** Keep the backup current from now on. Safe to call more than once. */
@@ -952,7 +1004,10 @@ export function startRecoverySync() {
     loading = null;
     void loadConfig().then(resume);
   });
-  void loadConfig().then(resume);
+  void loadConfig().then(() => {
+    resume();
+    return catchUp();
+  });
 }
 
 /** Save now (the "Back up now" button). Throws when it didn't save, so nothing can say it did. */

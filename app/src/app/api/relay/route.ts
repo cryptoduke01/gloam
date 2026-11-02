@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
 import {
   RelayError,
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
     if (e instanceof RelayError) {
       return NextResponse.json({ ok: false, error: e.message, code: e.code }, { status: e.status });
     }
-    console.error("gloam_relay", e);
+    console.error("gloam_relay", logSafe(e));
     return NextResponse.json(
       { ok: false, error: "The relay hit an error. Send from your wallet for now.", code: "internal" },
       { status: 500 }

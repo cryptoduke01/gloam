@@ -13,8 +13,9 @@
  * in 0.0.x) and `poolAddress` (default: Gloam's pool on that chain). For
  * mainnet, pass the mainnet network's chainId (see mainnetNetwork()); a mainnet
  * (or Base Sepolia) whose pool is not in this SDK version is refused rather
- * than guessed, and so is a mainnet vault passed with no chainId. Prove
- * with the key set of the same chain: circuitArtifactUrls(circuit, chainId).
+ * than guessed, and so is a mainnet vault, or Ethereum Sepolia's, passed with
+ * no chainId. Prove with the key set of the same chain:
+ * circuitArtifactUrls(circuit, chainId).
  */
 
 import type { Address } from "viem";
@@ -27,7 +28,7 @@ import {
   networkName,
   poolForChainId,
 } from "./constants.js";
-import { MAINNET_POOLS } from "./mainnet.js";
+import { ETHEREUM_SEPOLIA_POOL, MAINNET_POOLS } from "./mainnet.js";
 import { makeBoundNotePoseidon, type BoundNote } from "./note.js";
 import type { GloamIntent, IntentExec, TradeSide } from "./intents.js";
 import type { PoseidonMerklePath } from "./merkle.js";
@@ -48,16 +49,26 @@ const isNativeAsset = (a: Address) =>
 const isMainnetVault = (pool: Address) =>
   Object.values(MAINNET_POOLS).some((m) => m.pool?.toLowerCase() === pool.toLowerCase());
 
+const isEthereumSepoliaVault = (pool: Address) =>
+  ETHEREUM_SEPOLIA_POOL.pool?.toLowerCase() === pool.toLowerCase();
+
 /**
  * The chain a builder runs on: `chainId`, or Robinhood Chain testnet when it is
- * left out. A mainnet vault has the same address on every mainnet, so it can't
- * name its chain, and the testnet default would be wrong for it: refused.
+ * left out. A mainnet vault has the same address on every mainnet (and Base
+ * Sepolia), so it can't name its chain, and the testnet default would be wrong
+ * for it: refused. Ethereum Sepolia's vault is refused the same way, since the
+ * default is a different chain, as a Base Sepolia pool is.
  */
 function resolveChainId(params: { chainId?: number; poolAddress?: Address }): number {
   if (params.chainId != null) return params.chainId;
   if (params.poolAddress && isMainnetVault(params.poolAddress)) {
     throw new Error(
       `${params.poolAddress} is Gloam's vault on every mainnet, so it doesn't say which chain this is for. Pass chainId too (see mainnetNetwork()).`
+    );
+  }
+  if (params.poolAddress && isEthereumSepoliaVault(params.poolAddress)) {
+    throw new Error(
+      `${params.poolAddress} is Gloam's vault on Ethereum Sepolia, not on the default chain. Pass chainId too (see testnetNetwork("ethereum")).`
     );
   }
   return RH_TESTNET_CHAIN_ID;

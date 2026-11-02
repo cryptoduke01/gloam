@@ -50,7 +50,10 @@ async function serve() {
     process.exit(1);
   }
   const server = createGloamServer();
-  await server.connect(new StdioServerTransport());
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  // The client is gone when stdin ends. Closing tells a paid call still running that its answer will not arrive.
+  process.stdin.once("end", () => void transport.close());
 
   log("Gloam MCP server running on stdio.");
   log(`Networks: ${networks.NETWORK_KEYS.join(", ")}. Default: ${defaultNet.key}, ${networks.describeNetwork(defaultNet)}.`);
