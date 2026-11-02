@@ -540,10 +540,13 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
         USDG on Robinhood Chain.
       </p>
       <p>
-        With this on, VEYA sees the agent id, asset, amount and payee during the
-        check, along with the chain, the resource&apos;s host and the payment
-        request. It never sees a note, a secret, a balance, a wallet or a key.
-        What VEYA keeps after the check is VEYA&apos;s to say.
+        With this on, VEYA sees the agent id, the chain, the asset, the amount
+        and the payee during the check, and nothing else. It gets no resource
+        host and no payment request text, so it learns nothing about what was
+        bought. It never sees a note, a secret, a balance, a wallet or a key.
+        What VEYA keeps after the check is VEYA&apos;s to say. If VEYA ever
+        needs more than this to answer, the payment is refused and nothing is
+        spent.
       </p>
       <p>
         This server enforces the check, off-chain. The vault does not know about
