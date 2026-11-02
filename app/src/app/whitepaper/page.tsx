@@ -1,3 +1,4 @@
+import { swapMainnets, swapV3Live } from "@/lib/vaultSwap";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
@@ -598,9 +599,9 @@ export default function WhitepaperPage() {
         <li>Private payroll, scheduled payroll, and payment requests</li>
         <li>Proofs of funds, payment, and payroll totals, checked at /verify</li>
         <li>
-          Private swaps on Robinhood Chain and Tempo mainnet: USDG, $GLOAM,
+          Private swaps on {swapMainnets()} mainnet: USDG, $GLOAM,
           PONS, CASHCAT, WETH, stock tokens and more on Robinhood Chain, the four
-          vault stablecoins on Tempo, sent by the
+          vault stablecoins on Tempo{swapV3Live(8453) || swapV3Live(1) ? ", stablecoins and ETH on Uniswap v4 on the others" : ""}, sent by the
           Gloam relay, with who swapped kept private and the amounts public
         </li>
         <li>

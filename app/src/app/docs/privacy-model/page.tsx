@@ -5,6 +5,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { liveMainnetNames } from "@/lib/mainnet";
 import { SCREEN_LIST_INFO } from "@/lib/screening";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
   title: "What stays private",
@@ -50,7 +51,7 @@ export default function DocsPrivacyPage() {
           {
             n: "!",
             title: "Private swaps (mainnet)",
-            body: "Swap from your private balance on Robinhood Chain and Tempo mainnet. Who swapped stays private. The tokens and amounts show, like any DEX trade.",
+            body: `Swap from your private balance on ${swapMainnets()} mainnet. Who swapped stays private. The tokens and amounts show, like any DEX trade.`,
           },
           {
             n: "!",

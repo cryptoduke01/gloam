@@ -5,7 +5,7 @@ import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, mainnetPo
 import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, ETHEREUM_MAINNET_TOKENS, ETHEREUM_SEPOLIA_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
 import { DEFAULT_MAX_GAS_GWEI } from "@/lib/relay/gasCeiling";
 import { getNetwork } from "@/lib/networks";
-import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
+import { VAULT_SWAP_ROUTERS, swapMainnets, swapV3Live } from "@/lib/vaultSwap";
 import { GLOAM_OWNER, GLOAM_RELAYERS, GLOAM_TREASURY, MAINNET_POSEIDON_T3 } from "@/lib/contractDirectory";
 
 export const metadata: Metadata = {
@@ -84,9 +84,11 @@ export default function DocsNetworksPage() {
         (<code>ShieldPoolPayments</code>) take shield, private send, cash out
         and proofs, and have no swap code.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link>{" "}
-        run through a separate router on Robinhood Chain and Tempo, which uses
-        only the vault&apos;s normal calls; Base and Ethereum have no swap
-        router yet.
+        run through a separate router on {swapMainnets()}, which uses
+        only the vault&apos;s normal calls
+        {swapV3Live(8453) && swapV3Live(1)
+          ? "."
+          : `; ${[...(swapV3Live(8453) ? [] : ["Base"]), ...(swapV3Live(1) ? [] : ["Ethereum"])].join(" and ")} ${swapV3Live(8453) || swapV3Live(1) ? "has" : "have"} no swap router yet.`}
       </p>
       <div className="overflow-x-auto">
         <table>
@@ -202,8 +204,8 @@ export default function DocsNetworksPage() {
               <td>Swaps on</td>
               <td>Uniswap v4 (USDG, $GLOAM, PONS, CASHCAT, WETH, stock tokens and more)</td>
               <td>Tempo&apos;s stablecoin exchange (the four stablecoins)</td>
-              <td>Not yet</td>
-              <td>Not yet</td>
+              <td>{swapV3Live(8453) ? "Uniswap v4 (USDC, USDT, EURC, ETH)" : "Not yet"}</td>
+              <td>{swapV3Live(1) ? "Uniswap v4 (USDC, USDT, USDG, EURC, ETH)" : "Not yet"}</td>
             </tr>
             <tr>
               <td>Gas</td>
@@ -303,7 +305,8 @@ export default function DocsNetworksPage() {
           <strong>Fees.</strong> Deposits and private payments are free. A cash
           out costs 0.25%, kept by the pool. A private swap pays the same 0.25%
           on the amount swapped, plus a price buffer (0.5% on Robinhood Chain,
-          0.1% on Tempo) whose unused part goes to the swap treasury.
+          0.1% on Tempo{swapV3Live(8453) || swapV3Live(1) ? ", and on Base and Ethereum 0.1% between two dollar stablecoins and 0.5% otherwise" : ""})
+          whose unused part goes to the swap treasury.
         </li>
       </ul>
 
@@ -335,7 +338,7 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Treasury</strong>, <code>{GLOAM_TREASURY}</code>. Cash-out
-          fees go here since 24 October. Both swap routers also send what a swap
+          fees go here since 24 October. The swap routers also send what a swap
           does not use here; that address is fixed in each router and cannot
           change. The routers have no upgrade. Tempo&apos;s has no owner;
           Robinhood Chain&apos;s owner can add a pool with 3 days of public
@@ -616,8 +619,8 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Not on Base yet.</strong>{" "}
-          Private swaps (next, through a router
-          on Uniswap v4) and bringing money over from another chain (the Relay
+          {swapV3Live(8453) ? "Bringing" : "Private swaps (next, through a router on Uniswap v4) and bringing"} money
+          over from another chain (the Relay
           bridge). Payments, payroll, payment requests, claim links and proofs
           work as on the other chains.{" "}
           {BASE_MAINNET_MEMO

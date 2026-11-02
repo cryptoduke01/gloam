@@ -99,6 +99,12 @@ export const EVERY_SWAP_ROUTER: readonly Address[] = [
 /** Whether v3 is what new swaps use on a chain. Docs and Glim follow this, so they stay true either side of a switch. */
 export const swapV3Live = v3On;
 
+/** The mainnets with private swaps now, for the sentences that name them: "Robinhood Chain and Tempo". */
+export function swapMainnets(): string {
+  const names = ["Robinhood Chain", "Tempo", ...(v3On(8453) ? ["Base"] : []), ...(v3On(1) ? ["Ethereum"] : [])];
+  return names.length < 3 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 const v3Address = (chainId: number): Address | null => (v3On(chainId) ? VAULT_SWAP_V3_ADDRESS[chainId]! : null);
 
 /** The router new swaps go through, per chain. null: swaps are off there. */

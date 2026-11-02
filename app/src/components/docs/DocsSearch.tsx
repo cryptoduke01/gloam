@@ -227,7 +227,7 @@ const PAGE_META: Record<string, PageMeta> = {
     ],
   },
   "/docs/private-swaps": {
-    description: "Swap straight from your private balance on Robinhood Chain and Tempo mainnet. Who swapped stays private; the amounts are public.",
+    description: "Swap straight from your private balance on mainnet. Who swapped stays private; the amounts are public.",
     keywords: ["swap", "swaps", "private swap", "trade", "exchange", "dex", "uniswap", "usdg", "gloam", "pathusd", "usdc.e", "usdt0", "ousd", "refund", "buffer", "router", "escrow", "max"],
     headings: [
       "How a swap works",

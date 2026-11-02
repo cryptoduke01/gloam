@@ -324,7 +324,10 @@ function ethereumFacts(): string | null {
     "- Ethereum mainnet (chain ID 1): beta, joined after the 21 October launch. The vault takes USDC, USDT, USDG, PYUSD, EURC and ETH: 50,000 per deposit and 2,500,000 in total for each stablecoin, 20 ETH per deposit and 1,000 ETH in total. Same fees as the other mainnets, same final keys. " + (ethereumSepoliaPool() ? "Its testnet is Ethereum Sepolia (see ETHEREUM SEPOLIA)." : "Ethereum has no Gloam testnet; Base Sepolia is the place to practise.") + " EURC is a euro stablecoin, never count it as dollars. Details, if someone asks: chain ID 1, currency ETH, explorer https://etherscan.io.",
     "- Gas on Ethereum costs far more than on the other chains. The Gloam relay pays it for private payments and cash outs, so while Ethereum gas is above the relay's limit (3 gwei unless the team changes it) the relay waits and the app says \"Ethereum gas is high right now; try again shortly\". A cash out for later still schedules and goes out once gas is back under the limit. Turning off Hide my wallet sends from the wallet instead, which pays its own gas and shows the wallet as the sender.",
     "- Depositing USDT on Ethereum can take two approvals in the wallet: Tether's token makes an old approval go to zero before a new one. That is expected.",
-    "- On Ethereum there are no private swaps and no Bring money over (the bridge) into it yet; never give a date. Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
+    (swapV3Live(1)
+      ? "- There is no Bring money over (the bridge) into Ethereum yet; never give a date."
+      : "- On Ethereum there are no private swaps and no Bring money over (the bridge) into it yet; never give a date.") +
+      " Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
   ].join("\n");
 }
 
@@ -430,7 +433,16 @@ function mainnetLiveFacts(): string {
     "- Swaps only go through the Gloam relay, never from the wallet. If the button says The Gloam relay is off, try again a bit later.",
     ...(swapV3Live(4663) ? ["- On Robinhood Chain a swap can use a native ETH note as well as a WETH note, on either side, wherever the vault takes ETH."] : []),
     ...(swapV3Live(8453) ? ["- Private swaps are live on Base mainnet too: USDC, USDT, EURC and ETH, any one for another, on Uniswap v4. The price buffer there is 0.1% between two dollar stablecoins and 0.5% otherwise."] : []),
-    ...(swapV3Live(4663) || swapV3Live(4217) || swapV3Live(8453)
+    ...(swapV3Live(1)
+      ? [
+          "- Private swaps are live on Ethereum mainnet too: USDC, USDT, USDG, EURC and ETH, any one for another, on Uniswap v4. The price buffer there is 0.1% between two dollar stablecoins and 0.5% otherwise. PYUSD can be held and sent but not swapped: its plain Uniswap v4 pools return about $10 for $100.",
+          "- On Ethereum a swap has a smallest size. The relay pays the gas, so a swap's vault fee has to cover it, and the swap tab shows the smallest one right now. It moves with gas, so never give a number; point to the swap tab. \"Smallest swap right now\" means swap more, or wait for gas to fall. A refund never faces it.",
+        ]
+      : []),
+    ...(swapV3Live(8453) || swapV3Live(1)
+      ? ["- On Base and Ethereum the app won't send a swap that moves its pool by more than 2%, or that gives less than 98 cents on the dollar between two dollar stablecoins. \"This pool is too thin for that amount\" comes with a size that fits. EURC's pool on Base is thin, so large EURC swaps there are refused."]
+      : []),
+    ...(swapV3Live(4663) || swapV3Live(4217) || swapV3Live(8453) || swapV3Live(1)
       ? ["- If the vault's limit keeps a refund from landing, the money waits at the swap's escrow and comes back privately once there is room. The person can also take it out now, from the held line in Portfolio, to a wallet they pick. That pays a public address, so that money stops being private. Only they can do it. A swap through an earlier router has no exit.", "- A swap through the newest routers carries a deadline, 30 minutes after it is made, and can't land after that. A refund and an exit have no deadline."]
       : []),
     SWAPS_V2

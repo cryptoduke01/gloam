@@ -130,6 +130,12 @@ export default function DocsPrivateSwapsPage() {
           </tbody>
         </table>
       </div>
+      {V3_ETHEREUM && (
+        <p>
+          PYUSD can be held and sent on Ethereum, but not swapped: its plain
+          Uniswap v4 pools return about $10 for $100.
+        </p>
+      )}
       <p>
         An example on Tempo: 1 pathUSD gets about 0.9964 USDC.e, after the
         vault fee and the price buffer below. Prices move, so the app always
@@ -223,6 +229,8 @@ export default function DocsPrivateSwapsPage() {
         </li>
         <li>
           <strong>Network fee:</strong> the relay pays it.
+          {V3_ETHEREUM &&
+            " On Ethereum that sets a smallest swap: a swap's vault fee has to cover its gas. The swap tab shows the smallest one right now, and it moves with gas."}
         </li>
       </ul>
       <p>
@@ -244,6 +252,36 @@ export default function DocsPrivateSwapsPage() {
         {V2 &&
           " Every other token has its own limits, and a token the vault does not take yet can't be swapped into. A swap also spends no more than its refund could bring back in one deposit, so a larger part of your balance is split first."}
       </p>
+
+      {NEW_CHAINS.length > 0 && (
+        <>
+          <h2 id="stablecoins">Stablecoin pairs on {and(NEW_CHAINS)}</h2>
+          <p>
+            Two stablecoins can be far apart for a moment, and a pool can hold
+            far less than it looks like. A pool that runs out of liquidity at
+            the market price keeps filling at a worse one, so the app checks
+            each quote before it shows it.
+          </p>
+          <ul>
+            <li>
+              <strong>A thin pool is refused.</strong> A swap that would move
+              its pool by more than 2% doesn&apos;t go, and the app names a size
+              that would. From 1% it warns. EURC&apos;s pool on Base is thin, so
+              large EURC swaps there are refused.
+            </li>
+            <li>
+              <strong>Two dollars stay close to a dollar.</strong> Below 98 cents
+              on the dollar, before fees, the quote is refused. From 99.5 cents
+              the app says so.
+            </li>
+            <li>
+              <strong>The route is picked by what it pays.</strong> If the direct
+              pool is one-sided, the swap goes through another stablecoin. USDT to
+              USDG on Ethereum goes through USDC for this reason.
+            </li>
+          </ul>
+        </>
+      )}
 
       <h2 id="refund">If a swap can&apos;t finish</h2>
       <p>
@@ -356,7 +394,8 @@ export default function DocsPrivateSwapsPage() {
             </li>
             <li>
               <strong>Issuers keep their powers.</strong> Robinhood can pause a
-              stock token or block an address, as Paxos can with USDG. A swap in
+              stock token or block an address, as Paxos can with USDG
+              {NEW_CHAINS.length ? ", and Circle and Tether with theirs" : ""}. A swap in
               or out of a paused token fails and nothing moves; a refund in one
               waits until it can land.
             </li>

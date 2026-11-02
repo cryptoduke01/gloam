@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
   title: "Agents",
@@ -586,7 +587,7 @@ const hash = await wallet.writeContract({
         No fabricated fills, ever. If a private path is not live, the tool says so
         and returns a plan rather than a fake success.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link> are live in the
-        Gloam app on the Robinhood Chain and Tempo mainnets, but the SDK and the MCP server do not swap
+        Gloam app on the {swapMainnets()} mainnets, but the SDK and the MCP server do not swap
         yet: the market and trade tools only plan, and the old sealed trade they
         describe is retired. Shield, private send, cash out, and disclosure are
         live and proof-gated. Mainnet uses the final keys from the 13-contributor

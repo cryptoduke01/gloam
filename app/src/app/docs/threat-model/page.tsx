@@ -201,6 +201,22 @@ export default function DocsThreatModelPage() {
         moves the price before the swap lands can take up to the buffer, which would
         otherwise go to the treasury. Past the buffer, the swap reverts and nothing moves.
       </p>
+      {V3_NEW_CHAINS.length > 0 && (
+        <p>
+          <strong>Thin pools and stablecoin pegs.</strong> A pool that runs out of liquidity near the market price keeps
+          filling further and further from it. On {V3_NEW_CHAINS.join(" and ")} the app refuses a quote that moves its pool by
+          more than 2%, or that gives under 98 cents on the dollar between two dollar stablecoins, and it warns before that.
+          These checks are in the app, not the router: the router only holds a swap to the amount the person agreed to.
+        </p>
+      )}
+      {swapV3Live(1) && (
+        <p>
+          <strong>Ethereum&apos;s public mempool.</strong> A swap sits in the open until it lands, so a trader can take its
+          buffer, and anyone can send its first step on its own more easily than on a chain with a private sequencer. Neither
+          can change what lands. The relay pays the gas, so it weighs a swap&apos;s vault fee against that gas first, and
+          only reverted swaps it can&apos;t recover are capped, by the hour.
+        </p>
+      )}
       <p>
         <strong>A swap made to fail.</strong>{" "}
         Once a swap is broadcast, its unshield proof is public. Anyone can send that step alone. The money then waits at the
