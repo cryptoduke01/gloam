@@ -147,7 +147,7 @@ export type KeyView = {
 
 export type Activity = {
   id: string;
-  kind: "private_payment" | "cash_out" | "deposit";
+  kind: "private_payment" | "cash_out" | "deposit" | "private_swap";
   network: "robinhood" | "tempo";
   chainId: number;
   txHash: string;
@@ -167,13 +167,15 @@ export type Stats = {
     privatePayments: number;
     cashOuts: number;
     deposits: number;
+    privateSwaps: number;
     publicVolumeUsd: number;
+    swapVolumeUsd: number;
     commissionUsd: number;
     unpriced: number;
   };
   byNetwork: Record<"robinhood" | "tempo", Record<Activity["kind"], number>>;
   byAsset: { network: "robinhood" | "tempo"; chainId: number; asset: string; symbol: string; volume: string; commission: string }[];
-  daily: { day: string; privatePayments: number; cashOuts: number; deposits: number; volumeUsd: number; commissionUsd: number }[];
+  daily: { day: string; privatePayments: number; cashOuts: number; deposits: number; swaps: number; volumeUsd: number; commissionUsd: number }[];
   lastActivity: number | null;
   recent: Activity[];
 };

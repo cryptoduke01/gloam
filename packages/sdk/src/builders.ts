@@ -5,9 +5,9 @@
  *
  * shieldBound (live deposit), unshield (cash out), and private_send (in-vault
  * transfer) each build a witness, generate a Groth16 proof via the injected
- * prover, and resolve to a signed-ready call. private_trade (sealedSwap) builds
- * a valid intent too, but its on-chain path is disabled pending the H1 solvency
- * work — the builder is here so integrators can wire it ahead of that flip.
+ * prover, and resolve to a signed-ready call. private_trade (sealedSwap) is the
+ * old sealed trade, retired: its on-chain path reverts on every live pool. Private
+ * swaps are buildSwapIntent (swapIntent.ts).
  *
  * Network: every builder takes `chainId` (default Robinhood Chain testnet, as
  * in 0.0.x) and `poolAddress` (default: Gloam's pool on that chain). For
@@ -34,6 +34,7 @@ import type { GloamIntent, IntentExec, TradeSide } from "./intents.js";
 import type { PoseidonMerklePath } from "./merkle.js";
 import { fieldToBytes32 } from "./proof.js";
 import { assertDepositWithinLiveLimit, type DepositLimitReader } from "./limits.js";
+import { cashOutFeeLive, type FeeReader } from "./fee.js";
 import type { Prover } from "./prove.js";
 import { toField } from "./poseidon.js";
 import {
@@ -213,6 +214,11 @@ export interface UnshieldIntentParams {
   poolAddress?: Address;
   chainId?: number;
   agentAddress?: Address | null;
+  /**
+   * Reads the vault's cash-out fee live (a viem PublicClient on this chain), so the
+   * plan says what the vault keeps and what `to` receives. Left out, the plan has no fee.
+   */
+  client?: FeeReader;
 }
 
 /** Build a signed-ready unshield intent. exec.args match unshield(proof, root, nullifier, asset, to, amount). */
@@ -233,18 +239,26 @@ export async function buildUnshieldIntent(
     path: params.path,
   });
   if (!w.readyToProve) throw new Error(w.blocker ?? "unshield witness not ready");
+  // the fee the vault charges now, when it can be read; the vault applies its own either way
+  const fee =
+    params.client && isPaymentsPoolChainId(chainId) ? await cashOutFeeLive(params.client, poolAddress, params.amountWei).catch(() => null) : null;
   const { proofBytes } = await params.prove(w.circomInput);
 
   return {
     intent: "unshield",
     chainId,
     agentAddress: params.agentAddress ?? null,
-    plan: { asset: isNativeAsset(asset) ? "ETH" : asset, amountWei: params.amountWei, to: params.to },
+    plan: {
+      asset: isNativeAsset(asset) ? "ETH" : asset,
+      amountWei: params.amountWei,
+      to: params.to,
+      ...(fee ? { feeBps: fee.feeBps, feeWei: fee.fee, receivesWei: fee.receives } : {}),
+    },
     privacy:
       "Unshield is the public exit: the amount, asset, and recipient become visible. The nullifier keeps the source note unlinkable to your other activity.",
     execution: `Unsigned. Sign and broadcast unshield(proof, root, nullifier, asset, to, amount) on ${networkName(chainId)}.${
       isPaymentsPoolChainId(chainId)
-        ? " The pool keeps its cash-out fee (0.25% at launch, see cashOutFee) and sends the rest to the recipient."
+        ? ` The pool keeps its cash-out fee (${fee ? `${fee.feeBps / 100}% now` : "0.25% at launch; readCashOutFeeBps reads it now"}) and sends the rest to the recipient.`
         : ""
     }`,
     exec: {
