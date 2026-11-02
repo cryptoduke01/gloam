@@ -169,9 +169,16 @@ let buyMode: "ok" | "429" | "photoTimeout" = "ok";
 let refuseTx = "";
 /** Who Telegram lists as the group's admins; null when it can't say. */
 let chatAdmins: number[] | null = null;
+/** The channel linked to the group, as getChat says; undefined while getChat fails. */
+const LINKED_CHANNEL = -1002222333444;
+let linkedChannel: number | null | undefined = LINKED_CHANNEL;
 /** The stubbed Robinhood Chain: its head and the $GLOAM transfers out of the PoolManager. */
 let chainHead = 0;
 const buyLogs: { transactionHash: string; blockNumber: string; data: string; topics: string[] }[] = [];
+/** Transactions whose receipt shows liquidity taken out of the PoolManager, not a swap. */
+const liquidityTx = new Set<string>();
+/** Transactions whose receipt can't be read right now. */
+const receiptFails = new Set<string>();
 /** What the "should I answer this?" check says. */
 let classifierReply = "HELP";
 /** What the spam check says, as the model would write it. */
@@ -228,6 +235,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     // the bot's own member record: what it may do in the group
     if (method === "getChatMember") return reply({ ok: true, result: { status: "administrator", user: BOT, can_delete_messages: !noRights, can_restrict_members: !noRights } });
     if (method === "unbanChatMember") return reply({ ok: true, result: true });
+    if (method === "banChatSenderChat" || method === "unbanChatSenderChat") return reply({ ok: true, result: true });
+    if (method === "getChat") {
+      if (linkedChannel === undefined) return reply({ ok: false, description: "Bad Gateway" });
+      return reply({ ok: true, result: { id: GROUP, type: "supergroup", ...(linkedChannel === null ? {} : { linked_chat_id: linkedChannel }) } });
+    }
     if (method === "sendPhoto") {
       if (photoFails) return reply({ ok: false, description: "Bad Request: wrong file identifier/HTTP URL specified" });
       return reply({
@@ -249,7 +261,13 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       const inRange = buyLogs.filter((l) => parseInt(l.blockNumber, 16) >= parseInt(fromBlock, 16) && parseInt(l.blockNumber, 16) <= parseInt(toBlock, 16));
       return reply({ result: topics[1] ? inRange : [] });
     }
-    if (q.method === "eth_getTransactionByHash") return reply({ result: { from: `0x${"12".repeat(20)}` } });
+    if (q.method === "eth_getTransactionReceipt") {
+      const hash = String((q.params as unknown as string[])[0]);
+      if (receiptFails.has(hash)) return reply({ error: { code: -32000, message: "busy" } });
+      const pm = "0x8366a39cc670b4001a1121b8f6a443a643e40951";
+      const topic = liquidityTx.has(hash) ? "0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec" : "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+      return reply({ result: { from: `0x${"12".repeat(20)}`, status: "0x1", logs: [{ address: pm, topics: [topic] }] } });
+    }
   }
   if (url.host === "api.dexscreener.com") return reply({ pairs: [{ priceUsd: "0.5", marketCap: 100000, liquidity: { usd: 1 } }] });
   if (url.host === "redis.test") {
@@ -563,6 +581,9 @@ await test("replies: mainnet claims, dates, secrets and posing as a person are r
   assert.equal(cleanReply("I'm Duke.", policy), null);
   assert.ok(cleanReply("Gloam is not live on mainnet, it's testnet only.", policy));
   assert.ok(cleanReply("Mainnet isn't live. It waits on a production ceremony and an audit.", policy));
+  assert.equal(cleanReply("Gloam is fully audited.", policy), null, "an audited claim is dropped");
+  assert.ok(cleanReply("Kann Audits reviewed the vault contracts and found no Critical, High or Medium issues. Report: gloam.trade/security", policy), "the review as it happened goes out");
+  assert.ok(cleanReply("The routers were reviewed internally, not externally audited.", policy), "the routers' status goes out");
   assert.ok(cleanReply("I'm Glim, Gloam's community helper bot, not a person.", policy));
   assert.ok(cleanReply("Mainnet goes live on Wednesday 21 October at 13:00 UTC. Countdown at gloam.trade/mainnet.", policy), "the announced launch goes out");
   assert.ok(cleanReply("Mainnet is Oct 21, 2pm WAT.", policy), "the same time in WAT too");
@@ -587,7 +608,7 @@ await test("mainnet live: Glim says so, still never another date, and its facts 
   assert.ok(!after.includes("never say mainnet is live until the team announces it"), "the countdown line is replaced");
   assert.ok(!after.includes("The app itself is still on testnet"));
   assert.ok(after.includes("gloam.trade/app (the app: mainnet and testnet)"));
-  assert.ok(after.includes("500 per deposit and 25,000 in total"));
+  assert.ok(after.includes("50,000 per deposit and 2,500,000 in total"));
   // private swaps on mainnet: what shows, what it costs, and the old sealed trade retired
   assert.ok(after.includes("PRIVATE SWAPS") && after.includes("Vault > Swap"));
   assert.ok(after.includes("Public: the two tokens and the two amounts"), "swap amounts are public");
@@ -634,10 +655,10 @@ await test("facts: live on four mainnets, with USDC, and none of the old two-cha
   assert.ok(k.includes("Gloam is live on four mainnets: Robinhood Chain and Tempo since 21 October 2026, and Base and Ethereum since 26 October 2026."));
   assert.ok(k.includes("USDC is in the vault: on Base and Ethereum mainnet as USDC"));
   assert.ok(k.includes("Never say Gloam has no USDC."));
-  assert.ok(k.includes("raised 100x"), "the limit raise behind the timelock");
+  assert.ok(k.includes("$GLOAM 2,500,000 per deposit and 25,000,000 in total"), "the limits in force");
   assert.ok(k.includes("The mainnets: Robinhood Chain 4663, Tempo 4217, Base 8453 and Ethereum 1."));
   assert.ok(k.includes('On mainnet it shows "You get"'), "the cash-out line reads as now");
-  for (const stale of ["Mainnet is coming", "Next (mainnet): Gloam goes live", "Its two testnets", "the other mainnet (Robinhood Chain or Tempo)", "which joined later"]) {
+  for (const stale of ["Mainnet is coming", "Next (mainnet): Gloam goes live", "Its two testnets", "the other mainnet (Robinhood Chain or Tempo)", "which joined later", "raised 100x", "25,000 per deposit, 250,000 in total"]) {
     assert.ok(!k.includes(stale), stale);
   }
 });
@@ -705,9 +726,9 @@ const LOCKED = `gloam1e.${B}${B}`;
 const CLAIM = `https://gloam.trade/app/vault?tab=move&net=tempo#claim=${PLAIN}`;
 const CLAIM_LOCKED = `gloam.trade/app/vault?tab=move#claim=${encodeURIComponent(LOCKED)}`;
 const REQUEST = `https://gloam.trade/app/vault?tab=move&mode=pay#to=${ADDR}&amount=1250`;
-/** A plain code whose random body happens to hold 64 hex characters and a ".io". */
+/** A plain code whose random body happens to hold 64 hex characters, or a ".io" ending where a domain's would. */
 const HEXCODE = `gloam1.${"ab".repeat(32)}-${B}`;
-const IOCODE = `gloam1.io${B}${B}`;
+const IOCODE = `gloam1.io_${B}${B}`;
 
 await test("codes: each format is told apart", () => {
   const kinds = (t: string) => [...scanCodes(t).kinds].sort();
@@ -1185,6 +1206,15 @@ await test("moderation: look-alike Gloam accounts, DM lures, and the team's dele
   assert.deepEqual(moderationAsk("", "spam", false), { remove: true });
   assert.deepEqual(moderationAsk("", "del", false), { remove: false });
   assert.equal(moderationAsk("delete and kick him", null, false), null, "untagged words do nothing");
+  // an order opens with the verb; anything else an admin says while tagging the helper is not one
+  for (const [said, remove] of [["kick him", true], ["please ban this guy", true], ["block him", true], ["boot them", true], ["take it down", false], ["could you please remove this", false], ["remove him", true], ["go ahead and ban him", true]] as const) {
+    assert.deepEqual(moderationAsk(said, null, true), { remove }, said);
+  }
+  for (const said of ["which block was the snapshot?", "don't ban him", "please don't ban him", "how do they remove the passkey?", "why did you delete that?", "kick off the call at 5", "block height is what here?", "is he a scammer, should we ban him?"]) {
+    assert.equal(moderationAsk(said, null, true), null, said);
+  }
+  assert.deepEqual(moderationAsk("Glim, delete this", null, true, "Glim"), { remove: false }, "by name");
+  assert.deepEqual(moderationAsk("hey glim kick him", null, true, "Glim"), { remove: true }, "by name, with a greeting");
 
   // a look-alike posts a bare GIF: deleted, banned, one notice
   reset();
@@ -1439,6 +1469,50 @@ await test("buy alerts: six a check, a failed post stops the check there, Telegr
   assert.equal(await pollBuys(GROUP, true, -1), 0);
   assert.equal(await buysLastBlock(), 5000);
   buyLogs.length = 0;
+
+  // only swaps are buys: $GLOAM taken out of a position is never posted, and stays left out
+  reset();
+  chainHead = 7000;
+  await setBuysLastBlock(6000);
+  buy(61, 6001);
+  buy(62, 6002);
+  buy(63, 6003);
+  liquidityTx.add(tx(62));
+  assert.equal(await pollBuys(GROUP, true), 2);
+  assert.deepEqual(postedTx(), [tx(61), tx(63)], "the liquidity taken out is not a buy");
+  await setBuysLastBlock(6000);
+  calls.length = 0;
+  assert.equal(await pollBuys(GROUP, true), 0, "and a later check doesn't post it either");
+  buyLogs.length = 0;
+  liquidityTx.clear();
+
+  // a receipt that can't be read yet: not posted as a buy, and the next check starts there
+  reset();
+  chainHead = 8000;
+  await setBuysLastBlock(7000);
+  buy(71, 7001);
+  buy(72, 7002);
+  receiptFails.add(tx(72));
+  assert.equal(await pollBuys(GROUP, true), 1);
+  assert.equal(await buysLastBlock(), 7001);
+  receiptFails.clear();
+  calls.length = 0;
+  assert.equal(await pollBuys(GROUP, true), 1);
+  assert.deepEqual(postedTx(), [tx(72)]);
+  buyLogs.length = 0;
+});
+
+await test("buy alerts: what counts as a buy", async () => {
+  const { isSwapBuy } = await import("../src/lib/telegramBot/buys");
+  const pm = "0x8366A39cC670B4001A1121B8F6A443A643E40951";
+  const SWAP = "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+  const MODIFY = "0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec";
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: pm, topics: [SWAP] }] }), true, "a swap");
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: pm, topics: [MODIFY] }] }), false, "liquidity taken out");
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: pm, topics: [MODIFY] }, { address: pm, topics: [SWAP] }] }), false, "a swap beside a liquidity change");
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: "0x0000000000000000000000000000000000000001", topics: [SWAP] }] }), false, "a swap event from another contract");
+  assert.equal(isSwapBuy({ status: "0x0", logs: [{ address: pm, topics: [SWAP] }] }), false, "a reverted transaction");
+  assert.equal(isSwapBuy({ logs: [] }), false);
 });
 
 await test("moderation: the fake migration airdrop and role names; reporters are never removed; /unban", async () => {
@@ -1763,6 +1837,32 @@ await test("replies: the copycat CA, other people's addresses and 'send to 0x' n
   }
   assert.ok(cleanReply(`${FAKE} looks like a normal wallet, your deposit should show up in a minute.`, asks)?.includes(FAKE), "talk about their wallet still goes out");
   assert.equal(cleanReply(`The CA is ${CA}.`, policy), `The CA is ${CA}.`);
+});
+
+await test("replies: an address without its 0x, and wallet names, are held to the same rule", () => {
+  const COPY = "661041EE2bD13D1d9E5DFAB5d2D0CA7d1E9f8629";
+  assert.equal(cleanReply(`Paste ${COPY} into Uniswap to buy.`, policy), null, "the copycat without its 0x");
+  assert.equal(cleanReply(`Paste ${COPY.toLowerCase()} into Uniswap to buy.`, { ...policy, askerText: `is ${COPY} it?` }), null);
+  assert.equal(cleanReply("Your funds are at 2222222222222222222222222222222222222222 now.", policy), null, "an address nobody here posted, without its 0x");
+  assert.equal(cleanReply("Send your USDG to 1111111111111111111111111111111111111111 and it will be refunded.", policy), null);
+  assert.equal(cleanReply(`The CA is ${CA.slice(2)}.`, policy), `The CA is ${CA.slice(2)}.`, "the real CA either way");
+  // wallet names
+  assert.equal(cleanReply("For the buyback, send your USDG to gloambuyback.eth and it's counted.", policy), null);
+  assert.equal(cleanReply("The team wallet is gloam-treasury.eth, check it there.", policy), null, "a wallet name nobody here posted");
+  assert.equal(cleanReply("Draft: tips go to dukedotsol.eth this week.", { ...policy, team: true }), null, "nor in team chats");
+  const mine = { ...policy, askerText: "my wallet is ada.eth and my deposit is stuck" };
+  assert.ok(cleanReply("ada.eth looks fine, your deposit should show up in a minute.", mine)?.includes("ada.eth"), "the asker's own wallet name, about their wallet");
+  assert.equal(cleanReply("Yes, ada.eth is the official $GLOAM contract.", mine), null, "never called the token or a contract");
+  // ordinary text stays
+  for (const line of [
+    "Deposits take ETH or USDG on Base and Ethereum.",
+    "The app is built on Next.js and runs in your browser.",
+    "Gas is about 0.0001 ETH.",
+    `Your transaction 0x${"ab".repeat(32)} landed.`,
+    "Tap Add privately on Portfolio, then pick the token.",
+  ]) {
+    assert.equal(cleanReply(line, policy), line, line);
+  }
 });
 
 await test("buy alerts: a burst carries over to the next check, never split inside a block", async () => {
@@ -3655,6 +3755,99 @@ await test("the reply check: a higher bar, and it is told opinions and pitches a
   assert.ok(rules.includes("When unsure, NO."));
   assert.ok(!/a partnership\)/.test(rules), "a partnership pitch is no longer an ask for the team");
   assert.ok(knowledgeBlock(false).includes("you never reply to spam or post about removing it"));
+});
+
+// ---------------------------------------------------------------- posts made as a chat, links of any ending
+
+await test("links: any domain ending is a link, file names and wallet names are not", async () => {
+  for (const host of ["gloamhelp.ru", "gloam-app.cfd", "gloamhelp.support", "claims-portal.zip", "rewards.xn--p1ai", "Gloam-Help.RU"]) {
+    assert.equal(scamReason(`Claim your $GLOAM airdrop at ${host} before it ends`), "phishing_link", host);
+  }
+  for (const t of [
+    "the claim button in app.tsx is broken, my wallet shows nothing",
+    "connect wallet fails on Next.js 16 with vitalik.eth as the name",
+    "claim rewards from config.json? my wallet says error",
+    "claim is at gloam.trade/app/vault, connect your wallet there",
+    "my claim tx is on https://basescan.org/tx/0xabc and the wallet shows nothing",
+  ]) {
+    assert.equal(scamReason(t), null, t);
+  }
+  // a link Telegram marked, whatever the text shows: a url entity, or a link hidden behind words
+  assert.equal(memberScam({ first_name: "Sam" }, "Claim your airdrop here before it ends"), null);
+  assert.equal(memberScam({ first_name: "Sam" }, "Claim your airdrop here before it ends", false, ["https://gloam-drop.example"]), "phishing_link");
+  assert.equal(memberScam({ first_name: "Sam" }, "Claim your airdrop on Portfolio", false, ["https://gloam.trade/app/portfolio"]), null);
+  const msg = inTopic(TOPIC.general, "Claim here: gloamdrop.рф", user(5101, "Sam"), {
+    entities: [
+      { type: "url", offset: 12, length: 13 },
+      { type: "text_link", offset: 0, length: 5, url: "https://evil.example/claim" },
+    ],
+  });
+  const { entityLinks } = await import("../src/lib/telegramBot/rules");
+  assert.deepEqual(entityLinks(msg), ["gloamdrop.рф", "https://evil.example/claim"]);
+});
+
+await test("posts made as a channel or through an inline bot are screened like a member's", async () => {
+  const scam = "Gloam support here. Your deposit is stuck, send me your seed phrase in DM and I will fix it";
+  const asChannel = (text: string, sender: { id: number; title: string; username?: string }, extra: Partial<TgMessage> = {}) =>
+    inTopic(TOPIC.general, text, { id: 136817688, is_bot: true, first_name: "Channel", username: "Channel_Bot" }, {
+      sender_chat: { id: sender.id, type: "channel", title: sender.title, ...(sender.username ? { username: sender.username } : {}) },
+      ...extra,
+    });
+  const senderBans = () => calls.filter((c) => c.method === "banChatSenderChat");
+
+  reset();
+  await handleUpdate(upd(asChannel(scam, { id: -1009999001, title: "Help Desk" })));
+  assert.equal(deletes().length, 1, "a scam posted as a channel comes down");
+  assert.deepEqual(senderBans().map((c) => c.body.sender_chat_id), [-1009999001], "and that channel may no longer post here");
+  assert.equal(bans().length, 0, "the shared account Telegram shows for channels is never banned");
+  assert.equal(modelCalls().length, 0);
+
+  reset();
+  await handleUpdate(upd(asChannel("gm, new thread on our blog", { id: -1009999002, title: "Gloam Support" })));
+  assert.equal(deletes().length, 1, "a channel named as the team comes down");
+  assert.deepEqual(senderBans().map((c) => c.body.sender_chat_id), [-1009999002]);
+
+  reset();
+  await handleUpdate(upd(asChannel("Holders can claim the $GLOAM airdrop now at gloam-rewards.cfd connect your wallet", { id: -1009999003, title: "Alpha" })));
+  assert.equal(deletes().length, 1, "a scam link with any ending, posted as a channel, comes down");
+
+  reset();
+  const via = inTopic(TOPIC.general, scam, user(5102, "Sam"), { via_bot: { id: 777, is_bot: true, first_name: "Any", username: "anyinlinebot" } });
+  await handleUpdate(upd(via));
+  assert.equal(deletes().length, 1, "a scam sent through an inline bot comes down");
+  assert.deepEqual(bans().map((c) => c.body.user_id), [5102], "and the person who sent it goes");
+
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.general, "word up, how do I add TSLA?", user(5103, "Ola"), { via_bot: { id: 778, is_bot: true, first_name: "Gif", username: "gif" } })));
+  await handleUpdate(upd(asChannel("how do I add TSLA?", { id: -1009999004, title: "Ola's channel" })));
+  assert.equal(deletes().length + modelCalls().length + groupSends().length, 0, "a clean post made either way is left alone and never answered");
+
+  // the team's own: an anonymous admin (posting as the group) and the linked channel stay, whatever they say
+  reset();
+  await handleUpdate(upd(asChannel(scam, { id: GROUP, title: "Gloam" })));
+  await handleUpdate(upd(asChannel("Gloam: mainnet is live, claim your spot at gloam.trade", { id: LINKED_CHANNEL, title: "Gloam" })));
+  await handleUpdate(upd(asChannel("Gloam: new post", { id: -1003333, title: "Gloam" }, { is_automatic_forward: true })));
+  assert.equal(deletes().length + senderBans().length + bans().length, 0, "anonymous admins and the linked channel are the team");
+
+  // getChat failing: the last answer stands; with none, the team's channel by its handle still stays
+  reset();
+  linkedChannel = undefined;
+  await handleUpdate(upd(asChannel("Gloam: new post", { id: LINKED_CHANNEL, title: "Gloam" })));
+  assert.equal(deletes().length, 0, "the linked channel known from before stays while getChat fails");
+  await handleUpdate(upd(asChannel(scam, { id: -1009999005, title: "Gloam Help" })));
+  assert.equal(deletes().length, 1, "another channel is still screened while getChat fails");
+  linkedChannel = LINKED_CHANNEL;
+
+  // a report on a channel's post acts on the channel
+  reset();
+  const post = asChannel("Validate your wallet here to receive the airdrop", { id: -1009999006, title: "Promo" });
+  const reporter = user(5104, "Ivy");
+  await handleUpdate(upd(inTopic(TOPIC.general, "/spam", reporter, { reply_to_message: post })));
+  assert.deepEqual(senderBans().map((c) => c.body.sender_chat_id), [-1009999006], "a report on a channel's scam acts on that channel");
+  assert.equal(bans().length, 0, "and never on the shared channel account");
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.general, "/spam", reporter, { reply_to_message: asChannel("Validate your wallet here to receive the airdrop", { id: LINKED_CHANNEL, title: "Gloam" }) })));
+  assert.equal(deletes().length + senderBans().length, 0, "a report on the linked channel's post changes nothing");
 });
 
 await test("nothing was ever sent outside the group or the team's private chats", () => {

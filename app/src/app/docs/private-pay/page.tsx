@@ -143,7 +143,11 @@ export default function DocsPrivatePayPage() {
       <ul>
         <li>A bigger anonymity set: the mainnet pools are new</li>
         <li>Swaps that keep the amounts private too</li>
-        <li>An external audit (mainnet launched after an internal review)</li>
+        <li>
+          External review beyond the vault contracts: the{" "}
+          <Link href="/security">Kann Audits report</Link> did not cover the
+          routers, circuits or app
+        </li>
       </ul>
 
       <h2>Try it</h2>

@@ -22,8 +22,8 @@ Open http://localhost:3000, connect a wallet, and shield your first private USDG
 
 - **Mainnet** (default once the SDK has the mainnet pool): Robinhood Chain,
   chain id `4663`. You need USDG and a little ETH for gas. Gloam is
-  beta software, with deposit limits of 500 USDG per deposit and 25,000 USDG
-  across the pool for now. Deposits and private payments are free; cashing out
+  beta software, with deposit limits of 50,000 USDG per deposit and 2,500,000 USDG
+  across the pool. Deposits and private payments are free; cashing out
   costs 0.25%. Proofs use the final keys from the trusted setup.
 - **Testnet**: Robinhood Chain testnet, chain id `46630`, on the dev keys.
   Run with `NEXT_PUBLIC_GLOAM_NETWORK=robinhood`. Get test
@@ -52,4 +52,4 @@ selective disclosure with the rest of the SDK. See the
 
 `NEXT_PUBLIC_GLOAM_NETWORK` picks the network: `robinhood-mainnet` or
 `robinhood`. Unset, the app uses Robinhood Chain mainnet when the installed
-`@gloamtrade/sdk` has its pool, and testnet otherwise. Requires Node 18+.
+`@gloamtrade/sdk` has its pool, and testnet otherwise. Requires Node 20.9+, as Next does.

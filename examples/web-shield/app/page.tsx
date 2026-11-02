@@ -360,8 +360,8 @@ export default function Page() {
 
       {MAINNET ? (
         <p className="foot">
-          Robinhood Chain mainnet. Gloam is beta software, with deposit limits of 500 USDG per deposit
-          and 25,000 USDG across the pool for now. Deposits and private payments are free; cashing out costs 0.25%.
+          Robinhood Chain mainnet. Gloam is beta software, with deposit limits of 50,000 USDG per deposit
+          and 2,500,000 USDG across the pool. Deposits and private payments are free; cashing out costs 0.25%.
           Proofs use the final keys from the trusted setup. Practice first on testnet with{" "}
           <span className="mono">NEXT_PUBLIC_GLOAM_NETWORK=robinhood</span>. Docs at{" "}
           <a href="https://gloam.trade/docs/sdk" target="_blank" rel="noreferrer">

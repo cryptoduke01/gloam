@@ -157,7 +157,8 @@ import { ClaimSafetyLine } from "./ClaimSafetyLine";
 import { canSwapAfterClaim, takeFirstClaim } from "@/lib/afterClaim";
 import { TokenLogo } from "./TokenLogo";
 import { AddTokenToWallet } from "./AddTokenToWallet";
-import { checkSweep, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
+import { checkSweep, sweepVerdict, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
+import { EMBEDDED_CONNECTOR_ID } from "@/lib/embeddedWallet";
 import { moveModeFromParam, searchWithMoveMode } from "@/lib/vaultNav";
 import { cashOutHandoff, classifyPayRecipient, isWalletRecipient } from "@/lib/payRecipient";
 import { useEnsAddress } from "@/hooks/useEnsAddress";
@@ -182,7 +183,16 @@ const RELAY_MAYBE_SENT = new Set(["maybe_sent", "rpc", "network", "error", "inte
 export function MoveView() {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
-  const { address, isConnected, chainId } = useAppAccount();
+  const { address, isConnected, chainId, connector } = useAppAccount();
+  /** `to` is the Gloam wallet connected now (lib/sweepCheck sweepVerdict: its own sponsored deposits look like a sweep). */
+  const ownGloamWallet = (to: string | null | undefined) =>
+    Boolean(
+      to &&
+        address &&
+        connector?.id === EMBEDDED_CONNECTOR_ID &&
+        connector.type === "turnkey" &&
+        to.toLowerCase() === address.toLowerCase()
+    );
   const { network } = useNetwork();
   const onProduct = chainId === network.chainId;
   const { open, local: allLocal, refresh: refreshNotes } = useLocalShieldNotes(address);
@@ -968,7 +978,8 @@ export function MoveView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sweepKey]);
   const sweepNow = sweepKey ? (sweepResults[sweepKey] ?? null) : null;
-  const sweepHold = Boolean(sweepNow?.swept) && sweepOkFor !== sweepKey;
+  const sweepSays = sweepVerdict(sweepNow, { ownGloamWallet: ownGloamWallet(cashOutTo) });
+  const sweepHold = sweepSays === "swept" && sweepOkFor !== sweepKey;
 
   /** What Round it starts from and gives: the amount (or the whole balance) down to whole units. */
   const roundFrom = cashOutAmountInvalid ? noteWei : cashOutAmount;
@@ -1160,7 +1171,8 @@ export function MoveView() {
           runSweepCheck(key, t, asset, network.chainId),
           new Promise<null>((r) => window.setTimeout(() => r(null), 4_000)),
         ]);
-        if (!result?.swept) continue;
+        // the person's own connected Gloam wallet gets a note under To, not a hold
+        if (sweepVerdict(result, { ownGloamWallet: ownGloamWallet(t) }) !== "swept") continue;
         if (quiet && t.toLowerCase() === quiet.toLowerCase()) return false;
         setError(
           `Money sent to ${shortAddress(t, 4)} has been moved out automatically within seconds before, by another account. Use another address for that piece.`
@@ -1326,7 +1338,7 @@ export function MoveView() {
     if (!note.cashOut) return;
     setError(null);
     setScheduledNotice(null);
-    const result = await cancelCashOut(note.cashOut.job);
+    const result = await cancelCashOut(note.cashOut.job, note);
     if (result === "cancelled") {
       // Back in the balance as plain money: a cancelled piece is not one still to schedule.
       await cancelledPiece(note.id);
@@ -1352,6 +1364,8 @@ export function MoveView() {
   }
 
   async function onPrivateSend() {
+    // Whatever an earlier send kept is that send's, landed or not: a failure here must not drop it.
+    keptBeforeSend.current = null;
     if (!selected || !address || !network.pool || !poseidonMode) return;
     // never prove or send a balance of another chain (several vaults share one address)
     const wrongNetwork = noteNetworkProblem(selected, network);
@@ -1501,12 +1515,13 @@ export function MoveView() {
       // before anything is sent. The change waits out of the balance until the
       // chain shows it (lib/claimSweep settles it if this tab never hears back);
       // the code goes under Sent links. A send that surely never went out drops both.
+      // A code that can't be kept stops the send, like a change note that can't.
       if (pendingChange.current) await saveLocalNote({ ...pendingChange.current, sweepPending: true });
-      if (pendingLink.current) await saveSentLink(pendingLink.current).catch(() => undefined);
-      keptBeforeSend.current = {
-        changeId: pendingChange.current?.id ?? null,
-        linkId: pendingLink.current?.id ?? null,
-      };
+      keptBeforeSend.current = { changeId: pendingChange.current?.id ?? null, linkId: null };
+      if (pendingLink.current) {
+        await saveSentLink(pendingLink.current);
+        keptBeforeSend.current.linkId = pendingLink.current.id;
+      }
 
       if (relayOn) {
         setStatus("Sending through the Gloam relay…");
@@ -2512,7 +2527,7 @@ export function MoveView() {
                               <>
                                 <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
                                   Gloam pays it from your private balance. It arrives in their wallet like a normal
-                                  transfer, and nobody can see who sent it. The amount is public.
+                                  transfer, and it doesn&apos;t show which Gloam balance paid it. The amount is public.
                                 </p>
                                 <button
                                   type="button"
@@ -2927,7 +2942,22 @@ export function MoveView() {
                         For privacy, a fresh wallet that never added money to Gloam is best.
                       </p>
                     ) : null}
-                    {sweepNow?.swept && cashOutTo ? (
+                    {sweepNow?.swept && cashOutTo && sweepSays === "own-wallet" ? (
+                      <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+                        Money that reached this Gloam wallet left again soon after, in a transaction another account sent.
+                        Adding money privately with the network fee covered looks like that. If you didn&apos;t add
+                        money privately, someone else may be moving money out of this wallet: don&apos;t cash out
+                        here, and sign out.{" "}
+                        <a
+                          href={network.explorerTx(sweepNow.swept.evidenceTx)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-foreground underline underline-offset-2"
+                        >
+                          See it on the explorer
+                        </a>
+                      </p>
+                    ) : sweepNow?.swept && cashOutTo ? (
                       <SweptWarning
                         address={cashOutTo}
                         evidenceHref={network.explorerTx(sweepNow.swept.evidenceTx)}
@@ -3895,20 +3925,9 @@ function AssetMark({
   return <TokenLogo id={id} symbol={symbol} size={size} />;
 }
 
-/** The ETH mark, monochrome on an ink squircle (flips in dark mode). */
+/** ETH's real mark, the same one Portfolio and every token list show. */
 function EthMark({ size = 28 }: { size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-grid shrink-0 place-items-center rounded-[30%] bg-ink text-on-ink"
-      style={{ width: size, height: size }}
-    >
-      <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none">
-        <path d="M12 2.5l6 9.75-6 3.5-6-3.5 6-9.75z" fill="currentColor" />
-        <path d="M6 13.6l6 3.5 6-3.5-6 8.4-6-8.4z" fill="currentColor" opacity="0.7" />
-      </svg>
-    </span>
-  );
+  return <TokenLogo id="eth" symbol="ETH" size={size} />;
 }
 
 function EyeIcon({ off = false }: { off?: boolean }) {

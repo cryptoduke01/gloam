@@ -15,8 +15,9 @@
  *    own 0.25% on cash outs, kept by the pool.
  *
  * What is recorded per transaction: network, kind, tx hash, time, and for
- * public edges only the asset and amount (both already on chain). Never a note,
- * a secret, a recipient of a private send, or a private amount.
+ * public edges only the asset and amount (both already on chain: a deposit's, a
+ * cash out's, a private swap's input). Never a note, a secret, a recipient of a
+ * private send, or a private amount. A private swap carries no partner fee.
  *
  * Storage (lib/partnersKv), all under gloam:partners:v1:
  *   partner:<id>            partner record (JSON)
@@ -31,7 +32,7 @@ import { getAddress, isAddress, zeroAddress, type Address, type Hex } from "viem
 import { loadEthUsd } from "./live-quotes";
 import { getNetwork, isNetworkKey, NETWORK_KEYS, type GloamNetwork, type NetworkKey } from "./networks";
 import { cleanText } from "./paymentNote";
-import { hashNumbers, jsonOf, k, kv, kv1 } from "./partnersKv";
+import { hashNumbers, jsonOf, k, kv, kv1, type KvCommand } from "./partnersKv";
 import { randomId } from "./apiKeys";
 import { isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
 
@@ -103,13 +104,24 @@ export type Commission = {
   volumeUsdMicros: bigint | null;
 };
 
-export type ActivityKind = "private_payment" | "cash_out" | "deposit";
-export const ACTIVITY_KINDS: ActivityKind[] = ["private_payment", "cash_out", "deposit"];
+/**
+ * What a partner key brought in. A private swap is counted with its input (the
+ * asset and amount the swap's unshield names, public on chain) and carries no
+ * partner fee: there is no fee setting for swaps.
+ */
+export type ActivityKind = "private_payment" | "cash_out" | "deposit" | "private_swap";
+export const ACTIVITY_KINDS: ActivityKind[] = ["private_payment", "cash_out", "deposit", "private_swap"];
 
 /** The fee a partner's setting puts on one transaction. Pure; rounds down. */
 export function commissionFor(kind: ActivityKind, fees: PartnerFees, edge?: EdgeAmount | null): Commission {
   if (kind === "private_payment") {
     return { feeUsdMicros: BigInt(fees.privatePaymentCents) * 10_000n, feeToken: null, volumeUsdMicros: null };
+  }
+  if (kind === "private_swap") {
+    // No partner fee on a swap: only its input's dollar value, when it has a price.
+    const volumeUsdMicros =
+      edge && edge.amount >= 0n && edge.priceMicros != null ? (edge.amount * edge.priceMicros) / 10n ** BigInt(edge.decimals) : null;
+    return { feeUsdMicros: 0n, feeToken: 0n, volumeUsdMicros };
   }
   if (!edge || edge.amount < 0n) return { feeUsdMicros: null, feeToken: null, volumeUsdMicros: null };
   const bps = BigInt(kind === "cash_out" ? fees.cashoutBps : fees.depositBps);
@@ -126,6 +138,7 @@ export function toMicroUnits(raw: bigint, decimals: number): bigint {
 
 /** "$0.05 per private payment", "0.25% of each cash out". */
 export function describeFee(kind: ActivityKind, fees: PartnerFees): string {
+  if (kind === "private_swap") return "No partner fee on private swaps";
   if (kind === "private_payment") return `$${(fees.privatePaymentCents / 100).toFixed(2)} per private payment`;
   const bps = kind === "cash_out" ? fees.cashoutBps : fees.depositBps;
   return `${(bps / 100).toFixed(2)}% of each ${kind === "cash_out" ? "cash out" : "deposit"}`;
@@ -178,6 +191,13 @@ export type Partner = {
   /** Where fees would be paid, per network. */
   payout: PayoutAddresses;
   fees: PartnerFees;
+  /**
+   * Set by a Gloam admin, never by the partner, and kept under its own key apart
+   * from the record, so a save of the record never changes it. Payment messages from
+   * an approved account's keys use the relay's larger message budget; every other
+   * account's keys share one the size of the budget for messages sent without a key.
+   */
+  relayApproved?: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -230,9 +250,25 @@ export function validatePayout(input: unknown, base: PayoutAddresses = {}): Payo
   return out;
 }
 
+/** A stored record with its approval, which lives under its own key. */
+function withApproval(raw: unknown, approved: unknown): Partner | null {
+  const p = jsonOf<Partner>(raw);
+  return p ? { ...p, relayApproved: approved === "1" } : null;
+}
+
+/** The record as stored: everything but the approval. */
+function recordOf(p: Partner): string {
+  const { relayApproved: _approval, ...rest } = p;
+  return JSON.stringify(rest);
+}
+
 export async function getPartner(id: string): Promise<Partner | null> {
   if (!/^ptr_[A-Za-z0-9]{6,32}$/.test(id)) return null;
-  return jsonOf<Partner>(await kv1(["GET", k("partner", id)]));
+  const [raw, approved] = await kv([
+    ["GET", k("partner", id)],
+    ["GET", k("relay-approved", id)],
+  ]);
+  return withApproval(raw, approved);
 }
 
 export async function getPartnerByOwner(owner: string): Promise<Partner | null> {
@@ -247,7 +283,15 @@ export type PartnerInput = {
   fees?: unknown;
 };
 
-/** Creates the wallet's partner account, or updates it. */
+/** Throws a PartnerError for what a new account would refuse, making nothing. */
+export function checkNewPartner(input: PartnerInput): void {
+  if (cleanPartnerName(input.name).length < 2) throw new PartnerError("Add your app's name (at least two characters).", 400, "bad_name");
+  cleanWebsite(input.website);
+  validatePayout(input.payout, {});
+  validateFees(input.fees, DEFAULT_FEES);
+}
+
+/** Creates the wallet's partner account, or updates it. Never changes its approval (setRelayApproved). */
 export async function upsertPartner(owner: Address, input: PartnerInput): Promise<Partner> {
   const existing = await getPartnerByOwner(owner);
   const now = Date.now();
@@ -259,7 +303,7 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
 
   if (existing) {
     const next: Partner = { ...existing, name, website, payout, fees, updatedAt: now };
-    await kv1(["SET", k("partner", existing.id), JSON.stringify(next)]);
+    await kv1(["SET", k("partner", existing.id), recordOf(next)]);
     return next;
   }
   const partner: Partner = {
@@ -272,26 +316,40 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
     createdAt: now,
     updatedAt: now,
   };
+  // The account first, then the wallet's claim on it: a claim with no account behind it locks the wallet out.
+  await kv1(["SET", k("partner", partner.id), recordOf(partner)]);
   const [claimed] = await kv([["SET", k("owner", partner.owner), partner.id, "NX"]]);
   if (claimed !== "OK") {
     // Two tabs signed up at once: keep the first account.
     const first = await getPartnerByOwner(owner);
-    if (first) return first;
-    throw new PartnerError("Could not create the account. Try again.", 500, "internal");
+    if (first) {
+      await kv1(["DEL", k("partner", partner.id)]).catch(() => undefined);
+      return first;
+    }
+    // A claim with nothing behind it, from a signup that stopped halfway: this one takes its place.
+    await kv1(["SET", k("owner", partner.owner), partner.id]);
   }
-  await kv([
-    ["SET", k("partner", partner.id), JSON.stringify(partner)],
-    ["SADD", k("partners"), partner.id],
-  ]);
+  await kv1(["SADD", k("partners"), partner.id]);
   return partner;
+}
+
+/**
+ * Admin only: approves this account for the relay's larger message budget, or takes
+ * that back. Written under its own key, never with the record. Null when there is no
+ * such account.
+ */
+export async function setRelayApproved(id: string, approved: boolean): Promise<Partner | null> {
+  if (!(await getPartner(id))) return null;
+  await kv1(approved ? ["SET", k("relay-approved", id), "1"] : ["DEL", k("relay-approved", id)]);
+  return getPartner(id);
 }
 
 export async function listPartners(): Promise<Partner[]> {
   const ids = (await kv1(["SMEMBERS", k("partners")])) as string[];
   if (!Array.isArray(ids) || ids.length === 0) return [];
-  const raw = await kv(ids.map((id) => ["GET", k("partner", id)]));
-  return raw
-    .map((r) => jsonOf<Partner>(r))
+  const raw = await kv(ids.flatMap((id) => [["GET", k("partner", id)], ["GET", k("relay-approved", id)]] as KvCommand[]));
+  return ids
+    .map((_, i) => withApproval(raw[2 * i], raw[2 * i + 1]))
     .filter((p): p is Partner => Boolean(p))
     .sort((a, b) => b.createdAt - a.createdAt);
 }
@@ -308,7 +366,7 @@ export type ActivityRecord = {
   ts: number;
   /** The API key that brought it in. */
   keyId: string | null;
-  /** Public edges only (deposits, cash outs): what is already on chain. */
+  /** Public edges only (deposits, cash outs, a swap's input): what is already on chain. */
   asset: Address | null;
   symbol: string | null;
   decimals: number | null;
@@ -393,7 +451,8 @@ export async function recordActivity(args: {
   if (kind !== "private_payment") {
     if (c.volumeUsdMicros != null) incr.push([`usd:${kind}`, c.volumeUsdMicros]);
     else incr.push([`unpriced:${kind}`, 1]);
-    if (args.edge && info) {
+    // per-asset volume and fees stay what deposits and cash outs moved
+    if (args.edge && info && kind !== "private_swap") {
       const tag = `${net.chainId}:${args.edge.asset.toLowerCase()}`;
       incr.push([`vt:${tag}:${kind}`, toMicroUnits(args.edge.amount, info.decimals)]);
       if (c.feeToken != null) incr.push([`ft:${tag}:${kind}`, toMicroUnits(c.feeToken, info.decimals)]);
@@ -414,6 +473,16 @@ export async function recordActivity(args: {
   }
   await kv(cmds);
   return { recorded: true, record };
+}
+
+/**
+ * Claims a transaction for a partner without counting it: a swap's refund or exit sent
+ * with its key. It brings money back and is no one's swap or deposit, and once claimed
+ * it can't be attributed as either. True when this call claimed it.
+ */
+export async function claimTransaction(partner: Pick<Partner, "id">, chainId: number, txHash: Hex): Promise<boolean> {
+  const [claim] = await kv([["SET", k("tx", chainId, txHash.toLowerCase()), partner.id, "NX", "EX", TX_TTL_SEC]]);
+  return claim === "OK";
 }
 
 /** Who a transaction is attributed to, if anyone. */
@@ -439,6 +508,9 @@ export type DayTotals = {
   privatePayments: number;
   cashOuts: number;
   deposits: number;
+  /** Private swaps relayed with the key. */
+  swaps: number;
+  /** USD of priced deposits and cash outs (swaps are not in it). */
   volumeUsd: number;
   commissionUsd: number;
 };
@@ -448,8 +520,12 @@ export type PartnerStats = {
     privatePayments: number;
     cashOuts: number;
     deposits: number;
-    /** USD of priced deposits and cash outs. */
+    /** Private swaps relayed with the key. */
+    privateSwaps: number;
+    /** USD of priced deposits and cash outs. Swaps are counted apart, in swapVolumeUsd. */
     publicVolumeUsd: number;
+    /** USD of the priced inputs of private swaps (each swap's asset and amount in). */
+    swapVolumeUsd: number;
     /** Would-be commissions in USD, every kind, priced only. */
     commissionUsd: number;
     /** Deposits and cash outs with no USD price (counted, not valued). */
@@ -491,7 +567,7 @@ export function summarizeStats(
   }
   const byNetwork = {} as Record<NetworkKey, Record<ActivityKind, number>>;
   for (const net of NETWORK_KEYS) {
-    byNetwork[net] = { private_payment: 0, cash_out: 0, deposit: 0 };
+    byNetwork[net] = { private_payment: 0, cash_out: 0, deposit: 0, private_swap: 0 };
     for (const kind of ACTIVITY_KINDS) byNetwork[net][kind] = stats[`n:${net}:${kind}`] ?? 0;
   }
 
@@ -526,6 +602,7 @@ export function summarizeStats(
     privatePayments: c["n:private_payment"] ?? 0,
     cashOuts: c["n:cash_out"] ?? 0,
     deposits: c["n:deposit"] ?? 0,
+    swaps: c["n:private_swap"] ?? 0,
     volumeUsd: ((c["usd:cash_out"] ?? 0) + (c["usd:deposit"] ?? 0)) / 1e6,
     commissionUsd: ACTIVITY_KINDS.reduce((s, kind) => s + (c[`fee:${kind}`] ?? 0), 0) / 1e6,
   }));
@@ -535,7 +612,9 @@ export function summarizeStats(
       privatePayments: byKind.private_payment.count,
       cashOuts: byKind.cash_out.count,
       deposits: byKind.deposit.count,
+      privateSwaps: byKind.private_swap.count,
       publicVolumeUsd: byKind.cash_out.volumeUsd + byKind.deposit.volumeUsd,
+      swapVolumeUsd: byKind.private_swap.volumeUsd,
       commissionUsd: ACTIVITY_KINDS.reduce((s, kind) => s + byKind[kind].commissionUsd, 0),
       unpriced: byKind.cash_out.unpriced + byKind.deposit.unpriced,
     },
@@ -589,6 +668,7 @@ export function partnerView(p: Partner) {
     website: p.website,
     payout: p.payout,
     fees: p.fees,
+    relayApproved: p.relayApproved === true,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };

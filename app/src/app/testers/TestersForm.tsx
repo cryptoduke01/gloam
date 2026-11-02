@@ -9,7 +9,7 @@ type Network = "both" | "tempo" | "robinhood";
 type Field = "name" | "telegram" | "x" | "address" | "network" | "setup" | "note";
 
 const NETWORKS: { k: Network; label: string }[] = [
-  { k: "both", label: "Both" },
+  { k: "both", label: "Any" },
   { k: "tempo", label: "Tempo" },
   { k: "robinhood", label: "Robinhood Chain" },
 ];

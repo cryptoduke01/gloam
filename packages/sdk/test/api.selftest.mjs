@@ -162,4 +162,17 @@ await rejects(offline.me(), "network", "unreachable");
 const okFalse = new GloamApiClient({ apiKey: KEY, fetch: mockFetch(() => ({ json: { v: 1, ok: false, error: { code: "x", message: "y" } } })) });
 await rejects(okFalse.me(), "x", "ok:false with a 200 is still an error");
 
+// A sweep's submitter says when a failure leaves the send unknown, so its fresh note is kept.
+const hash32 = `0x${"11".repeat(32)}`;
+const intent = { chainId: 46630, exec: { fn: "transfer", args: ["0x", hash32, hash32, [hash32, hash32]] } };
+const answering = (code) => new GloamApiClient({ apiKey: KEY, fetch: mockFetch(() => ({ status: 502, json: { v: 1, ok: false, error: { code, message: "no" } } })) });
+for (const code of ["maybe_sent", "rpc", "internal"]) {
+  const e = await rejects(answering(code).submitter()(intent), code, `submitter on ${code}`);
+  assert(e.maybeSent === true, `${code} leaves the send unknown`);
+}
+const clear = await rejects(answering("rate_limit").submitter()(intent), "rate_limit", "submitter on a refusal");
+assert(clear.maybeSent !== true, "a clear refusal says nothing went out");
+const cut = await rejects(offline.submitter()(intent), "network", "submitter with no answer");
+assert(cut.maybeSent === true, "no answer leaves the send unknown");
+
 console.log(`api selftest: ${checks} checks passed`);

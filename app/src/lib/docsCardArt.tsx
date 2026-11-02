@@ -526,13 +526,13 @@ export function TimelineArt() {
   );
 }
 
-/** Production gate: the checklist, with the external audit still open. */
+/** Production gate: the checklist, with the multisig owner still open. */
 export function ChecklistArt() {
   const items: [string, boolean][] = [
     ["Final keys", true],
     ["Beta limits", true],
     ["Internal review", true],
-    ["External audit", false],
+    ["Multisig owner", false],
   ];
   return (
     <div style={{ ...col, gap: 18, width: 290 }}>

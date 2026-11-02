@@ -49,6 +49,8 @@ export function PasskeyGate() {
     setBusy(true);
     try {
       await startOverWithoutPasskey();
+      // a full load on purpose: nothing of the vault it just left stays in memory
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/app/settings#backup");
     } catch {
       setMsg("Could not start over. Nothing changed.");

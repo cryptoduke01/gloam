@@ -1,8 +1,9 @@
 # Gloam: Audit Remediation Status
 
 Tracks the fixes for the findings in `GLOAM-BUG-REPORT.md` and the second pass
-below. Both audits are internal (self-run Kensho passes, then owner-verified);
-there has been no external audit yet. "Fixed" here means verified, not asserted.
+below. Both audits are internal (self-run Kensho passes, then owner-verified).
+The Kann Audits review of the vault contracts has its own section at the end.
+"Fixed" here means verified, not asserted.
 
 Last re-verified against live on-chain state and current code on **2026-10-10**.
 Earlier sections are kept as a log; pool addresses in them are marked where they
@@ -443,3 +444,19 @@ tree size and the page shows how many notes back it; accepted for testnet),
 ZK I-5 (a mainnet relay fee and the pitch's in/out fee need a new public output
 in the circuits; design it before the production ceremony so there is one
 ceremony, not two). Status: **open.**
+
+## 2026-11-01 external review (Kann Audits)
+
+Kann Audits reviewed the vault contracts at commit `aac9e18` (review period 26 to
+30 October 2026, report dated 1 November 2026) and found no Critical, High or
+Medium issues. The report is at
+`app/public/audits/gloam-kann-security-review-2026-11-01.pdf`, with its scope and
+counts at gloam.trade/security.
+
+- The report labels L-01 and L-02 Fixed because fixes are planned, and the rest
+  Acknowledged. None of these changes are live yet. The vault cannot be upgraded,
+  so contract changes land in the next vault.
+- I-02: the owner can replace the proof verifier through the 3-day timelock.
+  `VaultOwnerGuard` is built to end that, and its handover waits on outside review.
+- Out of scope: the swap routers, `GloamPayMemo`, generated verifiers, circuits,
+  app, relay, MCP and SDK. Those have not had this review.

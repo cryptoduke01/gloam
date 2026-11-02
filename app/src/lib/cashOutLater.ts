@@ -26,7 +26,7 @@ import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import { publicClientFor } from "./rhClient";
 import { HANDOVER_MS, endedPlan, markCleared, shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
-import type { DelayWindow } from "./relay/scheduled";
+import { JOB_DONE_TTL_SEC, type DelayWindow } from "./relay/scheduled";
 
 /** The windows the relay offers (lib/relay/scheduled DELAY_WINDOWS): about an hour, 6 hours or a day. */
 export type CashOutWindow = DelayWindow;
@@ -63,6 +63,8 @@ export class CashOutLaterError extends Error {
 
 /** A sent job the chain still doesn't show after this long has its transaction checked. */
 const SENT_GRACE_MS = 30 * 60 * 1000;
+/** The relay keeps a finished job this long, so past it a job it no longer holds is surely over. */
+const GONE_MEANS_OVER_MS = JOB_DONE_TTL_SEC * 1000;
 
 function isOwnedJob(v: unknown): v is OwnedCashOutJob {
   const j = v as Partial<OwnedCashOutJob> | null;
@@ -153,10 +155,21 @@ export async function cashOutJobStatus(id: string): Promise<CashOutJobView | "go
  */
 export type CancelResult = "cancelled" | "over" | "going" | "gone" | null;
 
-export async function cancelCashOut(id: string): Promise<CancelResult> {
+/**
+ * Asks the relay to cancel `note`'s cash out (job `id`). The relay cancels only
+ * for whoever holds the note: the request carries the note's nullifier, worked
+ * out here from its secret.
+ */
+export async function cancelCashOut(id: string, note: LocalNote): Promise<CancelResult> {
   if (readDemo()) return demoCancelCashOut(id);
+  const nullifier = await nullifierOf(note);
+  if (!nullifier) return null;
   try {
-    const res = await fetch(`/api/relay/scheduled?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await fetch(`/api/relay/scheduled?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nullifier }),
+    });
     if (res.status === 404) return "gone";
     if (!res.ok) return null;
     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; status?: string };
@@ -360,6 +373,11 @@ export async function reconcileCashOuts(env?: CashOutEnv): Promise<boolean> {
       (await unspentOnChain(n, e)) === true
     ) {
       // Sent, but the transaction reverted and the note is unspent: nothing moved.
+      next = { ...mark, state: "failed" };
+    } else if (!next && view === "gone" && mark.state === "sent" && e.now() - mark.at > GONE_MEANS_OVER_MS && (await unspentOnChain(n, e)) === true) {
+      // On its way when last read, the relay has let the job go, and the note is
+      // unspent: it ended unsent while the app was closed. A job going out has no
+      // Cancel, so nothing else would ever bring this note back.
       next = { ...mark, state: "failed" };
     }
     if (next) {

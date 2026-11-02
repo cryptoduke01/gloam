@@ -6,9 +6,10 @@
  * goes ahead only when the answer is allow. The check scans the payment request
  * for hidden instructions and tells whether it changed since it was first seen.
  *
- * What is sent: the payment request the payee returned (the 402 price) as
- * {"content": ...}, with the key as a bearer token. Nothing else: never a note,
- * a balance, the wallet, a key or the payment this server would make.
+ * What is sent: the payment request the payee returned (the 402 price, decoded,
+ * and the body it came in) as {"content": ...}, with the key as a bearer token.
+ * Nothing else: never a note, a balance, the wallet, a key or the payment this
+ * server would make.
  *
  * It fails closed. A refuse, an abstain, an answer this code does not know, an
  * allow with findings attached, an allow that scanned nothing, an HTTP error,

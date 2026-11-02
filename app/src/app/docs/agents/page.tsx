@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
   title: "Agents",
@@ -12,7 +13,7 @@ export default function DocsAgentsPage() {
   return (
     <DocsLayout
       title="Build a private agent"
-      lede="Give an AI agent a private execution surface on Robinhood Chain, Tempo, Base and Ethereum. It shields, pays, and proves holdings end to end, with size and strategy hidden and signing under policy."
+      lede="Give an AI agent private payments on Robinhood Chain, Tempo, Base and Ethereum. It holds, pays and gets paid with amounts and payees hidden, proves what it holds when asked, and signs under policy."
       glance={[
         { label: "SDK", value: "@gloamtrade/sdk" },
         { label: "Server", value: "@gloamtrade/mcp (MCP)" },
@@ -28,11 +29,13 @@ export default function DocsAgentsPage() {
     >
       <h2>Why agents need this most</h2>
       <p>
-        An agent trading a public chain leaks its whole strategy: every position,
-        size, and time is on the graph for anyone to copy or front-run. Agents run
-        predictable, high-frequency strategies, so they are the easiest to
-        reverse-engineer. Gloam gives an agent a private execution surface: hold,
-        move, and prove value with size hidden, so its edge stays its own.
+        An agent paying on a public chain shows every payment: who it paid, how
+        much and when, for anyone to read or copy. Agents pay often and in
+        patterns, so they are easy to follow. With Gloam an agent holds, pays and
+        gets paid with the amounts and payees hidden. Money going in and out of
+        the vault stays public. Private swaps in the Gloam app hide who swapped,
+        not the tokens or the amounts, and agents can&apos;t swap through the SDK
+        or the MCP server yet.
       </p>
 
       <h2>Two ways in</h2>
@@ -363,13 +366,19 @@ const hash = await wallet.writeContract({
             </tr>
             <tr>
               <td>
-                <code>gloam_list_markets</code> / <code>gloam_quote</code>
+                <code>gloam_swap_quote</code>
               </td>
-              <td>Markets and indicative quotes, with what stays private (read)</td>
+              <td>The price of a private swap, and anything that would stop it (read)</td>
             </tr>
             <tr>
               <td>
-                <code>gloam_plan_shield</code> / <code>gloam_plan_private_trade</code>
+                <code>gloam_execute_private_swap</code> / <code>gloam_finish_swap</code>
+              </td>
+              <td>A private swap proved locally and sent through the Gloam relay, under the spending limits (&quot;swap&quot; must be listed); bring back a swap whose money waits at its escrow</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_plan_shield</code>
               </td>
               <td>Build an unsigned intent an agent can reason over (plan)</td>
             </tr>
@@ -656,13 +665,15 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
       <p>
         No fabricated fills, ever. If a private path is not live, the tool says so
         and returns a plan rather than a fake success.{" "}
-        <Link href="/docs/private-swaps">Private swaps</Link> are live in the
-        Gloam app on the Robinhood Chain and Tempo mainnets, but the SDK and the MCP server do not swap
-        yet: the market and trade tools only plan, and the old sealed trade they
-        describe is retired. Shield, private send, cash out, and disclosure are
-        live and proof-gated. Mainnet uses the final keys from the 13-contributor
+        <Link href="/docs/private-swaps">Private swaps</Link> are live on the{" "}
+        {swapMainnets()} mainnets, in the Gloam app, the SDK (<code>buildSwapIntent</code>) and the
+        MCP server (<code>gloam_execute_private_swap</code>): a swap hides who swapped, not the
+        tokens or the amounts. The old sealed trade is retired. Shield, private send, cash out,
+        swaps and disclosure are proof-gated. Mainnet uses the final keys from the 13-contributor
         ceremony; testnet runs on dev-ceremony keys. The code was reviewed
-        internally before launch, and an external audit is planned. Mainnet is
+        internally before launch, and Kann Audits reviewed the vault contracts
+        (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The SDK
+        and the MCP server were not part of that review. Mainnet is
         beta software, so start an agent on small limits.
       </p>
     </DocsLayout>

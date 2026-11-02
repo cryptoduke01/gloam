@@ -338,26 +338,34 @@ export const ETHEREUM_SEPOLIA_HISTORY_RPC: HistoryRpc = {
 };
 
 const units = (whole: bigint, decimals: number) => whole * 10n ** BigInt(decimals);
-const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
+/**
+ * Each stablecoin's limit on the four mainnet vaults, as read on chain on
+ * 2026-11-02 (depositLimit on 0x39E2…0194): 50,000 per deposit and 2,500,000 in
+ * total. The limits change through the vault's timelock (a change to no limit
+ * is queued for every asset), so readDepositLimit reads the live value.
+ */
+const stableLimit: DepositLimit = { perDeposit: units(50_000n, 6), total: units(2_500_000n, 6) };
+/** Each stablecoin's limit on the Sepolia vaults: the launch value, still live there. */
+const sepoliaStableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
 
 /**
- * Robinhood Chain mainnet pool assets and their beta deposit limits. GRIFT opens
- * with no limit once its timelocked change lands; 0 on chain until then, so the
- * vault refuses it and assertDepositWithinLiveLimit says so.
+ * Robinhood Chain mainnet pool assets and their beta deposit limits. USDG,
+ * GLOAM, PONS and CASHCAT are the limits read on chain on 2026-11-02. GRIFT
+ * opens with no limit once its timelocked change lands; 0 on chain until then,
+ * so the vault refuses it and assertDepositWithinLiveLimit says so.
  *
  * ETH, AI and ORBIO are the same: about $25,000 per deposit and $250,000 in total
  * at the prices of 2026-10-31, queued through contracts/script/
- * QueueRobinhoodAssets.s.sol, 0 on chain until each lands. PONS and CASHCAT were
- * opened as swap assets on 2026-10-27, so their limits here are the ones live
- * that day, with raises already queued. In every case the live read wins.
+ * QueueRobinhoodAssets.s.sol (ready on 2026-11-03), 0 on chain until each lands.
+ * In every case the live read wins.
  */
 export const RH_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDG", address: RH_MAINNET_USDG, decimals: 6, depositLimit: stableLimit },
-  { symbol: "GLOAM", address: GLOAM_TOKEN, decimals: 18, depositLimit: { perDeposit: units(25_000n, 18), total: units(250_000n, 18) } },
+  { symbol: "GLOAM", address: GLOAM_TOKEN, decimals: 18, depositLimit: { perDeposit: units(2_500_000n, 18), total: units(25_000_000n, 18) } },
   { symbol: "GRIFT", address: RH_MAINNET_GRIFT, decimals: 18, depositLimit: { perDeposit: (1n << 128n) - 1n, total: (1n << 128n) - 1n } },
   { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: { perDeposit: units(11n, 18), total: units(110n, 18) } },
-  { symbol: "PONS", address: RH_MAINNET_PONS, decimals: 18, depositLimit: { perDeposit: units(3_900n, 18), total: units(98_000n, 18) } },
-  { symbol: "CASHCAT", address: RH_MAINNET_CASHCAT, decimals: 18, depositLimit: { perDeposit: units(9_600n, 18), total: units(240_000n, 18) } },
+  { symbol: "PONS", address: RH_MAINNET_PONS, decimals: 18, depositLimit: { perDeposit: units(390_000n, 18), total: units(9_800_000n, 18) } },
+  { symbol: "CASHCAT", address: RH_MAINNET_CASHCAT, decimals: 18, depositLimit: { perDeposit: units(960_000n, 18), total: units(24_000_000n, 18) } },
   { symbol: "AI", address: RH_MAINNET_AI, decimals: 18, depositLimit: { perDeposit: units(400_000n, 18), total: units(4_000_000n, 18) } },
   { symbol: "ORBIO", address: RH_MAINNET_ORBIO, decimals: 18, depositLimit: { perDeposit: units(1_000_000n, 18), total: units(10_000_000n, 18) } },
 ];
@@ -370,16 +378,22 @@ export const TEMPO_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "OUSD", address: TEMPO_OUSD, decimals: 6, depositLimit: stableLimit },
 ];
 
-/** Native ETH on Base: 0.2 per deposit and 10 in total, about the dollar value of the stablecoin limits. */
-const baseEthLimit: DepositLimit = { perDeposit: 2n * 10n ** 17n, total: units(10n, 18) };
+/**
+ * Native ETH on the Base and Ethereum mainnet vaults, as read on chain on
+ * 2026-11-02: 20 per deposit and 1,000 in total. readDepositLimit reads it live.
+ */
+const baseEthLimit: DepositLimit = { perDeposit: units(20n, 18), total: units(1_000n, 18) };
+/** Native ETH on the Sepolia vaults: the launch value, still live there. */
+const sepoliaEthLimit: DepositLimit = { perDeposit: 2n * 10n ** 17n, total: units(10n, 18) };
 
 /**
- * BDX: 100,000 per deposit and 2,000,000 in total (about $7,150 and $143,000 at
- * $0.0715). Queued through the vault timelock on 2026-10-29 and 0 on chain until
- * it lands, so the vault refuses BDX deposits before then:
- * assertDepositWithinLiveLimit reads the live value and says so.
+ * BDX on Base and Ethereum: no limit once its timelocked change lands (queued
+ * 2026-10-30 through contracts/script/NoDepositLimits.s.sol, ready from
+ * 2026-11-02). It reads 0 on chain until then, so the vault refuses BDX
+ * deposits before it runs: assertDepositWithinLiveLimit reads the live value
+ * and says so.
  */
-const bdxLimit: DepositLimit = { perDeposit: units(100_000n, 9), total: units(2_000_000n, 9) };
+const bdxLimit: DepositLimit = { perDeposit: (1n << 128n) - 1n, total: (1n << 128n) - 1n };
 
 /** Base mainnet pool assets and their beta deposit limits. Native ETH is listed, then BDX. */
 export const BASE_MAINNET_ASSETS: GloamAsset[] = [
@@ -401,23 +415,23 @@ export const ETHEREUM_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "BDX", address: ETHEREUM_BDX, decimals: 9, depositLimit: bdxLimit },
 ];
 
-/** Base Sepolia pool assets: Circle's test USDC and EURC, and ETH, with the same limits as Base mainnet. No USDT there. */
+/** Base Sepolia pool assets: Circle's test USDC and EURC (500 / 25,000 each), and ETH (0.2 / 10). No USDT there. */
 export const BASE_SEPOLIA_ASSETS: GloamAsset[] = [
-  { symbol: "USDC", address: BASE_SEPOLIA_USDC, decimals: 6, depositLimit: stableLimit },
-  { symbol: "EURC", address: BASE_SEPOLIA_EURC, decimals: 6, depositLimit: stableLimit },
-  { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: baseEthLimit },
+  { symbol: "USDC", address: BASE_SEPOLIA_USDC, decimals: 6, depositLimit: sepoliaStableLimit },
+  { symbol: "EURC", address: BASE_SEPOLIA_EURC, decimals: 6, depositLimit: sepoliaStableLimit },
+  { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: sepoliaEthLimit },
 ];
 
 /**
  * Ethereum Sepolia pool assets: Circle's test USDC and EURC, Paxos's test USDG
- * and PYUSD, and ETH, with the mainnet limits. No USDT there.
+ * and PYUSD, and ETH, with the same limits as Base Sepolia. No USDT there.
  */
 export const ETHEREUM_SEPOLIA_ASSETS: GloamAsset[] = [
-  { symbol: "USDC", address: ETHEREUM_SEPOLIA_USDC, decimals: 6, depositLimit: stableLimit },
-  { symbol: "USDG", address: ETHEREUM_SEPOLIA_USDG, decimals: 6, depositLimit: stableLimit },
-  { symbol: "PYUSD", address: ETHEREUM_SEPOLIA_PYUSD, decimals: 6, depositLimit: stableLimit },
-  { symbol: "EURC", address: ETHEREUM_SEPOLIA_EURC, decimals: 6, depositLimit: stableLimit },
-  { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: baseEthLimit },
+  { symbol: "USDC", address: ETHEREUM_SEPOLIA_USDC, decimals: 6, depositLimit: sepoliaStableLimit },
+  { symbol: "USDG", address: ETHEREUM_SEPOLIA_USDG, decimals: 6, depositLimit: sepoliaStableLimit },
+  { symbol: "PYUSD", address: ETHEREUM_SEPOLIA_PYUSD, decimals: 6, depositLimit: sepoliaStableLimit },
+  { symbol: "EURC", address: ETHEREUM_SEPOLIA_EURC, decimals: 6, depositLimit: sepoliaStableLimit },
+  { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: sepoliaEthLimit },
 ];
 
 /**
@@ -568,7 +582,7 @@ const MAINNETS: Partial<Record<GloamChainFamily, GloamNetwork | null>> = {
 /**
  * Base Sepolia, or null while BASE_SEPOLIA_POOL is not filled in. A testnet,
  * but on the mainnet pool: ShieldPoolPayments on the final keys, payments only,
- * the same listed assets and beta limits as Base mainnet, the cash-out fee.
+ * the same listed assets as Base mainnet, its own beta limits, the cash-out fee.
  */
 const BASE_TESTNET: GloamNetwork | null = (() => {
   const p = baseSepoliaPool();
@@ -726,7 +740,7 @@ export function poolForChainId(chainId: number): Address {
  * nothing.
  *
  * The amount is not checked here: the beta limits change through the vault's
- * timelock, so the `depositLimit` on each asset is only the launch value. Read
+ * timelock, so the `depositLimit` on each asset is only a snapshot. Read
  * them live with assertDepositWithinLiveLimit (lib limits), which
  * buildShieldBoundIntent does when given a `client`. `amount` is kept so
  * existing callers compile.
@@ -758,23 +772,31 @@ export const CASH_OUT_TO_ROUTER_MESSAGE =
 export const CASH_OUT_TO_ZERO_MESSAGE = "That is the zero address, which nobody controls. Cash out to a wallet you control.";
 
 /**
- * Gloam's swap routers, by chain: GloamVaultSwapV4b and GloamVaultSwapV4 (kept
- * for refunds) on Robinhood Chain, GloamVaultSwapTempo on Tempo. Base and
- * Ethereum have none. How swaps run is the app's (app/src/lib/vaultSwap.ts).
+ * Gloam's swap routers, by chain, the newest first. GloamVaultSwapV4c on Robinhood
+ * Chain, Base and Ethereum and GloamVaultSwapTempo2 on Tempo land through the CREATE2
+ * factory, so each address is known before it deploys and a cash out is refused from
+ * the start (contracts/test/fixtures/router-next.json pins them). The older routers
+ * stay listed for good: GloamVaultSwapV4b and GloamVaultSwapV4 on Robinhood Chain,
+ * GloamVaultSwapTempo on Tempo. How swaps run is the app's (app/src/lib/vaultSwap.ts).
  */
 const VAULT_SWAP_ROUTERS: Record<number, readonly Address[]> = {
-  [RH_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"],
-  [TEMPO_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+  [RH_MAINNET_CHAIN_ID]: ["0x9CdA89fA6E6f796a1623C2086b2C710DCa64486d", "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"],
+  [TEMPO_MAINNET_CHAIN_ID]: ["0x991efFC6cA44BD578000d32C1351d78298BdBC0a", "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+  [BASE_MAINNET_CHAIN_ID]: ["0x3A99f461bdbfc86fbd4e84ee80Bfb2fd73f3576a"],
+  [ETHEREUM_MAINNET_CHAIN_ID]: ["0x2E0c06Ac42Cc6f0ecC3eDc86bC0d67F3c2DC7E6A"],
 };
 
 /**
  * Tokens that are not in a network's `assets` because its pool doesn't take a
  * deposit of them, but a cash out could still be pointed at. On Robinhood Chain
  * mainnet: what a private swap can land in (the app's RH_SWAP_ASSETS_V2, past
- * the listed USDG, GLOAM, PONS and CASHCAT). On its testnet: the faucet stock
- * tokens. Kept out of `assets` on purpose: assertDepositAllowed reads that list.
+ * the listed USDG, GLOAM, PONS and CASHCAT). On Base and Ethereum: WETH, which the
+ * swap router there converts to and from. On Robinhood Chain's testnet: the faucet
+ * stock tokens. Kept out of `assets` on purpose: assertDepositAllowed reads that list.
  */
 const UNLISTED_TOKENS: Record<number, readonly Address[]> = {
+  [BASE_MAINNET_CHAIN_ID]: ["0x4200000000000000000000000000000000000006"], // WETH
+  [ETHEREUM_MAINNET_CHAIN_ID]: ["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"], // WETH
   [RH_MAINNET_CHAIN_ID]: [
     "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", // WETH
     "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", // USDe

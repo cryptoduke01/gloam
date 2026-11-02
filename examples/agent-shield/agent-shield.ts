@@ -86,7 +86,7 @@ function pickNetwork(fallback: GloamNetworkKey = "robinhood"): GloamNetwork {
   if (net.testnet) {
     console.log(`${networkName(net.chainId)}. Set GLOAM_NETWORK=${net.family}-mainnet to use mainnet.`);
   } else {
-    console.log(`${net.label} mainnet. Gloam is beta software: at most 500 per stablecoin deposit for now.`);
+    console.log(`${net.label} mainnet. Gloam is beta software: at most 50,000 per stablecoin deposit.`);
   }
   return net;
 }

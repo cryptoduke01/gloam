@@ -117,7 +117,7 @@ const LIVE_FACTS: Fact[] = [
   ...FACTS,
   {
     title: "Beta deposit limits",
-    body: "On mainnet each stablecoin takes up to 500 per deposit and 25,000 in total, and $GLOAM 25,000 and 250,000. Cash outs and private payments are never limited. Raising a limit waits the same three days; lowering one is instant.",
+    body: "On mainnet each stablecoin takes up to 50,000 per deposit and 2,500,000 in total, and $GLOAM 2,500,000 and 25,000,000. Cash outs and private payments are never limited. Raising a limit waits the same three days; lowering one is instant.",
   },
 ];
 
@@ -497,7 +497,12 @@ export default function VerifyPage() {
                     closed on 17 October with 13 contributors, and Base Sepolia and
                     Ethereum Sepolia use them too. The Robinhood Chain and Tempo
                     testnets keep development keys. Gloam was reviewed internally
-                    before launch, and an external audit is in progress. It is beta
+                    before launch, and Kann Audits has since reviewed the vault
+                    contracts (
+                    <Link href="/security" className="text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                      report, 1 November 2026
+                    </Link>
+                    ) and found no Critical, High or Medium issues. It is beta
                     software.
                   </>
                 ) : (
@@ -505,7 +510,8 @@ export default function VerifyPage() {
                     Testnet proofs still use development
                     keys. The production trusted setup closed on 17 October with 13
                     contributors, and mainnet uses its final keys. It was reviewed
-                    internally before launch, and an external audit is planned.
+                    internally before launch, and Kann Audits has since reviewed the
+                    vault contracts.
                   </>
                 )}
               </p>

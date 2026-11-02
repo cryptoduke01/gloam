@@ -23,7 +23,7 @@ import { noteNullifierPoseidon } from "./note.js";
 import { fieldToHex, hexToField } from "./poseidon.js";
 import type { Prover } from "./prove.js";
 import type { ReceiveKey, ReceiveKeyJwk } from "./receiveTag.js";
-import { GloamRelayError, relayIntent, type RelayOptions } from "./relay.js";
+import { GloamRelayError, RELAY_MAYBE_SENT, relayIntent, type RelayOptions } from "./relay.js";
 import { syncTree, type SyncTreeParams } from "./sync.js";
 import type { NoteExport } from "./witness.js";
 import {
@@ -146,9 +146,6 @@ export function sweepChainFromClient(client: PublicClient, params: SyncTreeParam
 export function relaySubmitter(opts: RelayOptions = {}): SweepSubmitter {
   return (intent) => relayIntent(intent, opts);
 }
-
-/** Relay answers that leave open whether the transaction went out. */
-const RELAY_MAYBE_SENT = new Set(["maybe_sent", "rpc", "network", "error", "internal", "in_flight"]);
 
 export type SweepStatus = "swept" | "already_spent" | "not_settled" | "bad_note" | "unconfirmed" | "failed";
 

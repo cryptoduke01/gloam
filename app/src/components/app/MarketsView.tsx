@@ -14,7 +14,7 @@ import { MarketChart } from "./MarketChart";
 type Filter = "all" | "onchain" | "private" | "stocks";
 
 const FILTERS: { id: Filter; label: string; hint: string }[] = [
-  { id: "private", label: "Private-ready", hint: "Can be shielded and traded privately" },
+  { id: "private", label: "Private-ready", hint: "Can be held and traded privately" },
   { id: "onchain", label: "Onchain", hint: "Live as a token on Robinhood Chain" },
   { id: "stocks", label: "Stocks", hint: "Tokenized equities" },
   { id: "all", label: "All markets", hint: "Everything on the watchlist" },
@@ -115,7 +115,7 @@ export function MarketsView() {
             onClick={() => setMenuOpen((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            className={`inline-flex h-11 items-center gap-2 rounded-xl border bg-panel pl-4 pr-3 text-[14px] text-foreground transition-colors hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15 ${
+            className={`inline-flex h-11 items-center gap-2 rounded-xl border bg-panel pl-4 pr-3 text-[14px] text-foreground transition-colors hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 ${
               menuOpen ? "border-line-strong" : "border-line"
             }`}
           >

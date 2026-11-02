@@ -1,16 +1,13 @@
 "use client";
 
-import { useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   TurnkeyProvider,
   type TurnkeyProviderConfig,
 } from "@turnkey/react-wallet-kit";
+import { TURNKEY_AUTH_PROXY_CONFIG_ID, TURNKEY_ORGANIZATION_ID, embeddedRpId } from "@/lib/embeddedWallet";
 import { TurnkeyWagmiSync } from "./TurnkeyWagmiSync";
 import { ClientOnly } from "./ClientOnly";
-
-const ORG_ID = process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID;
-const AUTH_PROXY_CONFIG_ID =
-  process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID;
 
 /**
  * Turnkey's modal renders outside our token system, so it takes literal
@@ -67,13 +64,25 @@ const serverDark = () => false;
  */
 export default function TurnkeyKitProvider({ children }: { children: ReactNode }) {
   const dark = useSyncExternalStore(subscribeTheme, readDark, serverDark);
+  // The kit builds its passkey signer once, from the config of the first render
+  // in the browser, so the relying party is read then (it never reaches the page's
+  // markup). On the server there is no host and no signer.
+  const [rpId] = useState(() => (typeof window === "undefined" ? undefined : embeddedRpId(window.location.hostname)));
 
   // Memoised so the provider only rebuilds its config when the theme flips,
   // not on every parent render.
   const config = useMemo<TurnkeyProviderConfig>(
     () => ({
-      organizationId: ORG_ID!,
-      authProxyConfigId: AUTH_PROXY_CONFIG_ID!,
+      organizationId: TURNKEY_ORGANIZATION_ID,
+      authProxyConfigId: TURNKEY_AUTH_PROXY_CONFIG_ID,
+      ...(rpId ? { passkeyConfig: { rpId } } : {}),
+      // Browser wallets connect through wagmi, not the kit, so its own wallet
+      // manager stays off: nothing to start, and no connected wallet ever shows
+      // up in its wallet list next to the Gloam wallet.
+      walletConfig: {
+        features: { auth: false, connecting: false },
+        chains: { ethereum: { native: false }, solana: { native: false } },
+      },
       ui: {
         darkMode: dark,
         logoLight: "/brand/logo.png",
@@ -88,15 +97,20 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
         colors: TURNKEY_COLORS,
       },
     }),
-    [dark]
+    [dark, rpId]
+  );
+
+  // One object for the provider's life: the kit's methods (refreshWallets, logout)
+  // are rebuilt whenever this changes, and every page change re-renders this component.
+  const callbacks = useMemo(
+    () => ({ onError: (error: unknown) => console.error("[Gloam] Turnkey:", error) }),
+    []
   );
 
   return (
     <TurnkeyProvider
       config={config}
-      callbacks={{
-        onError: (error) => console.error("Turnkey error:", error),
-      }}
+      callbacks={callbacks}
     >
       <ClientOnly>
         <TurnkeyWagmiSync />

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { WagmiProvider } from "wagmi";
@@ -10,6 +11,10 @@ import { NetworkProvider } from "./NetworkProvider";
 import { CashOutProofRefresh } from "./CashOutProofRefresh";
 import { ReconnectWatchdog } from "./ReconnectWatchdog";
 import { PeopleCount } from "./PeopleCount";
+import { RecoverySync } from "./RecoverySync";
+
+// The Gloam wallet sheet uses the Turnkey kit: it loads only when Gloam wallets are on.
+const EmbeddedWalletFlow = dynamic(() => import("./EmbeddedWalletFlow"), { ssr: false });
 
 export function Web3Provider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -30,9 +35,15 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <ReconnectWatchdog />
-        {TURNKEY_ENABLED && <TurnkeyAutoConnect />}
         <NetworkProvider>
+          {TURNKEY_ENABLED && (
+            <>
+              <TurnkeyAutoConnect />
+              <EmbeddedWalletFlow />
+            </>
+          )}
           <CashOutProofRefresh />
+          <RecoverySync />
           <PeopleCount />
           {children}
         </NetworkProvider>

@@ -30,6 +30,7 @@ import {
 import { balanceNow, balancesNow, eligibleNow } from "./chainReads";
 import type { Excluded } from "./excluded";
 import { ensureFinal, storedFinal } from "./final";
+import { smartWalletFinalCheck } from "./submit";
 import { acceptingVotes } from "./registry";
 import { cachedBallots, getBallot } from "./store";
 
@@ -58,6 +59,8 @@ export type VoteSummary = {
   snapshotReady: boolean;
   weighting: Weighting;
   basis: TallyBasis;
+  /** What the team is doing with the result, once the final count is in. */
+  outcome: string | null;
   /** The closing block, once the final count is in. */
   closeBlock: number | null;
   accepting: boolean;
@@ -113,7 +116,7 @@ export async function finalFor(
   opts: { finalize?: boolean; now?: number } = {},
 ): Promise<FinalWeights | null> {
   if (weightingOf(v) !== "close" || voteStatus(v, opts.now) !== "closed") return null;
-  return opts.finalize ? ensureFinal(v, excluded, snapshot, { now: opts.now }) : storedFinal(v.id);
+  return opts.finalize ? ensureFinal(v, excluded, snapshot, { now: opts.now, contractCheck: smartWalletFinalCheck }) : storedFinal(v.id);
 }
 
 export async function voteSummary(
@@ -167,6 +170,7 @@ export async function voteSummary(
     snapshotReady: ready,
     weighting,
     basis,
+    outcome: basis === "final" ? (v.outcome ?? null) : null,
     closeBlock,
     accepting: acceptingVotes(v, snapshot, now),
     eligible,

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 const MAINNETS = liveMainnetNames();
 
@@ -125,9 +126,11 @@ npm install snarkjs   # optional peer, for proving`}</code>
           <code>TEMPO_OUSD</code>.
         </li>
         <li>
-          Beta deposit limits: 500 per deposit and 25,000 in total for each
-          stablecoin; $GLOAM 25,000 per deposit and 250,000 in total. Each
-          network&apos;s <code>assets</code> carry the <code>depositLimit</code>.
+          Beta deposit limits: 50,000 per deposit and 2,500,000 in total for
+          each stablecoin; $GLOAM 2,500,000 per deposit and 25,000,000 in total.
+          Each network&apos;s <code>assets</code> carry a snapshot in{" "}
+          <code>depositLimit</code>; <code>readDepositLimit</code> reads the
+          live limit from the vault.
         </li>
         <li>
           A mainnet cash out costs 0.25% (<code>CASH_OUT_FEE_BPS = 25</code>);{" "}
@@ -175,7 +178,7 @@ const intent = await buildShieldBoundIntent({
   chainId: net.chainId,
   poolAddress: net.pool,
   asset: TEMPO_USDCE,
-  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); beta cap is 500 per deposit
+  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); beta cap is 50,000 per deposit
   prover: artifactProver(circuitArtifactUrls("shield", net.chainId)),
 });
 
@@ -433,14 +436,18 @@ for (const p of payments) {
       <p>
         Mainnet ({MAINNET_IDS}) is beta software: final ceremony keys, beta
         deposit limits, a 0.25% cash-out fee. It was reviewed internally before
-        launch; an external audit is planned. The Robinhood Chain and Tempo
+        launch, and Kann Audits has since reviewed the vault contracts (
+        <Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The SDK was
+        not part of that review. The Robinhood Chain and Tempo
         testnets (<code>46630</code>, <code>42431</code>) run on dev-ceremony
         keys with test funds; Base Sepolia (<code>84532</code>) and Ethereum
         Sepolia (<code>11155111</code>) run the final keys with test funds. Real
         privacy only, never a mock success. Note secrets are the sole spend
         authority: persist and protect them. The old sealed trade is retired.{" "}
-        <Link href="/docs/private-swaps">Private swaps</Link> run in the app on
-        Robinhood Chain and Tempo mainnet; the SDK does not build them yet. See{" "}
+        <Link href="/docs/private-swaps">Private swaps</Link> run on {swapMainnets()} mainnet,
+        and from 0.5.0 the SDK builds them too (<code>quoteSwap</code>, <code>buildSwapIntent</code>,
+        and <code>buildSwapRefund</code> / <code>buildSwapExit</code> to get the money back): a swap
+        hides who swapped, not the tokens or the amounts. See{" "}
         <Link href="/docs/production">the production gate</Link>.
       </p>
     </DocsLayout>

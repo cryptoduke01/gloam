@@ -69,7 +69,7 @@ export default function DocsProofsPage() {
         you have claimed them.
       </p>
 
-      <h3>Payroll total</h3>
+      <h3 id="payroll-total">Payroll total</h3>
       <p>
         Shows that a payroll run you sent paid <strong>exactly</strong> a total
         across a number of payments, such as 21,500 USDG in 5 payments, without
@@ -171,7 +171,9 @@ export default function DocsProofsPage() {
           on 17 October with 13 contributors, and so do Base Sepolia and
           Ethereum Sepolia. On the Robinhood Chain and Tempo testnets they use
           development keys and test funds. The code was
-          reviewed internally before launch, and an external audit is planned.
+          reviewed internally before launch, and Kann Audits reviewed the vault
+          contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium
+          issues. The circuits were not part of that review.
           See the <Link href="/docs/production">production gate</Link>.
         </li>
         <li>

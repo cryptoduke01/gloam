@@ -1,3 +1,4 @@
+import { swapMainnets, swapV3Live } from "@/lib/vaultSwap";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
@@ -519,7 +520,7 @@ export default function WhitepaperPage() {
             <tr>
               <td>Railgun</td>
               <td>Only the owner; viewing keys show the whole history</td>
-              <td>Years live, a far bigger crowd of notes, external audits</td>
+              <td>Years live, a far bigger crowd of notes, more external audits</td>
             </tr>
           </tbody>
         </table>
@@ -598,9 +599,9 @@ export default function WhitepaperPage() {
         <li>Private payroll, scheduled payroll, and payment requests</li>
         <li>Proofs of funds, payment, and payroll totals, checked at /verify</li>
         <li>
-          Private swaps on Robinhood Chain and Tempo mainnet: USDG, $GLOAM,
+          Private swaps on {swapMainnets()} mainnet: USDG, $GLOAM,
           PONS, CASHCAT, WETH, stock tokens and more on Robinhood Chain, the four
-          vault stablecoins on Tempo, sent by the
+          vault stablecoins on Tempo{swapV3Live(8453) || swapV3Live(1) ? ", stablecoins and ETH on Uniswap v4 on the others" : ""}, sent by the
           Gloam relay, with who swapped kept private and the amounts public
         </li>
         <li>
@@ -628,7 +629,9 @@ export default function WhitepaperPage() {
           funds, payment, and payroll totals, private agent payments, beta
           deposit limits, and pools with no admin withdraw and timelocked rule
           changes. Private swaps from the private balance run on Robinhood
-          Chain and Tempo, through a router per chain. Encrypted payment memos run on every network, and
+          Chain and Tempo, through a router per chain, and on Robinhood Chain
+          they include stock tokens. A swap hides who swapped, not the tokens or
+          the amounts. Encrypted payment memos run on every network, and
           the Robinhood Chain testnet adds stock tokens held and sent
           privately, with test funds.
         </li>
@@ -643,13 +646,15 @@ export default function WhitepaperPage() {
         </li>
         <li>
           <strong>Mid term:</strong> issuer-scoped disclosure for regulated
-          stablecoins on Tempo; private trading of stock tokens.
+          stablecoins on Tempo.
         </li>
         <li>
           <strong>Production gate:</strong> done before mainnet, the multi-party
           trusted setup (13 contributors) and an internal review (no Critical or
-          High findings open on 20 October 2026). Still ahead: an external
-          audit, a multisig owner, and the incident process.
+          High findings open on 20 October 2026). Done since: Kann Audits
+          reviewed the vault contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical,
+          High or Medium issues. The swap routers, circuits, app and relay were
+          not part of it. Still ahead: a multisig owner and the incident process.
         </li>
       </ol>
 
@@ -660,8 +665,10 @@ export default function WhitepaperPage() {
           what the pools take
         </li>
         <li>
-          Smart contract and circuit bugs: reviews so far are internal, with no
-          external audit yet
+          Smart contract and circuit bugs: Kann Audits reviewed the vault
+          contracts and found no Critical, High or Medium issues, but no review
+          rules out bugs, and the routers, circuits, app and relay were not part
+          of it
         </li>
         <li>The Robinhood Chain and Tempo testnets run on development proving keys from a single-contributor dev ceremony (mainnet, Base Sepolia and Ethereum Sepolia use the 13-contributor keys)</li>
         <li>
@@ -693,8 +700,9 @@ export default function WhitepaperPage() {
 
       <h2 id="non-claims">13. Explicit non-claims</h2>
       <p>
-        Gloam is live on mainnet as beta software. It does not claim an
-        external audit, insurance of funds, legal immunity, or invisibility
+        Gloam is live on mainnet as beta software. It does not claim a full
+        external audit (the Kann Audits review covers the vault contracts only),
+        insurance of funds, legal immunity, or invisibility
         from investigation. Nothing in
         this paper is investment advice.
       </p>

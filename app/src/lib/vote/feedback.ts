@@ -21,6 +21,7 @@ import {
   MAX_SIGNATURE_HEX,
   SIGNED_MAX_AGE_SEC,
   SIGNED_MAX_AHEAD_SEC,
+  WALLET_DOMAIN_CHAINS,
   cleanFeedback,
   feedbackTypedData,
   weightOf,
@@ -56,14 +57,18 @@ let rhClient: PublicClient | null = null;
 
 /** EOAs offline; smart wallets through ERC-1271/6492 over Robinhood Chain, like the votes. */
 async function defaultVerify(author: `0x${string}`, typed: ReturnType<typeof feedbackTypedData>, signature: Hex): Promise<boolean> {
-  try {
-    const got = await recoverTypedDataAddress({ ...typed, signature });
-    if (got.toLowerCase() === author.toLowerCase()) return true;
-  } catch {
-    /* not an EOA signature: try the contract check */
+  // the typed data as sent, then as a wallet that adds its chain to the domain signs it, as a vote allows
+  for (const domain of [typed.domain, ...WALLET_DOMAIN_CHAINS.map((chainId) => ({ ...typed.domain, chainId }))]) {
+    try {
+      const got = await recoverTypedDataAddress({ ...typed, domain, signature });
+      if (got.toLowerCase() === author.toLowerCase()) return true;
+    } catch {
+      /* not an EOA signature: try the contract check */
+    }
   }
   rhClient ??= createPublicClient({
     chain: robinhood,
+    ccipRead: false,
     transport: serverTransport({ chainId: robinhood.id, chain: robinhood, historyRpc: null }, { timeout: 8_000, retryCount: 1 }),
   }) as PublicClient;
   try {

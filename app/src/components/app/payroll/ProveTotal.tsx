@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { payrollParts } from "@gloamtrade/sdk";
@@ -60,6 +61,7 @@ export function ProveTotal({
   const reduce = useReducedMotion();
   // Focus lands on the dialog itself: no ring on the close button, no keyboard popping up on a phone.
   const panelRef = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const [records, setRecords] = useState<Records>({ kind: "loading" });
   const [verifier, setVerifier] = useState("");
@@ -85,19 +87,15 @@ export function ProveTotal({
     };
   }, [batch]);
 
+  useModalFocus(dialog, onClose, { initial: panelRef });
+
   useEffect(() => {
-    panelRef.current?.focus({ preventScroll: true });
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, []);
 
   const forLabel = verifierLabel(verifier);
   const canCreate = records.kind === "ready" && !busy && forLabel != null;
@@ -135,6 +133,7 @@ export function ProveTotal({
 
   return createPortal(
     <div
+      ref={dialog}
       className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"

@@ -25,10 +25,19 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import Module from "node:module";
 import { fileURLToPath } from "node:url";
 import { createSiweMessage } from "viem/siwe";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import type { Address, Hex } from "viem";
+
+// the admin route reads lib/adminAuth, which is marked server only
+const serverOnlyStub = fileURLToPath(new URL("./server-only-stub.cjs", import.meta.url));
+const M = Module as unknown as { _resolveFilename: (req: string, ...rest: unknown[]) => string };
+const resolveFilename = M._resolveFilename;
+M._resolveFilename = function (req: string, ...rest: unknown[]) {
+  return req === "server-only" ? serverOnlyStub : resolveFilename.call(this, req, ...rest);
+};
 
 process.env.GLOAM_PARTNERS_STORE = "memory";
 delete process.env.GLOAM_API_KEY_PEPPER;
@@ -64,6 +73,8 @@ const {
   readAllPartnerTotals,
   readPartnerStats,
   recordActivity,
+  setRelayApproved,
+  partnerView,
   toMicroUnits,
   upsertPartner,
   validateFees,
@@ -71,7 +82,7 @@ const {
   validatePayout,
   DEFAULT_FEES,
 } = await import("../src/lib/partners");
-const { SIWE_STATEMENT, createSession, issueNonce, nonceAllowed, readSession, verifySignIn } = await import("../src/lib/partnersAuth");
+const { SIWE_STATEMENT, SESSION_COOKIE, createSession, issueNonce, nonceAllowed, readSession, verifySignIn } = await import("../src/lib/partnersAuth");
 const { getNetwork, MAINNET_ENABLED } = await import("../src/lib/networks");
 const { PROOF_ARTIFACTS } = await import("../src/lib/proofs/artifacts");
 const { CIRCUIT_ARTIFACTS } = await import("../src/lib/circuitArtifacts");
@@ -85,6 +96,8 @@ const { POST: depositPost } = await import("../src/app/api/v1/deposits/route");
 const { GET: nonceGet } = await import("../src/app/api/partners/nonce/route");
 const { POST: sessionPost, GET: sessionGet } = await import("../src/app/api/partners/session/route");
 const { PUT: accountPut } = await import("../src/app/api/partners/account/route");
+const { POST: adminPost } = await import("../src/app/api/partners/admin/route");
+const { NEW_ACCOUNTS_PER_IP_PER_DAY } = await import("../src/lib/partnersApi");
 const { POST: keysPost, GET: keysGet } = await import("../src/app/api/partners/keys/route");
 
 let passed = 0;
@@ -105,8 +118,9 @@ const pepper = (() => {
   return p.pepper;
 })();
 
-function req(path: string, init: { method?: string; key?: string; body?: unknown; cookie?: string; origin?: string | null } = {}) {
+function req(path: string, init: { method?: string; key?: string; body?: unknown; cookie?: string; origin?: string | null; ip?: string } = {}) {
   const headers: Record<string, string> = { "x-forwarded-host": HOST };
+  if (init.ip) headers["x-forwarded-for"] = init.ip;
   if (init.key) headers.authorization = `Bearer ${init.key}`;
   if (init.body !== undefined) headers["content-type"] = "application/json";
   if (init.cookie) headers.cookie = init.cookie;
@@ -842,6 +856,158 @@ await test("proofs: a real proof of funds passes the server snark check", async 
   // Another vault: refused.
   const elsewhere = await verifyProofText(encodeProof({ ...fundsProof, pool: "0x1111111111111111111111111111111111111111" as Address }));
   assert.equal(elsewhere.ok, false);
+});
+
+await test("signup: a claim left with no account behind it doesn't lock the wallet out", async () => {
+  const { k, kv1 } = await import("../src/lib/partnersKv");
+  const stuck = privateKeyToAccount(generatePrivateKey()).address;
+  await kv1(["SET", k("owner", stuck.toLowerCase()), "ptr_gone"]);
+  const made = await upsertPartner(stuck, { name: "Back again", website: "https://example.com" });
+  assert.equal((await getPartnerByOwner(stuck))?.id, made.id);
+  assert.ok((await listPartners()).some((p) => p.id === made.id));
+});
+
+await test("signup: two at once keep one account", async () => {
+  const twice = privateKeyToAccount(generatePrivateKey()).address;
+  const [a, b] = await Promise.all([upsertPartner(twice, { name: "One", website: "https://example.com" }), upsertPartner(twice, { name: "Two", website: "https://example.com" })]);
+  assert.equal(a.id, b.id);
+  assert.equal((await listPartners()).filter((p) => p.owner === twice.toLowerCase()).length, 1);
+});
+
+await test("keys: revoked ones past the limit are forgotten as new ones are made", async () => {
+  const { MAX_REVOKED_KEPT } = await import("../src/lib/apiKeys");
+  const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Churn", website: "https://example.com" });
+  for (let i = 0; i < MAX_REVOKED_KEPT + 5; i++) {
+    const made = await createApiKey({ partnerId: owner.id, name: `k${i}`, env: "test", pepper });
+    await revokeApiKey({ partnerId: owner.id, keyId: made.key.id });
+  }
+  const live = await createApiKey({ partnerId: owner.id, name: "live", env: "test", pepper });
+  const left = await listApiKeys(owner.id);
+  assert.ok(left.length <= MAX_REVOKED_KEPT + 1, `${left.length} kept`);
+  assert.ok(left.some((key) => key.id === live.key.id), "the new key stays");
+});
+
+await test("signup: one IP makes a few accounts a day; changing an account is not counted", async () => {
+  const from = (owner: Address, ip: string, name: string) => {
+    const session = createSession(owner, HOST)!;
+    return accountPut(
+      new Request(`${ORIGIN}/api/partners/account`, {
+        method: "PUT",
+        headers: { "x-forwarded-host": HOST, "x-forwarded-for": ip, origin: ORIGIN, "content-type": "application/json", cookie: `${SESSION_COOKIE}=${encodeURIComponent(session)}` },
+        body: JSON.stringify({ name, website: "https://example.com" }),
+      }) as never
+    );
+  };
+  assert.equal(NEW_ACCOUNTS_PER_IP_PER_DAY, 3, "docs/partners says three");
+  const ip = "198.51.100.77";
+  const owners = Array.from({ length: NEW_ACCOUNTS_PER_IP_PER_DAY + 1 }, () => privateKeyToAccount(generatePrivateKey()).address);
+  // a refused name makes no account and is not counted
+  assert.equal((await from(owners[0]!, ip, "")).status, 400);
+  for (let i = 0; i < NEW_ACCOUNTS_PER_IP_PER_DAY; i++) assert.ok((await json(await from(owners[i]!, ip, `App ${i}`))).ok);
+  const over = await json(await from(owners[NEW_ACCOUNTS_PER_IP_PER_DAY]!, ip, "One more"));
+  assert.equal(over.error?.code, "rate_limited");
+  assert.equal(await getPartnerByOwner(owners[NEW_ACCOUNTS_PER_IP_PER_DAY]!), null);
+  // an account already made can still be changed from there, and another IP can still make one
+  assert.ok((await json(await from(owners[0]!, ip, "App 0 renamed"))).ok);
+  assert.ok((await json(await from(owners[NEW_ACCOUNTS_PER_IP_PER_DAY]!, "198.51.100.78", "One more"))).ok);
+});
+
+await test("signup: sign-ups sent together from one IP still make only three", async () => {
+  const ip = "198.51.100.88";
+  const owners = Array.from({ length: 8 }, () => privateKeyToAccount(generatePrivateKey()).address);
+  const statuses = await Promise.all(
+    owners.map((owner, i) =>
+      accountPut(
+        new Request(`${ORIGIN}/api/partners/account`, {
+          method: "PUT",
+          headers: {
+            "x-forwarded-host": HOST, "x-forwarded-for": ip, origin: ORIGIN, "content-type": "application/json",
+            cookie: `${SESSION_COOKIE}=${encodeURIComponent(createSession(owner, HOST)!)}`,
+          },
+          body: JSON.stringify({ name: `Together ${i}`, website: "https://example.com" }),
+        }) as never
+      ).then((r: Response) => r.status)
+    )
+  );
+  assert.equal(statuses.filter((st) => st === 200).length, NEW_ACCOUNTS_PER_IP_PER_DAY);
+  assert.equal(statuses.filter((st) => st === 429).length, 8 - NEW_ACCOUNTS_PER_IP_PER_DAY);
+  assert.equal((await Promise.all(owners.map((o) => getPartnerByOwner(o)))).filter(Boolean).length, NEW_ACCOUNTS_PER_IP_PER_DAY);
+});
+
+await test("relay messages: a partner's save never undoes the admin's switch, even at the same moment", async () => {
+  const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Overlap", website: "https://example.com" });
+  await setRelayApproved(owner.id, true);
+  for (let i = 0; i < 5; i++) {
+    const want = i % 2 === 1;
+    await Promise.all([upsertPartner(owner.owner, { name: `Overlap ${i}` }), setRelayApproved(owner.id, want)]);
+    const now = (await getPartnerByOwner(owner.owner))!;
+    assert.equal(now.relayApproved, want, `round ${i}`);
+    assert.equal(now.name, `Overlap ${i}`);
+  }
+  // the record itself never carries it
+  const raw = (await kv1(["GET", k("partner", owner.id)])) as string;
+  assert.equal(JSON.parse(raw).relayApproved, undefined);
+  assert.equal((await listPartners()).find((p) => p.id === owner.id)?.relayApproved, false);
+  await setRelayApproved(owner.id, true);
+  assert.equal((await listPartners()).find((p) => p.id === owner.id)?.relayApproved, true);
+});
+
+await test("relay messages: a new account is not approved; only an admin, from the site, changes that", async () => {
+  const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Fresh", website: "https://example.com" });
+  assert.equal(owner.relayApproved, undefined);
+  assert.equal(partnerView(owner).relayApproved, false);
+  // the partner's own edits never set it, whatever they send
+  const edited = await upsertPartner(owner.owner, { name: "Fresh", relayApproved: true } as never);
+  assert.equal(partnerView(edited).relayApproved, false);
+  // cross-site or not JSON: refused before the admin session is read
+  const cross = await adminPost(req("/api/partners/admin", { method: "POST", body: { id: owner.id, relayApproved: true }, origin: "https://elsewhere.example" }) as never);
+  assert.equal(cross.status, 403);
+  const approved = await setRelayApproved(owner.id, true);
+  assert.equal(approved?.relayApproved, true);
+  // kept through the partner's own changes
+  const after = await upsertPartner(owner.owner, { name: "Fresh renamed" });
+  assert.equal(after.relayApproved, true);
+  assert.equal((await setRelayApproved(owner.id, false))?.relayApproved, false);
+  assert.equal(await setRelayApproved("ptr_nobody00", true), null);
+});
+
+/** Requests through the v1 relay (an action it turns away after the per-sender check) until one is refused. */
+async function untilRefused(send: (i: number) => Request) {
+  let accepted = 0;
+  for (let i = 0; i < 1_000; i++) {
+    const b = await json(await relayPost(send(i)));
+    if (b.error?.code !== "bad_action") return { accepted, refusedBy: b.error?.code ?? "ok" };
+    accepted++;
+  }
+  return { accepted, refusedBy: "none" };
+}
+const shield = (secret: string, ip: string) => req("/api/v1/relay", { method: "POST", key: secret, ip, body: { chainId: 46630, action: "shield" } });
+
+await test("v1 relay: every key of one account counts as one sender", async () => {
+  const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Many keys", website: "https://example.com" });
+  await setRelayApproved(owner.id, true);
+  const keys = await Promise.all(Array.from({ length: 4 }, (_, i) => createApiKey({ partnerId: owner.id, name: `k${i}`, env: "test", pepper })));
+  // from several IPs: an approved account is the sender, whatever IP it calls from
+  assert.deepEqual(await untilRefused((i) => shield(keys[i % keys.length]!.secret, `198.51.100.${70 + (i % 3)}`)), { accepted: 400, refusedBy: "rate_limit" });
+  // another account is its own sender
+  const other = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Other", website: "https://example.com" });
+  await setRelayApproved(other.id, true);
+  const otherKey = await createApiKey({ partnerId: other.id, name: "k", env: "test", pepper });
+  assert.equal((await json(await relayPost(shield(otherKey.secret, "198.51.100.70")))).error?.code, "bad_action");
+});
+
+await test("v1 relay: accounts no admin approved count as their IP too, so a second account from it adds nothing", async () => {
+  const make = async (name: string) => {
+    const p = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name, website: "https://example.com" });
+    return { p, key: await createApiKey({ partnerId: p.id, name: "k", env: "test", pepper }) };
+  };
+  const [a, b, approved] = await Promise.all([make("Free one"), make("Free two"), make("Approved")]);
+  await setRelayApproved(approved.p.id, true);
+  const IP = "198.51.100.80";
+  assert.deepEqual(await untilRefused((i) => shield((i % 2 === 0 ? a : b).key.secret, IP)), { accepted: 400, refusedBy: "rate_limit" }, "both accounts, one IP's limit");
+  // the same accounts from elsewhere, and an approved account from that IP, still go
+  assert.equal((await json(await relayPost(shield(a.key.secret, "198.51.100.81")))).error?.code, "bad_action");
+  assert.equal((await json(await relayPost(shield(approved.key.secret, IP)))).error?.code, "bad_action");
 });
 
 console.log(`\n${passed} partner tests passed`);

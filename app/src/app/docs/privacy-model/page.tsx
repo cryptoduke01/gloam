@@ -5,6 +5,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { liveMainnetNames } from "@/lib/mainnet";
 import { SCREEN_LIST_INFO } from "@/lib/screening";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
   title: "What stays private",
@@ -50,7 +51,7 @@ export default function DocsPrivacyPage() {
           {
             n: "!",
             title: "Private swaps (mainnet)",
-            body: "Swap from your private balance on Robinhood Chain and Tempo mainnet. Who swapped stays private. The tokens and amounts show, like any DEX trade.",
+            body: `Swap from your private balance on ${swapMainnets()} mainnet. Who swapped stays private. The tokens and amounts show, like any DEX trade.`,
           },
           {
             n: "!",
@@ -350,8 +351,9 @@ export default function DocsPrivacyPage() {
         <li>
           <strong>Cash out:</strong> the vault must be allowed to send it, and
           the destination must be allowed to receive it. If the destination&apos;s
-          own Tempo receive policy would refuse the vault, Gloam says so instead
-          of letting the payment be held.
+          own Tempo receive policy would refuse the payment, Gloam says so instead
+          of letting it be held. If that policy can&apos;t be read, the relay sends
+          nothing and asks you to try again.
         </li>
         <li>
           <strong>When:</strong> next to sanctions screening, in the app before
@@ -430,12 +432,14 @@ export default function DocsPrivacyPage() {
           contributor, so testnet is for practice only.
         </li>
         <li>
-          <strong>Internal review only.</strong> Several rounds, with fixes
-          deployed, and a review before launch that finished on 20 October with
-          no Critical or High findings open. An external audit is planned; until
-          then, beta deposit limits cap how much each pool can hold: 500 per
-          deposit and 25,000 in total for each stablecoin, and 25,000 per deposit
-          and 250,000 in total for $GLOAM.
+          <strong>External review covers the vault only.</strong> Kann Audits reviewed the vault
+          contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues.
+          The swap routers, circuits, app and relay were not part of it. Before
+          that came several internal rounds, with fixes deployed, and a review
+          before launch that finished on 20 October with no Critical or High
+          findings open. Beta deposit limits cap how much each pool can hold: 50,000 per
+          deposit and 2,500,000 in total for each stablecoin, and 2,500,000 per
+          deposit and 25,000,000 in total for $GLOAM.
         </li>
         <li>
           <strong>A payer can take back a payment until it is claimed.</strong>{" "}

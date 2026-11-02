@@ -1,15 +1,16 @@
 /**
  * Gloam relay client.
  *
- * Sends an already-proven private send or cash out through the Gloam relay,
- * so the sender's wallet (a person's or an agent's) never appears next to the
- * payment on a block explorer. The proof is the authorization and the cash-out
+ * Sends an already-proven private send, cash out or private swap through the
+ * Gloam relay, so the sender's wallet (a person's or an agent's) never appears
+ * next to the payment on a block explorer. The proof is the authorization and the cash-out
  * recipient is bound inside the proof, so a relay can only submit or refuse,
  * never redirect money. Deposits (shield) still come from the depositor's own
  * wallet, since that is where the money starts.
  */
 import type { Address, Hex } from "viem";
 import type { GloamIntent } from "./intents.js";
+import { assertSwapSendable, type SwapRelayCall } from "./swapIntent.js";
 
 export const GLOAM_RELAY_URL = "https://gloam.trade/api/relay";
 
@@ -27,6 +28,10 @@ export interface RelayNetworkStatus {
   relayer: Address | null;
   memo: boolean;
   lowBalance: boolean;
+  /** Gas is over the relay's ceiling on this chain: nothing is sent until it falls. */
+  gasHigh?: boolean;
+  /** Where gas is dear: the smallest one-hop private swap the relay sends right now, in dollars. */
+  swapFloorUsd?: number | null;
 }
 
 export class GloamRelayError extends Error {
@@ -39,13 +44,19 @@ export class GloamRelayError extends Error {
   }
 }
 
+/** Relay answers that don't say a send stayed unsent: it may still land, so nothing kept for it can go. */
+export const RELAY_MAYBE_SENT: ReadonlySet<string> = new Set(["maybe_sent", "rpc", "network", "error", "internal", "in_flight"]);
+
 async function post(body: Record<string, unknown>, opts: RelayOptions = {}): Promise<Hex> {
   const f = opts.fetch ?? fetch;
-  const res = await f(opts.url ?? GLOAM_RELAY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)),
-  });
+  const payload = JSON.stringify(body, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+  let res: Response;
+  try {
+    res = await f(opts.url ?? GLOAM_RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
+  } catch (e) {
+    // A dropped connection can come after the relay took the request and sent it.
+    throw new GloamRelayError(`No answer from the relay: ${e instanceof Error ? e.message : String(e)}`, "maybe_sent");
+  }
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; hash?: Hex; error?: string; code?: string };
   if (!res.ok || !json.ok || !json.hash) {
     throw new GloamRelayError(json.error ?? `Relay error (${res.status})`, json.code ?? "error");
@@ -92,4 +103,16 @@ export async function relayMemo(
   opts: RelayOptions = {}
 ): Promise<Hex> {
   return post({ action: "memo", ...args }, opts);
+}
+
+/**
+ * Send a private swap, its refund or its exit (buildSwapIntent's `relay`,
+ * buildSwapRefund's or buildSwapExit's) through the relay. Store the swap's
+ * recovery record first (sendSwap does it for you). A swap whose deadline is
+ * too close is refused here, as the relay would refuse it.
+ */
+export async function relaySwapCall(call: SwapRelayCall, opts: RelayOptions = {}): Promise<Hex> {
+  if (call.action !== "swap" && call.action !== "swapExit") throw new GloamRelayError("Only a swap or a swap exit goes through relaySwapCall.", "unsupported");
+  assertSwapSendable(call);
+  return post({ ...call.body, action: call.action }, opts);
 }

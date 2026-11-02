@@ -84,6 +84,7 @@ export async function readGloamNow(address: Address): Promise<bigint | null> {
   if (process.env.GLOAM_VOTE_NO_CHAIN === "1") return null;
   rhClient ??= createPublicClient({
     chain: robinhood,
+    ccipRead: false,
     transport: serverTransport({ chainId: robinhood.id, chain: robinhood, historyRpc: null }, { timeout: READ_TIMEOUT_MS, retryCount: 1 }),
   }) as PublicClient;
   try {

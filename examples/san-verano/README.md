@@ -172,8 +172,9 @@ verify page fails a proof past its expiry; the default is 30 days, set it with
 - **GRIFT is queued, not live.** Its deposit limit is behind the vault's 3-day
   timelock and deposits revert until it lands. USDG works now.
 - **Beta.** Mainnet runs on the final keys of the 13-contributor trusted setup,
-  with beta deposit limits. It had an internal review on 20 October 2026; an
-  external audit is planned and not done. Start small.
+  with beta deposit limits. It had an internal review on 20 October 2026, and
+  Kann Audits reviewed the vault contracts (report, 1 November 2026) and found no
+  Critical, High or Medium issues. Start small.
 
 ## Run it on Robinhood Chain testnet
 

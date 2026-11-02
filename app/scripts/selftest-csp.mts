@@ -10,7 +10,7 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CSP_CONNECT_SOURCES, CSP_REPORT_ONLY } from "../csp.config.mjs";
+import { CSP_APP_ENFORCED, CSP_CONNECT_SOURCES, CSP_REPORT_ONLY, embeddedWalletsBuild } from "../csp.config.mjs";
 import { ORIGIN_CHAINS } from "../src/lib/originChains";
 import { getNetwork, type NetworkKey } from "../src/lib/networks";
 
@@ -58,10 +58,14 @@ for (const [, url] of wagmi.matchAll(/http\("([^"]+)"/g)) {
 }
 
 // WalletConnect relay and the services read from the browser
-for (const url of ["wss://relay.walletconnect.org", "https://pulse.walletconnect.org", "https://api.coingecko.com/api/v3/simple/price", "https://api.relay.link/quote"]) {
+for (const url of ["wss://relay.walletconnect.org", "https://pulse.walletconnect.org", "https://api.relay.link/quote"]) {
   assert.ok(allowed(url), url);
   n++;
 }
+
+// prices come from the app's own server, so the browser reads no price API
+assert.ok(!allowed("https://api.coingecko.com/api/v3/simple/price"), "no browser price API");
+n++;
 
 // nothing that would break the app if enforced by mistake, and nothing wide open
 assert.ok(CSP_REPORT_ONLY.includes("'wasm-unsafe-eval'"), "the prover's WebAssembly is allowed");
@@ -75,5 +79,28 @@ assert.ok(config.includes('key: "Content-Security-Policy-Report-Only", value: CS
 assert.ok(/NODE_ENV === "production" \? \[\{ key: "Content-Security-Policy-Report-Only"/.test(config), "sent in production builds only");
 assert.ok(config.includes("frame-ancestors 'none'"));
 n += 3;
+
+// With Gloam wallets on, /app enforces scripts, frames, workers and connections. A Gloam
+// wallet signs with no prompt, so a page that loads code from anywhere could send from it.
+const directive = (name: string) => CSP_APP_ENFORCED.split("; ").find((d: string) => d.startsWith(`${name} `)) ?? "";
+assert.equal(directive("script-src"), "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://va.vercel-scripts.com", "scripts only from here");
+assert.ok(!CSP_APP_ENFORCED.includes("'unsafe-eval'"), "no eval");
+assert.equal(directive("connect-src"), `connect-src ${CSP_CONNECT_SOURCES.join(" ")}`, "the same tested connect list");
+for (const host of ["https://api.turnkey.com", "https://authproxy.turnkey.com", "https://lottie.host"]) assert.ok(allowed(host), host);
+assert.ok(/frame-src [^;]*https:\/\/\*\.turnkey\.com/.test(CSP_APP_ENFORCED), "Turnkey's export and import frames");
+assert.equal(directive("worker-src"), "worker-src 'self' blob:", "the prover's workers");
+for (const d of ["frame-ancestors 'none'", "base-uri 'self'", "object-src 'none'", "form-action 'self'"]) assert.ok(CSP_APP_ENFORCED.includes(d), d);
+n += 9;
+const ids = { NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID: "org", NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID: "proxy" };
+const env = (e: Record<string, string>) => e as unknown as NodeJS.ProcessEnv;
+assert.equal(embeddedWalletsBuild(env({ NEXT_PUBLIC_TURNKEY_ENABLED: "true", ...ids })), true);
+assert.equal(embeddedWalletsBuild(env({ NEXT_PUBLIC_TURNKEY_ENABLED: "1", ...ids })), false);
+assert.equal(embeddedWalletsBuild(env({ NEXT_PUBLIC_TURNKEY_ENABLED: "true" })), false);
+assert.ok(
+  /process\.env\.NODE_ENV === "production" && embeddedWalletsBuild\(\)\s*\? \[\{ source: "\/app\/:path\*", headers: \[\{ key: "Content-Security-Policy", value: CSP_APP_ENFORCED \}\] \}\]/.test(config),
+  "enforced on /app in production builds with Gloam wallets on, and nowhere else",
+);
+assert.ok(config.indexOf("CSP_APP_ENFORCED }") > config.indexOf("frame-ancestors 'none'; base-uri"), "after the framing policy, so it replaces it on /app");
+n += 5;
 
 console.log(`csp: ${n} passed`);

@@ -49,6 +49,25 @@ export function messageText(msg: TgMessage): string {
   return (msg.text ?? msg.caption ?? "").trim();
 }
 
+/**
+ * Every link Telegram marked in a message: a url entity as written, and where
+ * a text_link (a link behind other words) points. Telegram knows every domain
+ * ending, so these catch links the text pattern can't.
+ */
+export function entityLinks(msg: TgMessage): string[] {
+  const text = msg.text ?? msg.caption ?? "";
+  const out: string[] = [];
+  for (const e of msg.entities ?? msg.caption_entities ?? []) {
+    if (e.type === "url") {
+      const link = text.slice(e.offset, e.offset + e.length).trim();
+      if (link) out.push(link);
+    } else if (e.type === "text_link" && typeof e.url === "string" && e.url.trim()) {
+      out.push(e.url.trim());
+    }
+  }
+  return out;
+}
+
 /** Which topic a group message is in. Replies inside General carry a thread id but are not topic messages. */
 export function topicOf(msg: TgMessage): number {
   return msg.is_topic_message && msg.message_thread_id ? msg.message_thread_id : TOPIC.general;
@@ -398,8 +417,18 @@ const DM_CHAT =
 export const INVITATION = /^\W*(?:if|when)\s+(?:you|u|ya|anyone|someone|any\s+of\s+you)\b/i;
 const WALLET_FIX =
   /\b(?:validate|validation|rectify|rectification|reactivate|synchroni[sz]e|resync|whitelist)\s+(?:your\s+|ur\s+|the\s+)?wallets?\b|\bsync\s+(?:your|ur)\s+wallets?\b|\bwallet\s+(?:validation|rectification|synchroni[sz]ation)\b/i;
-export const LINK_RE =
-  /\b(?:https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|t\.me\/[^\s<>"']+|(?:[a-z0-9-]+\.)+(?:com|io|xyz|org|net|app|finance|link|site|online|live|pro|top|info|co|me|cc|vip|club|fi|dev|gg|ai|so|claims?|gift|cash|money|exchange|network|tech|trade)(?:\/[^\s<>"']*)?)/gi;
+/**
+ * Endings that look like a domain's but are file types or wallet names, never
+ * a top-level domain ("app.tsx", "duke.eth"). Any other ending of two or more
+ * letters (or an encoded one, xn--) is read as a domain: new and country
+ * endings (.ru, .cfd, .support) are where look-alike sites live.
+ */
+const NOT_A_TLD =
+  "js|jsx|mjs|cjs|ts|tsx|json|jsonl|txt|csv|tsv|png|jpe?g|gif|webp|svg|pdf|html?|s?css|sol|eth|mp[34]|wav|ya?ml|toml|lock|log|env|ini|cfg|exe|dll|wasm|zkey|circom|rb|java|kt|swift|cpp|hpp|go|gz|tar|rar";
+export const LINK_RE = new RegExp(
+  `\\b(?:https?:\\/\\/[^\\s<>"']+|www\\.[^\\s<>"']+|t\\.me\\/[^\\s<>"']+|(?:[a-z0-9-]+\\.)+(?!(?:${NOT_A_TLD})(?![a-z0-9-]))(?:xn--[a-z0-9-]{2,59}|[a-z]{2,24})(?![a-z0-9-])(?:\\/[^\\s<>"']*)?)`,
+  "gi"
+);
 const LURE =
   /\b(?:wallets?|claim(?:ing|ed)?|airdrops?|giveaways?|rewards?|bonus|free (?:tokens?|money|usdc|usdt|eth|crypto)|connect|whitelist|presale|mint|eligible|allocation)\b/i;
 /**
@@ -629,19 +658,19 @@ export function says(re: RegExp, text: string): boolean {
  * flagged. Look-alike letters, digits for letters ("airdr0p") and spaced-out
  * words are read the way a person reads them.
  */
-export function scamReason(raw: string, glued = false): ScamReason | null {
+export function scamReason(raw: string, glued = false, links: readonly string[] = []): ScamReason | null {
   const text = scorable(raw);
   let warned: ScamReason | null = null;
   for (const t of spellings(text)) {
-    const why = wordsReason(t, text, glued);
+    const why = wordsReason(t, text, glued, links);
     if (why && !WARN_ONLY.has(why)) return why;
     warned ??= why;
   }
   return warned;
 }
 
-/** scamReason for one spelling of the text; links are read from the text as written. */
-function wordsReason(text: string, written: string, glued = false): ScamReason | null {
+/** scamReason for one spelling of the text; links are read from the text as written, plus the ones Telegram marked (`links`). */
+function wordsReason(text: string, written: string, glued = false, links: readonly string[] = []): ScamReason | null {
   for (const re of [SECRET_REQUEST, SECRET_QUESTION]) {
     const m = re.exec(text);
     if (m && !negated(text, m.index, m[0])) return "secret_request";
@@ -666,7 +695,7 @@ function wordsReason(text: string, written: string, glued = false): ScamReason |
   // safety words around it ("careful", "not fake") change nothing, a negation or a question in its own sentence does
   if (says(MIGRATION, text) && says(DROP, text) && says(PRIVATE_ASK, text)) return "migration_airdrop";
   if (LURE.test(text)) {
-    for (const link of written.match(LINK_RE) ?? []) {
+    for (const link of [...(written.match(LINK_RE) ?? []), ...links]) {
       const { host } = hostOf(link);
       if (!linkAllowed(link) && (host === "t.me" || !SAFE_HOSTS.some((s) => onHost(host, s)))) return "phishing_link";
     }
@@ -811,8 +840,8 @@ export function roleScam(u: { first_name?: string; last_name?: string }, raw: st
  * split-scam joiner), where a harmless "holders, the docs are updated" and a
  * later "dm me if you get stuck" must not read as the lure.
  */
-export function memberScam(u: { first_name?: string; last_name?: string }, raw: string, glued = false): ScamReason | null {
-  const words = scamReason(raw, glued);
+export function memberScam(u: { first_name?: string; last_name?: string }, raw: string, glued = false, links: readonly string[] = []): ScamReason | null {
+  const words = scamReason(raw, glued, links);
   if (words && !WARN_ONLY.has(words)) return words;
   const role = roleScam(u, raw, glued);
   return role && !WARN_ONLY.has(role) ? role : (words ?? role);
@@ -889,6 +918,10 @@ export function impersonates(u: { first_name?: string; last_name?: string; usern
 
 export type ModAction = { remove: boolean };
 
+/** How an order opens: an optional please or "can you", then the verb, with its object where the word alone means something else. */
+const MOD_ORDER =
+  /^(?:(?:please|pls|plz|ok|okay)[\s,]+)*(?:(?:can|could|would|will)\s+(?:you|u)\s+(?:please\s+|pls\s+)?|go\s+ahead\s+and\s+)?(?:delete|remove|kick(?!\s+off\b)|ban|boot|block\s+(?:him|her|them|this|that)|throw\s+(?:him|her|them)\s+out|get\s+(?:him|her|them)\s+out|take\s+(?:it|this)\s+down)\b/;
+
 /**
  * Rose's manual moderation commands. Rose owns them: when an admin types one,
  * Rose acts and Glim stays out of it, so one command never gets two bots
@@ -905,17 +938,22 @@ export const ROSE_COMMANDS = new Set([
  * (delete it), /spam (delete it and remove the person), or tagging the helper
  * with "delete", "remove", "kick" or "ban". Rose's own commands (/ban, /kick,
  * /del and the rest) are Rose's: the bot ignores them before getting here.
- * Null when it is not that.
+ * Null when it is not that. The words have to open the message as an order:
+ * this bans people and deletes what they said, and "which block was the
+ * snapshot?", "don't ban him" and "how do they remove the passkey?" are not.
+ * `persona` is the helper's name, for "Glim, delete this".
  */
-export function moderationAsk(text: string, command: string | null, tagged: boolean): ModAction | null {
+export function moderationAsk(text: string, command: string | null, tagged: boolean, persona = ""): ModAction | null {
   if (command) {
     if (command === "del" || command === "delete") return { remove: false };
     if (command === "spam" || command === "remove") return { remove: true };
     return null;
   }
   if (!tagged) return null;
-  const t = norm(text).toLowerCase();
-  const remove = /\b(?:kick|ban|boot|block|remove\s+(?:him|her|them|this\s+(?:guy|person|user|account|scammer))|throw\s+(?:him|her|them)\s+out|get\s+(?:him|her|them)\s+out)\b/.test(t);
+  const said = norm(text).toLowerCase();
+  const t = persona ? said.replace(new RegExp(`^(?:(?:hey|hi|hello|yo|ok|okay|pls|please|oi)[\\s,]+)?${escapeRe(persona.toLowerCase())}[\\s,:]+`, "u"), "") : said;
+  if (!MOD_ORDER.test(t)) return null;
+  const remove = /\b(?:kick|ban|boot|block\s+(?:him|her|them|this|that)|remove\s+(?:him|her|them|this\s+(?:guy|person|user|account|scammer))|throw\s+(?:him|her|them)\s+out|get\s+(?:him|her|them)\s+out)\b/.test(t);
   const del = /\b(?:delete|remove|take\s+(?:it|this)\s+down)\b/.test(t);
   return remove || del ? { remove } : null;
 }
@@ -1200,8 +1238,21 @@ export function linkAllowed(link: string): boolean {
 
 const ANY_EVM_ADDRESS = /\b0x[0-9a-fA-F]{40}\b/g;
 const ABOUT_TOKEN = /\$gloam\b|\btoken\b/i;
-/** "Send your USDG to 0x...": the helper never tells anyone to send money to an address. */
-const SEND_TO_ADDRESS = /\b(?:send|transfer|deposit|move|pay)\b[^.!?\n]*?\bto\s+(?:(?:this|that|the|my|our)\s+(?:address|wallet)\s*:?\s*)?0x[0-9a-fA-F]{40}\b/i;
+/** An address in a reply, written with or without its 0x (40 hex characters standing alone, never part of a hash). */
+const REPLY_ADDRESS = /(?<![0-9a-zA-Z])(?:0x)?[0-9a-fA-F]{40}(?![0-9a-zA-Z])/g;
+/** A wallet name ("gloambuyback.eth"): it points at an address just as one does. */
+const WALLET_NAME = /(?<![\w.-])(?:[a-z0-9-]+\.)+eth(?![\w-])/gi;
+/** "Send your USDG to 0x..." (or to a wallet name): the helper never tells anyone to send money to an address. */
+const SEND_TO_ADDRESS =
+  /\b(?:send|transfer|deposit|move|pay)\b[^.!?\n]*?\bto\s+(?:(?:this|that|the|my|our)\s+(?:address|wallet)\s*:?\s*)?(?:(?<![0-9a-zA-Z])(?:0x)?[0-9a-fA-F]{40}(?![0-9a-zA-Z])|(?:[a-z0-9-]+\.)+eth\b)/i;
+
+/** The addresses in a reply, as 0x and lower case, and its wallet names, lower case. */
+function addressesIn(s: string): string[] {
+  return (s.match(REPLY_ADDRESS) ?? []).map((a) => `0x${a.replace(/^0x/i, "").toLowerCase()}`);
+}
+function walletNamesIn(s: string): string[] {
+  return (s.match(WALLET_NAME) ?? []).map((n) => n.toLowerCase());
+}
 
 /** $GLOAM's contract and Gloam's mainnet pools (and Base Sepolia's and Ethereum Sepolia's): the addresses the helper may name on its own. */
 export function ownAddress(a: string): boolean {
@@ -1213,17 +1264,21 @@ export function ownAddress(a: string): boolean {
 }
 
 /**
- * A 0x address that must not go out: the known copycat token in any letter
- * case (a RobinScan link to it too), "send ... to 0x...", and any address
- * other than $GLOAM's (team chats) or other than $GLOAM's, a pool's or one the
- * asker posted (the group), so a mistyped or fake contract never goes out.
+ * An address that must not go out, with or without its 0x: the known copycat
+ * token in any letter case (a RobinScan link to it too), "send ... to 0x...",
+ * and any address other than $GLOAM's (team chats) or other than $GLOAM's, a
+ * pool's or one the asker posted (the group), so a mistyped or fake contract
+ * never goes out. A wallet name (.eth) is held to the same rule as an address.
  */
 function wrongAddress(s: string, team: boolean, posted: Set<string>): boolean {
-  const found = (s.match(ANY_EVM_ADDRESS) ?? []).map((a) => a.toLowerCase());
+  const found = addressesIn(s);
+  const names = walletNamesIn(s);
   if (found.some((a) => COPYCAT.has(a)) || SEND_TO_ADDRESS.test(s)) return true;
-  if (team) return found.some((a) => a !== GLOAM_TOKEN.address.toLowerCase());
-  // an address the asker posted may come back about their wallet, never in a line that calls it the token or a contract
-  return found.some((a) => !ownAddress(a) && (!posted.has(a) || TOKEN_TALK.test(s)));
+  if (team) return found.some((a) => a !== GLOAM_TOKEN.address.toLowerCase()) || names.length > 0;
+  // an address or wallet name the asker posted may come back about their wallet, never in a line that calls it the token or a contract
+  return (
+    found.some((a) => !ownAddress(a) && (!posted.has(a) || TOKEN_TALK.test(s))) || names.some((n) => !posted.has(n) || TOKEN_TALK.test(s))
+  );
 }
 
 /**
@@ -1234,9 +1289,10 @@ function wrongAddress(s: string, team: boolean, posted: Set<string>): boolean {
 const TOKEN_TALK = /\$gloam\b|\b(?:ca|contracts?|tokens?|addy|official|legit|genuine|verified|real one|right one|correct one)\b/i;
 
 /**
- * "Gloam is audited", "the contracts were fully audited": not true. Gloam had an
- * internal review before mainnet; an external audit is planned, not done.
- * "Not audited yet" and "an audit is planned" are fine.
+ * "Gloam is audited", "the contracts were fully audited": not true. Kann Audits
+ * reviewed the vault contracts only; the routers, circuits, app and relay were
+ * not part of it. "Kann Audits reviewed the vault contracts" and "the routers
+ * are not audited" are fine.
  */
 const AUDITED_CLAIM =
   /\b(?:is|are|was|were|been|got|fully|already|externally|independently|professionally)\s+(?:fully\s+|externally\s+|independently\s+|professionally\s+)?audited\b/gi;
@@ -1329,7 +1385,8 @@ export function cleanReply(raw: string, policy: ReplyPolicy): string | null {
   if ([...scanCodes(text).kinds].some((k) => k !== "address" && k !== "request_link")) return null;
   const okHandles = new Set(["gloamtrade", "gloamhq", ...policy.handles.map((h) => h.toLowerCase())]);
   const live = policy.mainnetLive ?? isMainnetLive();
-  const posted = new Set((policy.askerText?.match(ANY_EVM_ADDRESS) ?? []).map((a) => a.toLowerCase()));
+  const asked = policy.askerText ?? "";
+  const posted = new Set([...addressesIn(asked), ...walletNamesIn(asked)]);
   const r = dropBroken(text, (s) => brokenSentence(s, Boolean(policy.team), okHandles, live, posted));
   if (!r.kept) return null;
   if (!policy.team && r.dropped * 2 > r.kept + r.dropped) return null;

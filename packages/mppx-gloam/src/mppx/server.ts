@@ -6,7 +6,7 @@
  *
  *   const mppx = Mppx.create({
  *     secretKey: process.env.MPP_SECRET_KEY!,
- *     methods: [gloam({ receiveKey, chain, prove, submit, network: "tempo" })],
+ *     methods: [gloam({ receiveKey, chain, prove, submit, beforeSubmit, network: "tempo" })],
  *   })
  *   const r = await mppx.charge({ amount: "0.01" })(request)
  *   if (r.status === 402) return r.challenge
@@ -30,15 +30,15 @@ import {
   type GloamChargeNetwork,
   type GloamChargeRequest,
 } from "../charge.js";
-import { settleGloamCharge, validateGloamCharge, type GloamChargeServerConfig, type ValidatedGloamCharge } from "../server.js";
+import { assertKeepsFreshNotes, settleGloamCharge, validateGloamCharge, type GloamChargeServerConfig, type ValidatedGloamCharge } from "../server.js";
 import { charge } from "./method.js";
 
 /** Translate a gloam failure into the mppx error that answers with the right Problem Details. */
 export function toMppxError(e: unknown, challengeId?: string): Error {
   if (e instanceof Errors.PaymentError) return e;
-  // mppx ends the problem detail with its own period.
-  const reason = (e instanceof Error ? e.message : String(e)).replace(/\.$/, "");
   if (e instanceof GloamChargeError) {
+    // mppx ends the problem detail with its own period.
+    const reason = e.message.replace(/\.$/, "");
     switch (e.code) {
       case "payment-expired":
         return new Errors.PaymentExpiredError({});
@@ -50,7 +50,9 @@ export function toMppxError(e: unknown, challengeId?: string): Error {
         return new Errors.VerificationFailedError({ reason, details: { retryable: e.retryable } });
     }
   }
-  return new Errors.VerificationFailedError({ reason });
+  // Anything else came from the RPC, the store or the submitter. That text is for the operator, so the
+  // client gets the same words as on the plain paywall.
+  return new Errors.VerificationFailedError({ reason: "The payment could not be processed" });
 }
 
 export declare namespace gloam {
@@ -81,6 +83,7 @@ export type GloamServerMethod = Method.Server<typeof charge, GloamServerDefaults
 /** A gloam charge method for `Mppx.create({ methods: [...] })`. Routes pass `{ amount: "0.01" }`. */
 export function gloam(parameters: gloam.Parameters): GloamServerMethod {
   const { network, currency, decimals, canOffer, onPaymentSuccess, ...config } = parameters;
+  assertKeepsFreshNotes(config);
   const net = resolveNetwork(network);
   const pool = officialPool(net.chainId, config.pools);
   if (!pool) throw new Error(`There is no Gloam pool on chain ${net.chainId}.`);

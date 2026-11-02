@@ -700,7 +700,7 @@ async function fetchPaid(s: Awaited<ReturnType<typeof setup>>, requirements: unk
   return { r, body402, sent: transfers(s.chain) - before };
 }
 
-test("fetch_paid: the 402 body goes out as the payee sent it, and only an allow pays", async () => {
+test("fetch_paid: the decoded price and the 402 body go out as Agent Wormhole gets them, and only an allow pays", async () => {
   reset(ALLOW);
   let s = await setup(on);
   let { r, body402, sent } = await fetchPaid(s, s.priced.requirements);
@@ -708,7 +708,11 @@ test("fetch_paid: the 402 body goes out as the payee sent it, and only an allow 
   assert.equal(r.body, "the answer is 42");
   assert.equal(sent, 1);
   const out = JSON.parse(received[0]!.body);
-  assert.equal(out.content, body402, "exactly the 402 body, as Agent Wormhole gets it");
+  // The same text Agent Wormhole reads: the price as it would be paid, decoded, then the 402 body as the payee sent it.
+  const [decoded, asSent] = out.content.split("\n");
+  assert.equal(JSON.parse(decoded).payTo, s.priced.requirements.payTo, "the price as it would be paid");
+  assert.equal(asSent, body402, "then the 402 body as the payee sent it");
+  assert.equal(out.resource_host, "api.example.com", "the host this server fetched");
   assert.equal(out.amount, "1000000");
   assert.equal(out.payee, s.priced.requirements.payTo);
 

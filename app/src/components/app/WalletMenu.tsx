@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { Address } from "viem";
 import {
   useConnect,
@@ -27,11 +27,13 @@ import {
 } from "@/lib/feeSponsor";
 import { isTempoWallet, preloadTempoWallet } from "@/lib/tempoWallet";
 import { WALLETCONNECT_ID, prefersWalletConnect } from "@/lib/walletConnect";
+import { EMBEDDED_CONNECTOR_ID } from "@/lib/embeddedWallet";
+import { embeddedAvailability, onEmbeddedAvailability, openEmbeddedSheet, signOutEmbedded } from "@/lib/turnkeyBridge";
 import { useNetwork } from "./NetworkProvider";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
 import { ClientOnly } from "./ClientOnly";
 
-// Passkey sign-in ships only when Turnkey is switched on.
+// Email and passkey sign-in (Gloam wallets) ships only when Turnkey is switched on.
 const TurnkeyHeaderSignIn = dynamic(() =>
   import("./TurnkeyHeaderSignIn").then((m) => m.TurnkeyHeaderSignIn),
 );
@@ -72,11 +74,16 @@ function walletChainName(id: number): string {
 export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   const { address, isConnected, isConnecting, chainId, demo, connector } =
     useAppAccount();
-  const { connect, connectors, isPending, error, variables } = useConnect();
+  const { connect, connectors, isPending, error, variables, reset } = useConnect();
   const { disconnect: wagmiDisconnect, disconnectAsync } = useDisconnect();
-  const disconnect = demo ? exitDemo : wagmiDisconnect;
+  const embedded = connector?.id === EMBEDDED_CONNECTOR_ID;
+  // A Gloam wallet signs out of Turnkey: disconnecting alone would connect it again.
+  const disconnect = demo ? exitDemo : () => (embedded ? void signOutEmbedded() : wagmiDisconnect());
   const { network } = useNetwork();
   const { switchChain, isPending: switching } = useSwitchChain();
+  // Gloam wallets: offered while the Turnkey kit can work on this page.
+  const embeddedState = useSyncExternalStore(onEmbeddedAvailability, embeddedAvailability, () => "starting" as const);
+  const offerEmbedded = TURNKEY_ENABLED && embeddedState !== "unavailable";
   // `wc`: no wallet in this browser, so "use a wallet" opens WalletConnect
   const [env, setEnv] = useState<{ mounted: boolean; auto: WalletMenuVariant; wc: boolean }>(
     { mounted: false, auto: "inline", wc: false }
@@ -118,7 +125,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   // Injected wallet (MetaMask, etc.) is the fallback, not a passkey connector.
   const walletConnector =
     connectors.find(
-      (c) => c.id !== "gloam-turnkey" && c.id !== WALLETCONNECT_ID && !isTempoWallet(c)
+      (c) => c.id !== EMBEDDED_CONNECTOR_ID && c.id !== WALLETCONNECT_ID && !isTempoWallet(c)
     ) ?? connectors[0];
   const wc = env.wc;
   const canUseWallet = wc || Boolean(walletConnector);
@@ -131,9 +138,10 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
     else if (walletConnector) connect({ connector: walletConnector });
   }
   const sheet = wc && wcShown ? <WalletConnectSheet open={wcOpen} onClose={closeWc} /> : null;
-  // Passkey sign-in (Tempo Wallet) is offered on Tempo, where it lives.
+  // Passkey sign-in (Tempo Wallet) is offered on Tempo testnet, where it lives,
+  // unless Gloam wallets are on: they sign in with a passkey on every network.
   const passkeyConnector =
-    network.key === "tempo" ? connectors.find((c) => isTempoWallet(c)) : undefined;
+    network.key === "tempo" && !offerEmbedded ? connectors.find((c) => isTempoWallet(c)) : undefined;
   const offerPasskey = Boolean(passkeyConnector) && !isConnected && !demo;
 
   // Load the wallet SDK while the button is visible, so a click can open the
@@ -205,6 +213,57 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   if (!isConnected || !address) {
     const connecting = isPending || isConnecting;
 
+    // Gloam wallets: email or passkey on every network, a browser wallet beside it.
+    if (offerEmbedded) {
+      const plainConnect = (
+        <button type="button" onClick={openWallet} disabled={!canUseWallet || connecting} className={primary}>
+          {!compact && <WalletGlyph />}
+          {connecting ? "Connecting…" : compact ? "Connect" : "Connect wallet"}
+        </button>
+      );
+      return (
+        <div
+          ref={root}
+          className={
+            compact
+              ? "flex items-center gap-2"
+              : "flex flex-col items-stretch gap-1"
+          }
+        >
+          <ClientOnly>
+            <TurnkeyHeaderSignIn
+              className={primary}
+              quietClassName={`text-[13px] text-mute transition-colors hover:text-foreground disabled:opacity-60 ${
+                compact ? "h-9 px-1" : "h-9 w-full rounded-full hover:bg-surface"
+              }`}
+              fallback={plainConnect}
+            />
+          </ClientOnly>
+          <button
+            type="button"
+            onClick={openWallet}
+            disabled={!canUseWallet || connecting}
+            className={`text-[13px] text-mute transition-colors hover:text-foreground disabled:opacity-60 ${
+              compact ? "h-9 px-1" : "h-9 w-full rounded-full hover:bg-surface"
+            }`}
+          >
+            {connecting ? "Connecting…" : compact ? "Use a wallet" : wc ? "Use a wallet app" : "Use a browser wallet"}
+          </button>
+          {v === "inline" && (
+            <p className="mt-1 text-center text-[12px] leading-snug text-mute">
+              Sign in with your email or a passkey. No seed phrase.
+            </p>
+          )}
+          {error && !compact && (
+            <p className="mt-1 text-[12px] leading-snug text-danger">
+              {connectErrorText(error)}
+            </p>
+          )}
+          {sheet}
+        </div>
+      );
+    }
+
     if (passkeyConnector) {
       const pendingConnector = variables?.connector;
       const signingIn =
@@ -265,37 +324,8 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
       );
     }
 
-    // Turnkey passkeys live on Robinhood Chain testnet only.
-    if (TURNKEY_ENABLED && network.key === "robinhood") {
-      return (
-        <div
-          ref={root}
-          className={
-            compact
-              ? "flex items-center gap-2"
-              : "flex flex-col items-stretch gap-1"
-          }
-        >
-          <ClientOnly>
-            <TurnkeyHeaderSignIn className={primary} />
-          </ClientOnly>
-          <button
-            type="button"
-            onClick={openWallet}
-            disabled={!canUseWallet || connecting}
-            className={`text-[13px] text-mute transition-colors hover:text-foreground disabled:opacity-60 ${
-              compact ? "h-9 px-1" : "h-9 w-full rounded-full hover:bg-surface"
-            }`}
-          >
-            {connecting ? "Connecting…" : "Use a wallet"}
-          </button>
-          {sheet}
-        </div>
-      );
-    }
-
     return (
-      <div ref={root} className={compact ? "inline-flex" : undefined}>
+      <div ref={root} className={compact ? "relative inline-flex" : undefined}>
         <button
           type="button"
           onClick={openWallet}
@@ -309,6 +339,25 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
           <p className="mt-2 text-[12px] leading-snug text-danger">
             {connectErrorText(error)}
           </p>
+        )}
+        {/* The top bar has no room under the button, so a phone gets the same message as a small card. */}
+        {error && compact && (
+          <div
+            role="alert"
+            className="absolute right-0 top-full z-50 mt-2 flex w-[min(300px,calc(100vw-2rem))] items-start gap-1 rounded-[14px] border border-line bg-panel py-2 pl-3.5 pr-1 shadow-pop"
+          >
+            <p className="min-w-0 flex-1 py-1 text-[12.5px] leading-snug text-danger">{connectErrorText(error)}</p>
+            <button
+              type="button"
+              onClick={() => reset()}
+              aria-label="Dismiss"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         )}
         {sheet}
       </div>
@@ -482,6 +531,22 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
             <MenuLink href="/app" onClick={() => setOpen(false)} icon={<GridGlyph />}>
               Portfolio
             </MenuLink>
+            {embedded && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  openEmbeddedSheet("funding");
+                }}
+                className="flex h-10 w-full items-center gap-3 rounded-xl px-2.5 text-[14px] text-foreground transition-colors hover:bg-surface"
+              >
+                <span className="text-mute">
+                  <PlusGlyph />
+                </span>
+                Add funds
+              </button>
+            )}
             {/* Trade: tokenized stocks, where the network has them (the Vault's Trade) */}
             {network.stocks && (
               <MenuLink
@@ -519,7 +584,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
               className="flex h-10 w-full items-center gap-3 rounded-xl px-2.5 text-[14px] text-mute transition-colors hover:bg-surface hover:text-foreground"
             >
               <ExitGlyph />
-              Disconnect
+              {embedded ? "Sign out" : "Disconnect"}
             </button>
           </div>
         </div>
@@ -799,6 +864,13 @@ function GearGlyph() {
         strokeWidth="1.6"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+function PlusGlyph() {
+  return (
+    <svg {...glyph}>
+      <path d="M12 5.5v13M5.5 12h13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

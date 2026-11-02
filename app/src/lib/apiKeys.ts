@@ -25,7 +25,7 @@
  */
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { GloamNetwork } from "./networks";
-import { jsonOf, k, kv, kv1 } from "./partnersKv";
+import { jsonOf, k, kv, kv1, type KvCommand } from "./partnersKv";
 
 export type KeyEnv = "test" | "live";
 
@@ -38,6 +38,8 @@ const KEY_RE = /^gloam_(test|live)_([A-Za-z0-9_-]{43})$/;
 
 /** Active keys a partner may hold at once. */
 export const MAX_ACTIVE_KEYS = 10;
+/** Revoked keys kept on record per partner. Past this the oldest go, so making and revoking keys can't grow the store for good. */
+export const MAX_REVOKED_KEPT = 50;
 export const KEY_NAME_MAX = 40;
 
 /** Requests per key per minute, every v1 endpoint together. */
@@ -213,7 +215,8 @@ export async function createApiKey(args: {
   pepper: string;
 }): Promise<{ key: ApiKeyView; secret: string }> {
   const name = cleanKeyName(args.name) || "Untitled key";
-  const active = (await readRecords(args.partnerId)).filter((r) => r.revokedAt === null);
+  const records = await readRecords(args.partnerId);
+  const active = records.filter((r) => r.revokedAt === null);
   if (active.length >= MAX_ACTIVE_KEYS) {
     throw new ApiKeyError(`You can have ${MAX_ACTIVE_KEYS} active keys. Revoke one first.`, 409, "key_limit");
   }
@@ -237,7 +240,17 @@ export async function createApiKey(args: {
     ["SADD", k("partnerkeys", rec.partnerId), rec.id],
   ]);
   if (setIndex !== "OK") throw new ApiKeyError("Could not make a key. Try again.", 500, "internal");
+  await forgetOldRevoked(args.partnerId, records).catch(() => undefined);
   return { key: viewOf(rec, null), secret };
+}
+
+async function forgetOldRevoked(partnerId: string, records: ApiKeyRecord[]): Promise<void> {
+  const old = records
+    .filter((r) => r.revokedAt !== null)
+    .sort((a, b) => b.revokedAt! - a.revokedAt!)
+    .slice(MAX_REVOKED_KEPT);
+  if (!old.length) return;
+  await kv(old.flatMap((r): KvCommand[] => [["SREM", k("partnerkeys", partnerId), r.id], ["DEL", k("keyrec", r.id)], ["DEL", k("keyused", r.id)]]));
 }
 
 /** How long a rotate, revoke or rename may hold a key's lock before it lapses on its own. */

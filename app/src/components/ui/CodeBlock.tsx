@@ -37,7 +37,7 @@ export function CopyButton({ text, className = "" }: { text: string; className?:
           window.setTimeout(() => setCopied(false), 1600);
         });
       }}
-      className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface-2 hover:text-foreground ${className}`}
+      className={`gl-tap inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface-2 hover:text-foreground ${className}`}
       aria-label={copied ? "Copied" : "Copy code"}
     >
       {copied ? <CheckIcon /> : <CopyIcon />}

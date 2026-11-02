@@ -34,7 +34,7 @@ Mainnet runs `ShieldPoolPayments`: the same surface without `sealedSwap`, plus b
 
 ## Mainnet deploy (2026-10-21, beta)
 
-All four mainnets (Robinhood Chain, Tempo, Base and Ethereum) run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the shared core with no sealed swap code, deposits through `shieldBound()` only, beta deposit limits and a 0.25% cash-out fee. Each was deployed by `script/MainnetDeploy.sol` (through `DeployRobinhoodMainnet.s.sol`, `DeployTempoMainnet.s.sol`, `DeployBaseMainnet.s.sol` and `DeployEthereumMainnet.s.sol`), which deploys the final-key verifiers, refuses to create the pool unless they accept final-key proofs and reject dev-key ones, and ends setup in the same run. The internal pre-mainnet review (20 October 2026) closed with no Critical or High findings open; an external audit is planned.
+All four mainnets (Robinhood Chain, Tempo, Base and Ethereum) run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the shared core with no sealed swap code, deposits through `shieldBound()` only, beta deposit limits and a 0.25% cash-out fee. Each was deployed by `script/MainnetDeploy.sol` (through `DeployRobinhoodMainnet.s.sol`, `DeployTempoMainnet.s.sol`, `DeployBaseMainnet.s.sol` and `DeployEthereumMainnet.s.sol`), which deploys the final-key verifiers, refuses to create the pool unless they accept final-key proofs and reject dev-key ones, and ends setup in the same run. The internal pre-mainnet review (20 October 2026) closed with no Critical or High findings open. Kann Audits then reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues.
 
 Base runs the same deploy, with native ETH listed next to USDC, EURC and, on mainnet, bridged USDT. Base Sepolia (`84532`, a testnet on the final keys) went live on 24 October 2026 through `DeployBaseSepolia.s.sol` (table below). Base mainnet (`8453`, `DeployBaseMainnet.s.sol`) is next and not deployed. Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
@@ -49,7 +49,7 @@ Ethereum runs the same path too: Ethereum Sepolia (`11155111`, a testnet on the 
 | PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
 | DualProofVerifier, ShieldIVerifier | Final keys (`src/verifiers/final`); read `verifier()` and `shieldVerifier()` on the pool |
 | sealedSwapVerifier | `0x0`, always (no swap code) |
-| Listed assets (per deposit / total) | USDG `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (500 / 25,000), $GLOAM `0xDcD885F5c60b3aD49F6D58718696417314e8724d` (25,000 / 250,000). ETH is gas only |
+| Listed assets (per deposit / total) | USDG `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (50,000 / 2,500,000), $GLOAM `0xDcD885F5c60b3aD49F6D58718696417314e8724d` (2,500,000 / 25,000,000). ETH is gas only |
 | Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet; a multisig is planned) |
 | Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8`, the treasury, since 2026-10-24 (the owner at launch; changed through the 3-day timelock) |
 | Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
@@ -64,7 +64,7 @@ Ethereum runs the same path too: Ethereum Sepolia (`11155111`, a testnet on the 
 | PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
 | DualProofVerifier, ShieldIVerifier | Final keys (`src/verifiers/final`); read `verifier()` and `shieldVerifier()` on the pool |
 | sealedSwapVerifier | `0x0`, always (no swap code) |
-| Listed assets (per deposit / total) | USDC.e `0x20c000000000000000000000b9537d11c60e8b50`, pathUSD `0x20c0000000000000000000000000000000000000`, USDT0 `0x20c00000000000000000000014f22ca97301eb73`, OUSD `0x20c0000000000000000000006a37da5c996874be` (TIP-20, 6 decimals, 500 / 25,000 each) |
+| Listed assets (per deposit / total) | USDC.e `0x20c000000000000000000000b9537d11c60e8b50`, pathUSD `0x20c0000000000000000000000000000000000000`, USDT0 `0x20c00000000000000000000014f22ca97301eb73`, OUSD `0x20c0000000000000000000006a37da5c996874be` (TIP-20, 6 decimals, 50,000 / 2,500,000 each) |
 | Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet; a multisig is planned) |
 | Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8`, the treasury, since 2026-10-24 (the owner at launch; changed through the 3-day timelock) |
 | Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
@@ -159,7 +159,7 @@ Older verifier deployments (for example `DualProofVerifier 0x4B0D…949C`, `Seal
 | 3a | Vault trade adapter (unshield → DEX → reshield) | In the app where a public pool exists; size is public on the swap edge |
 | 3b | Sealed-size private trade | **Built, switched off pending audit** (`sealedSwapVerifier = 0`); see [SEALED_TRADE.md](./SEALED_TRADE.md) |
 | 4 | Off-chain proofs: funds, payment, payroll total | **Live on mainnet and testnet**, verified at gloam.trade/verify |
-| Prod | Multi-party ceremony + mainnet | **Live in beta** from 2026-10-21: ceremony done (13 contributors), internal review, beta deposit limits. External audit planned. See [PRODUCTION.md](./PRODUCTION.md) |
+| Prod | Multi-party ceremony + mainnet | **Live in beta** from 2026-10-21: ceremony done (13 contributors), internal review, beta deposit limits. Kann Audits reviewed the vault contracts (report, 1 November 2026). See [PRODUCTION.md](./PRODUCTION.md) |
 
 ## Note scheme (Poseidon)
 

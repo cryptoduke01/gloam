@@ -4,7 +4,8 @@
  * before issuing a receipt. Covers push and pull, replay, a credential lifted
  * onto another challenge, wrong keys, amounts, assets, pools and events, a
  * payer who spends the payment back, lost sweep receipts, a sweep sent by a
- * relay whose answer was lost, and concurrency.
+ * relay whose answer was lost, concurrency, one receipt for each payment, and
+ * what a client is told when a sweep fails.
  */
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
@@ -24,6 +25,7 @@ import {
   buildGloamChargeRequest,
   challengeBinding,
   createGloamChargeCredential,
+  createGloamPaywall,
   createPaymentChallenge,
   memoryReplayStore,
   parseGloamChargePayload,
@@ -32,6 +34,8 @@ import {
   toPaymentRequirements,
   fromPaymentRequirements,
   transfersInReceipt,
+  transferCheckFromCall,
+  callReverted,
   validateGloamCharge,
   payloadFromPayment,
   GloamChargeError,
@@ -229,6 +233,50 @@ test("pull: the server submits the payer's transfer, so the payer never touches 
   assert.deepEqual(pool.submitted, ["payee", "payee"], "the payee submitted the payment, then the sweep");
   assert.equal(config.stored[0]!.amountWei, "250");
   await rejects(settle(ch, paid.credential.payload, config), /already used/);
+});
+
+test("pull: a transfer the pool would refuse is refused before anything is sent", async () => {
+  const pool = mockPool();
+  const ch = await challengeFor(250n);
+  const paid = await pay(pool, ch, "pull");
+  const payload = paid.credential.payload as { type: "transfer"; transfer: { proof: Hex; root: Hex; nullifier: Hex; newCommitments: [Hex, Hex] } };
+  // The payment note opens and binds the price; the transfer that would fund it is made up.
+  const junk = { ...payload, transfer: { ...payload.transfer, proof: `0x${"ab".repeat(64)}` as Hex, root: `0x${"cd".repeat(32)}` as Hex, nullifier: `0x${"ef".repeat(32)}` as Hex } };
+  const asked: unknown[] = [];
+  const refusing = { ...pool.chain, transferWouldLand: async (_pool: unknown, t: unknown) => (asked.push(t), false) };
+  await rejects(settle(ch, junk, serverConfig(pool, { chain: refusing })), /would not take the presented transfer/);
+  assert.equal(asked.length, 1, "the pool was asked");
+  assert.deepEqual(pool.submitted, [], "nothing submitted");
+  // a node that can't say: submitted as before (and the pool, here the mock, refuses it on chain)
+  const unsure = { ...pool.chain, transferWouldLand: async () => null };
+  await assert.rejects(settle(ch, junk, serverConfig(pool, { chain: unsure })));
+  assert.deepEqual(pool.submitted, ["payee"], "sent once the node couldn't say");
+  // the honest transfer passes the check and settles
+  const pool2 = mockPool();
+  const ch2 = await challengeFor(250n);
+  const honest = await pay(pool2, ch2, "pull");
+  const willing = { ...pool2.chain, transferWouldLand: async () => true };
+  const receipt = await settle(ch2, honest.credential.payload, serverConfig(pool2, { chain: willing }));
+  assert.equal(receipt.status, "success");
+  assert.deepEqual(pool2.submitted, ["payee", "payee"]);
+});
+
+test("transferWouldLand from a call: a revert is a no, a node that fails is unsure", async () => {
+  const revert = Object.assign(new Error("Execution reverted for an unknown reason."), {
+    name: "CallExecutionError",
+    cause: Object.assign(new Error("execution reverted"), { name: "ExecutionRevertedError" }),
+  });
+  const down = Object.assign(new Error("HTTP request failed. Status: 503"), { name: "HttpRequestError" });
+  const t = { proof: "0x1234" as Hex, root: `0x${"11".repeat(32)}` as Hex, nullifier: `0x${"22".repeat(32)}` as Hex, newCommitments: [`0x${"33".repeat(32)}`, `0x${"44".repeat(32)}`] as const };
+  const seen: { to: string; data: string }[] = [];
+  assert.equal(await transferCheckFromCall(async (a) => void seen.push(a))(POOL, t), true);
+  assert.equal(seen[0]!.to, POOL);
+  assert.ok(seen[0]!.data.startsWith("0x"), "an encoded transfer() call");
+  assert.equal(await transferCheckFromCall(async () => { throw revert; })(POOL, t), false);
+  assert.equal(await transferCheckFromCall(async () => { throw down; })(POOL, t), null);
+  assert.equal(callReverted(revert), true);
+  assert.equal(callReverted(down), false);
+  assert.equal(callReverted(new Error("timeout")), false);
 });
 
 test("auto mode prefers pull, falls back to push, and respects the challenge", async () => {
@@ -503,4 +551,202 @@ test("the same credential settling twice at once yields one receipt", async () =
   const ok = results.filter((r) => r.status === "fulfilled");
   assert.equal(ok.length, 1, JSON.stringify(results.map((r) => (r.status === "rejected" ? String(r.reason) : "ok"))));
   assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, "one sweep");
+});
+
+test("a payment gets one receipt when another request arrives while its sweep waits to be confirmed", async () => {
+  for (const other of ["same credential", "bound to another challenge"]) {
+    const pool = mockPool();
+    const ch = await challengeFor(400n);
+    const paid = await pay(pool, ch, "push");
+    // The sweep is in a block, and the request that sent it has not heard yet.
+    let landed!: () => void;
+    let hear!: () => void;
+    const onChain = new Promise<void>((r) => (landed = r));
+    const heard = new Promise<void>((r) => (hear = r));
+    const config = serverConfig(pool, {
+      chain: {
+        ...pool.chain,
+        waitForReceipt: async (hash) => {
+          landed();
+          await heard;
+          return pool.chain.waitForReceipt(hash);
+        },
+      },
+    });
+    const outcome = (p: Promise<unknown>) => p.then(() => "receipt", (e: Error) => e.message);
+    const first = outcome(settle(ch, paid.credential.payload, config));
+    await onChain;
+
+    let ch2 = ch;
+    let payload2: unknown = paid.credential.payload;
+    if (other !== "same credential") {
+      ch2 = await challengeFor(400n);
+      const { secret, commitment } = paid.built.paymentNote;
+      const binding = await challengeBinding({ secret, realm: ch2.realm, challengeId: ch2.id, commitment });
+      payload2 = { ...(paid.credential.payload as Record<string, unknown>), binding };
+    }
+    const second = await outcome(settle(ch2, payload2, config));
+    hear();
+    const results = [await first, second];
+    assert.equal(results.filter((r) => r === "receipt").length, 1, `${other}: ${JSON.stringify(results)}`);
+    assert.match(results.find((r) => r !== "receipt")!, /already used/, other);
+    assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, `${other}: one sweep`);
+    await rejects(settle(ch, paid.credential.payload, config), /already used/);
+
+    // The challenge is used, not left waiting on a sweep that finished.
+    const next = await pay(pool, ch, "push");
+    await assert.rejects(settle(ch, next.credential.payload, config), (e: unknown) => e instanceof GloamChargeError && e.code === "invalid-challenge", other);
+  }
+});
+
+test("a store that fails while a receipt is recorded leaves the payment able to be served, once", async () => {
+  for (const failing of ["the payment's record", "the challenge's record"]) {
+    const pool = mockPool();
+    const ch = await challengeFor(400n);
+    const paid = await pay(pool, ch, "push");
+    const store = memoryReplayStore();
+    let fail = true;
+    const config = serverConfig(pool, {
+      replay: {
+        ...store,
+        put: async (key, record) => {
+          const target = failing === "the payment's record" ? Boolean(record.receipt) : key.startsWith("challenge:");
+          if (fail && record.state === "settled" && target) {
+            fail = false;
+            throw new Error("store unavailable");
+          }
+          return store.put(key, record);
+        },
+      },
+    });
+    await assert.rejects(settle(ch, paid.credential.payload, config), /store unavailable/, failing);
+    assert.equal((await settle(ch, paid.credential.payload, config)).status, "success", failing);
+    await rejects(settle(ch, paid.credential.payload, config), /already used/);
+    assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, `${failing}: one sweep`);
+  }
+});
+
+test("a retry that reads a sent sweep as it lands serves the payment, and a spend by someone else is still refused", async () => {
+  const sentSweep = async () => {
+    const pool = mockPool();
+    const ch = await challengeFor(400n);
+    const paid = await pay(pool, ch, "push");
+    // The sweep goes out and the answer is lost: it is on its way, with a sent record.
+    let sweep: readonly unknown[] | undefined;
+    const replay = memoryReplayStore();
+    const first = serverConfig(pool, {
+      replay,
+      submit: async (intent) => {
+        sweep = intent.exec.args;
+        throw Object.assign(new Error("timed out"), { maybeSent: true });
+      },
+    });
+    await rejects(settle(ch, paid.credential.payload, first), /has not confirmed/, true);
+    return { pool, ch, paid, replay, sweep: sweep! };
+  };
+
+  // It lands between the retry's two reads, whichever comes first.
+  const landing = await sentSweep();
+  let armed = false;
+  const land = async () => {
+    if (!armed) return;
+    armed = false;
+    await landing.pool.transfer(landing.sweep);
+  };
+  const config = serverConfig(landing.pool, {
+    replay: landing.replay,
+    chain: {
+      ...landing.pool.chain,
+      isSpent: async (n) => {
+        const r = await landing.pool.chain.isSpent(n);
+        await land();
+        return r;
+      },
+      isCommitmentSeen: async (c) => {
+        const r = await landing.pool.chain.isCommitmentSeen(c);
+        await land();
+        return r;
+      },
+    },
+  });
+  const validated = await validateGloamCharge({ challenge: landing.ch, payload: landing.paid.credential.payload, config });
+  armed = true;
+  const receipt = await settleGloamCharge({ challenge: landing.ch, payload: landing.paid.credential.payload, config, validated });
+  assert.equal(receipt.status, "success");
+  await rejects(settle(landing.ch, landing.paid.credential.payload, config), /already used/);
+
+  // The payer spends the payment back instead: no fresh note ever shows, so it is refused.
+  const taken = await sentSweep();
+  const note = taken.paid.built.paymentNote;
+  const back = await buildPrivateSendIntent({
+    secretHex: note.secret,
+    amountInWei: 400n,
+    amountPayWei: 400n,
+    asset: USD,
+    path: await taken.pool.path(note.commitment),
+    prove: stubProve,
+    poolAddress: POOL,
+    chainId: CHAIN_ID,
+  });
+  await taken.pool.transfer(back.exec.args);
+  await rejects(settle(taken.ch, taken.paid.credential.payload, serverConfig(taken.pool, { replay: taken.replay })), /spent by someone else/);
+});
+
+test("a sweep that fails tells the client what to do, never the text of the failure", async () => {
+  const raw = 'HTTP request failed. URL: https://rpc.example.com/v2/detail-for-the-operator Request body: {"method":"eth_sendRawTransaction"}';
+  const thrownBy = (error: Error): GloamChargeServerConfig["submit"] => async () => {
+    throw error;
+  };
+  const refusal = async (config: GloamChargeServerConfig, ch: PaymentChallenge, payload: unknown) => {
+    const e = await settle(ch, payload, config).then(
+      () => assert.fail("a sweep that failed gave a receipt"),
+      (err: unknown) => err
+    );
+    assert.ok(e instanceof GloamChargeError, String(e));
+    assert.ok(!e.message.includes("detail-for-the-operator") && !e.message.includes("eth_sendRawTransaction"), e.message);
+    return e;
+  };
+
+  // Never sent: nothing moved, and the same credential can come back.
+  let pool = mockPool();
+  let ch = await challengeFor(400n);
+  let paid = await pay(pool, ch, "push");
+  const nothingMoved = await refusal(serverConfig(pool, { submit: thrownBy(new Error(raw)) }), ch, paid.credential.payload);
+  assert.match(nothingMoved.message, /did not go through and nothing moved/);
+
+  // Maybe sent: the client is told to retry.
+  pool = mockPool();
+  ch = await challengeFor(400n);
+  paid = await pay(pool, ch, "push");
+  const unclear = await refusal(serverConfig(pool, { submit: thrownBy(Object.assign(new Error(raw), { maybeSent: true })) }), ch, paid.credential.payload);
+  assert.match(unclear.message, /has not confirmed.*Retry shortly/);
+  assert.equal(unclear.retryable, true);
+});
+
+test("a server or client with nowhere to keep its notes is refused before it can sweep", async () => {
+  const pool = mockPool();
+  const { beforeSubmit: _kept, ...noHook } = serverConfig(pool);
+  void _kept;
+  const server = noHook as unknown as GloamChargeServerConfig;
+  assert.throws(() => createGloamPaywall({ secretKey: "s".repeat(32), server }), /beforeSubmit/);
+  await assert.rejects(settle(await challengeFor(400n), {}, server), /beforeSubmit/);
+});
+
+test("a fresh note that can't be kept stops the sweep, and the same payment can try again", async () => {
+  const pool = mockPool();
+  const ch = await challengeFor(400n);
+  const paid = await pay(pool, ch, "push");
+  let refuse = true;
+  const config = serverConfig(pool);
+  const keep = config.beforeSubmit;
+  config.beforeSubmit = (fresh, intent) => {
+    if (refuse) throw new Error("the database is down");
+    return keep(fresh, intent);
+  };
+  await assert.rejects(settle(ch, paid.credential.payload, config), /database is down/);
+  assert.equal(config.stored.length, 0);
+  refuse = false;
+  const receipt = await settle(ch, paid.credential.payload, config);
+  assert.equal(receipt.status, "success");
+  assert.equal(config.stored.length, 1);
 });

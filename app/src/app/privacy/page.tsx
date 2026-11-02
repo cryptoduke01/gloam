@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LegalLayout } from "@/components/LegalLayout";
+import { EMBEDDED_WALLETS } from "@/lib/embeddedWallet";
 
 export const metadata: Metadata = { title: "Privacy Policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="October 26, 2026">
+    <LegalLayout title="Privacy Policy" updated="November 2, 2026">
       <p>
         This Privacy Policy describes what information Gloam (&ldquo;we,&rdquo;
         &ldquo;us&rdquo;) handles when you use gloam.trade, the Gloam app, the
@@ -19,7 +21,9 @@ export default function PrivacyPage() {
         Gloam runs on two kinds of network. On mainnet (Robinhood Chain and
         Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) it is
         beta software, with deposit limits, and it was
-        reviewed internally before launch; an external audit is planned. On
+        reviewed internally before launch. Kann Audits then reviewed the vault
+        contracts (<Link href="/security">report, 1 November 2026</Link>) and
+        found no Critical, High or Medium issues. On
         the testnets (Tempo Moderato testnet and Robinhood Chain testnet) the
         tokens you use are test tokens. Do not send mainnet funds
         to a testnet address or contract.
@@ -32,6 +36,18 @@ export default function PrivacyPage() {
         your browser too. We never receive your keys, your seed phrase or your
         note secrets.
       </p>
+      {EMBEDDED_WALLETS && (
+        <p>
+          If you sign in with your email or a passkey and create a Gloam wallet,
+          that wallet&apos;s key is made and kept by Turnkey, the service Gloam
+          wallets run on, inside its secure hardware. It never reaches the page
+          or our servers. Turnkey signs with it when your signed-in session
+          asks, and keeps a record of each request, signatures included. Turnkey
+          gives Gloam&apos;s Turnkey account read-only visibility into the
+          account it keeps for you. Your private balance still lives in your
+          browser, as above.
+        </p>
+      )}
       <p>
         We never hold your funds. Money in the Gloam vault contract leaves only
         with a valid proof, and there is no admin withdraw. Any change to how
@@ -149,8 +165,10 @@ export default function PrivacyPage() {
         sign-in cookies for the partner portal and the team&apos;s admin page.
         The app keeps your private balance, settings and preferences in your
         browser&apos;s local storage, and none of it is sent to us except an
-        encrypted recovery backup if you turn recovery on (section 8). Details
-        and your choices:{" "}
+        encrypted recovery backup if you turn recovery on (section 8).
+        {EMBEDDED_WALLETS &&
+          " If you sign in to a Gloam wallet, Turnkey's code keeps your sign-in session in this browser: a session key in its database and a session token in local storage, until you sign out or the session ends."}{" "}
+        Details and your choices:{" "}
         <a href="/cookies">
           Cookie Policy
         </a>
@@ -213,13 +231,26 @@ export default function PrivacyPage() {
       <p>
         It is encrypted in your browser, before it leaves, with a key made
         from your wallet&apos;s signature or your passkey. We can&apos;t read
-        it, and it is filed under an id that doesn&apos;t reveal your wallet.
+        it{EMBEDDED_WALLETS && " (except a backup made with a Gloam wallet's signature, below)"},
+        and it is filed under an id that doesn&apos;t reveal your wallet.
         It is replaced each time your browser backs up, and it stays until you
         turn recovery off in Settings, which deletes it from our servers. We
         don&apos;t delete it on a schedule. Anyone who gets your recovery
         signature or passkey could open your backup and spend what is in it,
         so only sign the recovery message on gloam.trade.
       </p>
+      {EMBEDDED_WALLETS && (
+        <p>
+          With a Gloam wallet, the app offers recovery with a passkey: the key
+          comes from the passkey on your device and never leaves it, so neither
+          we nor Turnkey can open that backup. Nothing turns on without your
+          say. If your browser can&apos;t make a passkey backup, you can choose
+          the Gloam wallet&apos;s signature instead. Turnkey makes and keeps
+          that signature, so Turnkey, and anyone with access to Gloam&apos;s
+          Turnkey account, could open a backup made with it. The app says so
+          before you choose it.
+        </p>
+      )}
       <h2>9. Tester applications</h2>
       <p>
         If you apply at gloam.trade/testers, we keep what you send: your name,
@@ -359,6 +390,28 @@ export default function PrivacyPage() {
           Robinhood Chain, Tempo, Base and Ethereum, and Tempo&apos;s fee
           sponsor when you use Tempo Wallet on the testnet.
         </li>
+        <li>
+          Relay (relay.link): when you bring money over, our server asks Relay
+          for a route and sends it the chains, the tokens, the amount, your
+          wallet, where the money lands and a refund address. For a deposit
+          straight into your private balance it also sends the vault deposit
+          that Relay makes for you. We then ask Relay how the order is going.
+          Relay fills the order under its own terms.
+        </li>
+        {EMBEDDED_WALLETS && (
+          <li>
+            Turnkey, only when you sign in with your email or a passkey to use
+            a Gloam wallet. Turnkey receives your email address (it sends you
+            the sign-in code), your passkey&apos;s public key and name, the
+            account and wallet it makes for you and their addresses, every
+            request your wallet signs (messages and transactions, with their
+            chain) and the signatures it makes, which Gloam&apos;s Turnkey
+            account can also view, and your IP address and browser details. When Gloam covers
+            a network fee for you, Turnkey sends that transaction and records
+            its cost. It keeps your wallet&apos;s key encrypted in its secure
+            hardware and processes all of this under its own privacy policy.
+          </li>
+        )}
         <li>
           WalletConnect (Reown), only when you choose Use a wallet app: its
           relay passes encrypted messages between the page and your wallet app

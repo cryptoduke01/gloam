@@ -1,6 +1,19 @@
 import { compareHoldings } from "./vaultHub";
 
 /**
+ * A token amount short enough for the big number: "8.03", "1,204", "12.3M",
+ * "0.0339". The rows below it keep the full amount, so nothing is lost.
+ */
+export function tidyAmount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n < 0.0001) return "<0.0001";
+  if (n >= 1_000_000) return n.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 });
+  if (n >= 1_000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (n >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return n.toLocaleString("en-US", { maximumSignificantDigits: 3 });
+}
+
+/**
  * Dollars where every asset has a price, and the amounts of those that don't
  * next to them ("$100", "+ 1,000 GLOAM"): never a silent $0 for an asset with
  * no price, and no "$0" in front when nothing held is priced.
@@ -24,7 +37,7 @@ export function privateHeadline(args: {
   showUsd: boolean;
   /** The priced part, in dollars. */
   sealedUsd: number;
-  /** "1,000 GLOAM" for each asset held with no dollar price, largest first. */
+  /** "1,000 GLOAM" for each asset held with no dollar price, largest first, each through tidyAmount. */
   unpriced: string[];
   /** The vault as amounts ("500 USDC", "2 assets"), shown when dollars are off. */
   vaultValue: string;

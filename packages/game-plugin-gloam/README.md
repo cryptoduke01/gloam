@@ -19,7 +19,7 @@ with options, one getter per `GameFunction`, and `getWorker()`.
 | `base-mainnet` | Base, mainnet, once Gloam's Base vault is live | USDC, EURC, USDT, ETH |
 
 The same vault address on each: `0x39e28cde55cab798874746ac52cb4b5cc99a0194`.
-Mainnet is in beta, with deposit limits (500 of a stablecoin per deposit).
+Mainnet is in beta, with deposit limits (50,000 of a stablecoin per deposit).
 
 ## Install
 

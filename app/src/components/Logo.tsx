@@ -36,7 +36,7 @@ export function Logo({
     <Link
       href={href}
       aria-label="Gloam home"
-      className={`inline-flex items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${className}`}
+      className={`gl-tap inline-flex items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${className}`}
     >
       <Mark size={size} />
       <span className="text-[19px] font-medium leading-none tracking-[-0.015em] text-foreground">

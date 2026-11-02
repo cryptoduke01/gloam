@@ -31,6 +31,7 @@ export function NetworkSelector() {
   const { network, setNetworkKey, settled } = useNetwork();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const nets = allNetworks();
 
   useEffect(() => {
@@ -46,6 +47,8 @@ export function NetworkSelector() {
       // listening on window) stays open, as one Escape closes one layer.
       e.stopPropagation();
       setOpen(false);
+      // The focused row is about to go: hand focus back so the keyboard keeps its place.
+      trigger.current?.focus();
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -58,12 +61,13 @@ export function NetworkSelector() {
   return (
     <div ref={ref} className="relative w-full">
       <button
+        ref={trigger}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={settled ? `Network: ${network.label}. Change network` : "Change network"}
-        className={`flex h-[52px] w-full items-center gap-3 rounded-full pl-2 pr-4 text-left text-foreground transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15 ${
+        className={`flex h-[52px] w-full items-center gap-3 rounded-full pl-2 pr-4 text-left text-foreground transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 ${
           open ? "bg-surface-2" : "bg-surface"
         }`}
       >

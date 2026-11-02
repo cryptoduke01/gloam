@@ -111,7 +111,7 @@ function AddCard({ view }: { view: View }) {
           <p className="tnum mt-2 text-[26px] font-light leading-none tracking-[-0.02em]">{fmt(amt)}</p>
         )}
       </div>
-      <p className="mt-3 px-1 text-[12px] leading-relaxed text-mute">
+      <p className="mb-3 mt-3 px-1 text-[12px] leading-relaxed text-mute">
         {pub
           ? "The deposit is public. Where it goes next is not."
           : "Pick an amount, then flip the view to see what the public gets."}

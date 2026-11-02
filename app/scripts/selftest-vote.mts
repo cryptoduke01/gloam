@@ -63,7 +63,7 @@ const final = await import("../src/lib/vote/final");
 const { ballotsCsv } = await import("../src/lib/vote/results");
 const { kv, resetMemoryKv } = await import("../src/lib/partnersKv");
 const directory = await import("../src/lib/contractDirectory");
-const { VAULT_SWAP_ROUTERS, VAULT_SWAP_V2_ROUTER } = await import("../src/lib/vaultSwap");
+const { VAULT_SWAP_ROUTERS, VAULT_SWAP_V2_ROUTER, VAULT_SWAP_V3_ADDRESS, swapV3Live } = await import("../src/lib/vaultSwap");
 
 type VoteConfig = (typeof VOTES)[number];
 type Ballot = import("../src/lib/vote/core").Ballot;
@@ -212,7 +212,9 @@ await test("the standing exclusions name the team wallets, the vault, the swap r
   assert.ok(has(directory.GLOAM_DEPLOYER), "deployer");
   for (const r of directory.GLOAM_RELAYERS) assert.ok(has(r), "relayer");
   assert.ok(has("0x39e28cde55cab798874746ac52cb4b5cc99a0194"), "vault");
-  for (const r of [...Object.values(VAULT_SWAP_ROUTERS), ...Object.values(VAULT_SWAP_V2_ROUTER)]) if (r) assert.ok(has(r), `router ${r}`);
+  // Robinhood Chain's routers: GLOAM lives there, and the next one is listed once it is live
+  for (const r of [VAULT_SWAP_ROUTERS[4663], ...Object.values(VAULT_SWAP_V2_ROUTER)]) if (r) assert.ok(has(r), `router ${r}`);
+  assert.equal(has(VAULT_SWAP_V3_ADDRESS[4663]!), swapV3Live(4663), "the next router, only once it is live");
   assert.ok(has("0x8366a39cc670b4001a1121b8f6a443a643e40951"), "v4 PoolManager");
   assert.ok(has("0x0000000000000000000000000000000000000000"), "zero");
   // a vote's own extras add to the list, never replace it
@@ -335,6 +337,21 @@ await test("the voting window and the signing time are enforced", async () => {
   await rejects(submitBallot(await sign(alice, 0, nowSec + core.SIGNED_MAX_AHEAD_SEC + 5), ctx()), "stale");
   // the last second of the window still counts
   await submitBallot(await sign(alice, 0, Math.floor(END / 1000) - 1), ctx({ now: END - 1_000 }));
+  // a fast clock signing past the close is refused, so it can't replace a vote that counts with one that doesn't
+  await rejects(submitBallot(await sign(alice, 1, Math.floor(END / 1000)), ctx({ now: END - 1_000 })), "stale");
+  await rejects(submitBallot(await sign(alice, 1, Math.floor(END / 1000) + 30), ctx({ now: END - 1_000 })), "stale");
+  // a signature from before the open is refused when it is sent, since the count would leave it out
+  const early = await sign(bob, 1, Math.floor(START / 1000) - 90);
+  await rejects(submitBallot(early, ctx({ now: START + 5_000 })), "stale");
+  await rejects(submitBallot(await sign(bob, 1, Math.floor(START / 1000) - 1), ctx({ now: START + 1_000 })), "stale");
+  try {
+    await submitBallot(early, ctx({ now: START + 5_000 }));
+  } catch (e) {
+    assert.match((e as Error).message, /before this vote opened/);
+  }
+  assert.ok(!(await listBallots(testVote.id)).some((b) => b.voter.toLowerCase() === bob.address.toLowerCase()), "nothing kept");
+  // the first second of the window counts
+  await submitBallot(await sign(bob, 1, Math.floor(START / 1000)), ctx({ now: START + 1_000 }));
 });
 
 await test("bad input is refused before any check", async () => {
@@ -968,6 +985,13 @@ await test("weight at close: stored once, on the first results request after the
   assert.equal(await final.ensureFinal(testVote, excluded, snapshot, { now: after }), null);
 });
 
+await test("a closed vote's outcome reaches Glim, and an open one's doesn't", async () => {
+  const { voteFacts } = await import("../src/lib/vote/glim");
+  const v = { ...VOTES[0]!, outcome: "Stablecoin swaps are next." };
+  assert.match(voteFacts([v], Date.parse(v.end) + 1000) ?? "", /Result: Stablecoin swaps are next\./);
+  assert.doesNotMatch(voteFacts([v], Date.parse(v.start) + 1000) ?? "", /Result:/);
+});
+
 await test("weight at close: feedback and Glim follow what a wallet holds now", async () => {
   const { feedbackWeight } = await import("../src/lib/vote/feedback");
   const { voteFacts } = await import("../src/lib/vote/glim");
@@ -1033,6 +1057,33 @@ await test("amounts and shares read plainly", () => {
   assert.equal(core.timeLeft(5 * 3_600_000 + 12 * 60_000), "5 hours, 12 minutes");
   assert.equal(core.timeLeft(2 * 86_400_000 + 7 * 3_600_000 + 59_000), "2 days, 7 hours");
   assert.equal(core.timeLeft(86_400_000), "1 day");
+});
+
+await test("the final count checks smart wallets, and stops rather than drop one when the node gives no answer", async () => {
+  const signature = `0x${"11".repeat(65)}` as Hex;
+  const ballot = { voter: smart, option: 1, choice: closeVote.options[1]!, weight: "0", timestamp: nowSec, signature, receivedAt: Date.now() };
+  const at = { balances: { [lower(smart)]: (7n * ONE).toString() }, block: 1 };
+  const counted = await core.recount(closeVote, at, excluded, [ballot], async () => true, { closeBlock: 1 });
+  assert.deepEqual(counted.counted.map((b) => b.weight), [(7n * ONE).toString()]);
+  const bad = await core.recount(closeVote, at, excluded, [ballot], async () => false, { closeBlock: 1 });
+  assert.deepEqual(bad.problems.map((p) => p.problem), ["signature does not match"], "a clear no is still a no");
+  await assert.rejects(
+    core.recount(closeVote, at, excluded, [ballot], async () => {
+      throw new core.ContractCheckDown(smart);
+    }, { closeBlock: 1 }),
+    core.ContractCheckDown,
+  );
+  // ballots come in with a retry, so there the same failure is only a no
+  await rejects(
+    submitBallot({ voter: smart, option: 1, timestamp: nowSec, signature }, ctx({ contractCheck: async () => { throw new Error("rpc"); } })),
+    "bad_signature",
+  );
+  // the site's count, and the script's, both make this check
+  const { readFileSync } = await import("node:fs");
+  const results = readFileSync(new URL("../src/lib/vote/results.ts", import.meta.url), "utf8");
+  assert.ok(/ensureFinal\(v, excluded, snapshot, \{[^}]*contractCheck: smartWalletFinalCheck/.test(results));
+  const script = readFileSync(new URL("./vote-final.mts", import.meta.url), "utf8");
+  assert.equal((script.match(/contractCheck: smartWalletFinalCheck/g) ?? []).length, 2);
 });
 
 console.log(`\n${passed} passed`);

@@ -76,11 +76,12 @@ const SERVICES = [
   "wss://*.walletconnect.com",
   "https://api.web3modal.org",
   "https://*.reown.com",
+  // Gloam wallets (Turnkey): api, authproxy, and the success animation the sign-in sheet loads
   "https://*.turnkey.com",
+  "https://lottie.host",
   "https://wallet.tempo.xyz",
   "https://tokenlist.tempo.xyz",
   "https://api.relay.link",
-  "https://api.coingecko.com",
   "https://api.dexscreener.com",
   "https://va.vercel-scripts.com",
 ];
@@ -105,3 +106,34 @@ export const CSP_REPORT_ONLY = [
   "base-uri 'self'",
   "form-action 'self'",
 ].join("; ");
+
+/**
+ * Enforced on /app while Gloam wallets are on (NEXT_PUBLIC_TURNKEY_ENABLED with both
+ * ids, production builds only: dev reloads code with eval). A Gloam wallet signs with
+ * no prompt, so a script that got into the page could send from it; this policy
+ * stops the page loading scripts, frames or workers from any host not listed, and
+ * talking to any host not listed.
+ *
+ * Still open, until Next's inline scripts carry nonces: 'unsafe-inline' for scripts,
+ * so markup injected into the page could still run inline code. Styles, images and
+ * fonts stay as they are (the Report-Only policy covers them).
+ */
+export const CSP_APP_ENFORCED = [
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://va.vercel-scripts.com",
+  `connect-src ${CSP_CONNECT_SOURCES.join(" ")}`,
+  `frame-src ${FRAMES.join(" ")}`,
+  "worker-src 'self' blob:",
+].join("; ");
+
+/** Gloam wallets are switched on for this build (the same rule as lib/embeddedWallet). */
+export function embeddedWalletsBuild(env = process.env) {
+  return (
+    env.NEXT_PUBLIC_TURNKEY_ENABLED?.trim() === "true" &&
+    Boolean(env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID?.trim()) &&
+    Boolean(env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID?.trim())
+  );
+}

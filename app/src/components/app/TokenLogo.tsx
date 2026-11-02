@@ -52,6 +52,12 @@ export function logoIsDisc(id: string): boolean {
   return DISC_LOGO_IDS.has(id.toLowerCase());
 }
 
+/**
+ * White marks on a clear ground. On the usual white plate they vanish and leave
+ * an empty tile, so these sit on an ink plate instead.
+ */
+const INK_PLATE_LOGO_IDS = new Set(["dis", "hims", "ibm", "nke", "rblx", "uber", "v"]);
+
 const SPECIAL_LOGOS: Record<string, string> = {
   tempo: "/brand/logos/tempo.svg",
   // Robinhood Chain's own app icon: a full tile, so no white plate shows
@@ -136,8 +142,9 @@ export function TokenLogo({
   }
 
   if (src && !broken) {
-    // Brand marks keep a white plate (some ship transparent with dark ink), the
-    // one allowed literal colour: it is part of the logo, not the theme.
+    // Brand marks keep a white plate (some ship transparent with dark ink) or an
+    // ink one (INK_PLATE_LOGO_IDS), the one allowed literal colour: it is part of
+    // the logo, not the theme.
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -146,7 +153,9 @@ export function TokenLogo({
         width={size}
         height={size}
         onError={() => setBroken(true)}
-        className={`shrink-0 rounded-[22%] border border-line bg-white object-cover ${className}`}
+        className={`shrink-0 rounded-[22%] border border-line object-cover ${
+          INK_PLATE_LOGO_IDS.has(id.toLowerCase()) ? "bg-[#0b0c0e]" : "bg-white"
+        } ${className}`}
         style={{ width: size, height: size }}
       />
     );

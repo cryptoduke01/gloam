@@ -14,7 +14,7 @@ const CHECK_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
 const HEAD_CLASS =
   "docs-code-head absolute inset-x-0 top-0 flex h-11 items-center justify-between gap-3 whitespace-normal pl-5 pr-2 text-[12.5px] text-mute";
 const BUTTON_CLASS =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface-2 hover:text-foreground";
+  "gl-tap inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface-2 hover:text-foreground";
 
 const LANG_LABEL: Record<CodeLang, string> = {
   ts: "TypeScript",

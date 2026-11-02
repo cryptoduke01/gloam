@@ -14,14 +14,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { formatUnits, type Address, type Hex } from "viem";
+import { BaseError, formatUnits, type Address, type Hex } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
+import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { useAppAccount } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
-import { relayFor } from "@/lib/relay/client";
+import { relayFor, type RelayNetworkStatus } from "@/lib/relay/client";
+import { hasSwapFloor, swapFloorGas, swapFloorShown, swapGasUnits } from "@/lib/relay/swapFloor";
 import { isUnsecuredClaim } from "@/lib/claimSweep";
 import { freshPath } from "@/lib/cashOutSplit";
 import {
@@ -35,10 +37,22 @@ import {
   withdrawFeeOf,
   type LocalNote,
 } from "@/lib/shield";
-import { isDollarStable, knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
+import {
+  NATIVE_ETH_TOKEN,
+  isAddableToken,
+  isDollarStable,
+  isNativeAddable,
+  knownTokens,
+  shieldTokensFor,
+  type OnchainToken,
+} from "@/lib/tokens";
 import {
   IMPACT_WARN_BPS,
+  PEG_WARN_BPS,
   QUOTE_TTL_MS,
+  SwapQuoteRefused,
+  VALUE_STOP_BPS,
+  VALUE_WARN_BPS,
   VAULT_SWAP_ASSETS,
   livePools,
   offeredSwapAssets,
@@ -50,7 +64,9 @@ import {
   quoteFresh,
   routeCurrencies,
   swapBufferBps,
+  swapChecked,
   swapRouterFor,
+  valueGapBps,
   vaultSwapRouter,
   type SwapPlan,
 } from "@/lib/vaultSwap";
@@ -60,10 +76,33 @@ import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { countPerson } from "@/lib/people";
 import type { GloamNetwork } from "@/lib/networks";
 import { useNetwork } from "./NetworkProvider";
+import { RelayGasNotice } from "./RelayGasNotice";
 import { SuccessModal } from "./SuccessModal";
 import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
 import { ADD_FIRST, vaultActionSearch } from "@/lib/vaultHub";
+import { BRIDGE_DESTINATIONS, bridgeVisible } from "@/lib/bridge";
+import type { NetworkKey } from "@/lib/networks";
+import { swapLinkFromHash, swapLinkParams, swapLinkStep, type SwapLink } from "@/lib/swapLink";
+import { dropSwapLink, keepSwapLink, keptSwapLink } from "@/lib/swapLinkStore";
+import { SwapLinkBanner } from "./SwapLinkBanner";
+
+/**
+ * The swap link this tab opens with (lib/swapLink): the one in the address bar,
+ * else one this tab kept while the person went to Add first (lib/swapLinkStore).
+ * One read from the address bar is kept for that trip.
+ */
+function openSwapLink(shown: NetworkKey): SwapLink | null {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash;
+  const link = swapLinkFromHash(hash, shown);
+  if (link) {
+    if (link.on) keepSwapLink(hash.replace(/^#/, ""), link.on);
+    return link;
+  }
+  const kept = keptSwapLink();
+  return kept ? swapLinkFromHash(kept.frag, kept.on) : null;
+}
 
 const limitAbi = [
   {
@@ -89,8 +128,9 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const noopSubscribe = () => () => {};
 const ZERO = "0x0000000000000000000000000000000000000000";
 
-/** The token record for an asset on this chain (logo id, name, CoinGecko id). */
+/** The token record for an asset on this chain (logo id, name). */
 function tokenFor(chainId: number, asset: string): OnchainToken | undefined {
+  if (same(asset, NATIVE_ETH_TOKEN.address)) return NATIVE_ETH_TOKEN;
   return knownTokens(chainId).find((t) => same(t.address, asset));
 }
 
@@ -121,21 +161,20 @@ const uiMultiplierAbi = [
 ] as const;
 
 /**
- * USD marks: stablecoins at $1. A Robinhood stock token at the live share price
- * times its uiMultiplier (balances never rebase; splits and dividends move the
- * multiplier, so one raw token is worth share price x multiplier / 1e18), else
- * CoinGecko's price for the token itself. Other tokens at CoinGecko's price.
- * Null while unknown.
+ * USD marks: stablecoins at $1, WETH at ETH's price. A Robinhood stock token at
+ * the live share price times its uiMultiplier (balances never rebase; splits and
+ * dividends move the multiplier, so one raw token is worth share price x
+ * multiplier / 1e18), else the server's price for the token itself (lib/tokenMarksServer,
+ * so the browser asks no price API). Other tokens at the server's price. Null while unknown.
  */
-const geckoCache = new Map<string, number>();
 function useUsdMarks(
   chainId: GloamNetwork["chainId"],
   assets: readonly Address[],
   shown: readonly (Address | null)[]
 ): Record<string, number | null> {
-  const [tick, setTick] = useState(0);
   const tokens = useMemo(() => assets.map((a) => tokenFor(chainId, a)), [assets, chainId]);
   const { data: marketData } = useLiveMarkets();
+  const { marks: serverMarks } = useCoingeckoMarks(hasCoingeckoMarks(chainId));
   const stocks = useMemo(
     () => shown.filter((a): a is Address => Boolean(a) && tokenFor(chainId, a!)?.kind === "stock"),
     [shown, chainId]
@@ -144,34 +183,18 @@ function useUsdMarks(
     contracts: stocks.map((a) => ({ address: a, abi: uiMultiplierAbi, functionName: "uiMultiplier", chainId }) as const),
     query: { enabled: stocks.length > 0, staleTime: 5 * 60_000 },
   });
-  useEffect(() => {
-    const ids = [...new Set(tokens.map((t) => t?.coingecko).filter((x): x is string => Boolean(x)))].filter(
-      (id) => !geckoCache.has(id)
-    );
-    if (!ids.length) return;
-    let live = true;
-    fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`, {
-      signal: AbortSignal.timeout(5_000),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: Record<string, { usd?: number }> | null) => {
-        for (const id of ids) {
-          const v = j?.[id]?.usd;
-          if (typeof v === "number" && v > 0) geckoCache.set(id, v);
-        }
-        if (live) setTick((n) => n + 1);
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [tokens]);
   return useMemo(() => {
-    void tick;
     const out: Record<string, number | null> = {};
     assets.forEach((a, i) => {
       const t = tokens[i];
-      out[a.toLowerCase()] = t && isDollarStable(t) ? 1 : t?.coingecko ? (geckoCache.get(t.coingecko) ?? null) : null;
+      const key = a.toLowerCase();
+      out[key] = !t
+        ? null
+        : isDollarStable(t)
+          ? 1
+          : t.id === "weth" || t.id === "eth"
+            ? (marketData?.ethUsd ?? null)
+            : (serverMarks.get(key) ?? null);
     });
     stocks.forEach((a, i) => {
       const t = tokenFor(chainId, a);
@@ -180,7 +203,7 @@ function useUsdMarks(
       if (m && m.mark > 0 && mult) out[a.toLowerCase()] = (m.mark * Number(mult)) / 1e18;
     });
     return out;
-  }, [assets, tokens, tick, stocks, marketData, mults, chainId]);
+  }, [assets, tokens, serverMarks, stocks, marketData, mults, chainId]);
 }
 
 /** The note a swap of `amount` spends: an exact match first, else the smallest that covers it. */
@@ -193,7 +216,7 @@ function pickSwapNote(notes: readonly LocalNote[] | undefined, amount: bigint | 
 }
 
 export function VaultSwapView() {
-  const { network } = useNetwork();
+  const { network, networkKey, setNetworkKey } = useNetwork();
   const { address, isConnected } = useAppAccount();
   const router = vaultSwapRouter(network.chainId);
   const openGated = useOpenGatedTokens();
@@ -224,7 +247,7 @@ export function VaultSwapView() {
       ),
     [network.chainId, openGated, livePool]
   );
-  const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
+  const { open, ready: notesRead, balanceSyncing, refresh: refreshNotes } = useLocalShieldNotes(address);
 
   // Notes a swap can spend: this vault's, in a swap asset, with their secret.
   // A claimed payment the payer could still take back is secured first, in Pay.
@@ -260,20 +283,28 @@ export function VaultSwapView() {
     return m;
   }, [notes]);
 
-  const [payPick, setPayPick] = useState<Address | null>(null);
-  const [toPick, setToPick] = useState<Address | null>(null);
+  // A swap link (lib/swapLink) fills in both tokens and the amount, read once
+  // here and again when another link opens in this tab. It never swaps: the
+  // person checks the quote and taps Swap privately like any other swap.
+  const [link, setLink] = useState<SwapLink | null>(() => openSwapLink(networkKey));
+  const [payPick, setPayPick] = useState<Address | null>(() => link?.from?.address ?? null);
+  const [toPick, setToPick] = useState<Address | null>(() => link?.to?.address ?? null);
+  // The link's token to pay with stays picked with no private balance in it, so
+  // the person sees what to add; a token picked by hand needs a balance.
+  const [payPinned, setPayPinned] = useState(() => Boolean(link?.from));
+  const offered = (a: Address) => assets.some((x) => same(x, a));
   const payAsset: Address | null =
-    (payPick && holdings.has(payPick.toLowerCase()) ? payPick : null) ??
+    (payPick && offered(payPick) && (payPinned || holdings.has(payPick.toLowerCase())) ? payPick : null) ??
     // The first held token in the list's order (the dollar first), not the
     // largest raw amount: 18-decimal GLOAM would always outrank 6-decimal USDG.
     assets.find((a) => holdings.has(a.toLowerCase())) ??
     assets[0] ??
     null;
   const toAsset: Address | null =
-    (toPick && payAsset && !same(toPick, payAsset) ? toPick : null) ??
+    (toPick && payAsset && !same(toPick, payAsset) && offered(toPick) ? toPick : null) ??
     assets.find((a) => payAsset && !same(a, payAsset)) ??
     null;
-  const [amountInput, setAmountInput] = useState("");
+  const [amountInput, setAmountInput] = useState(() => link?.amount ?? "");
   const marks = useUsdMarks(network.chainId, assets, [payAsset, toAsset]);
 
   // The vault's limits on the input token: a swap's refund note lands in it, so
@@ -299,21 +330,7 @@ export function VaultSwapView() {
     limitIn && typeof inVaultIn === "bigint" ? { perDeposit: limitIn[0], total: limitIn[1], deposited: inVaultIn } : null;
 
   const held = payAsset ? holdings.get(payAsset.toLowerCase()) : undefined;
-  const refundCap = roomIn ? maxSwapInForRefund(roomIn) : null;
-  // The most one swap can spend: the largest note, and no more than its refund could bring back.
-  const oneSwapMax = held ? (refundCap != null && refundCap < held.largest ? refundCap : held.largest) : 0n;
-  const typed = amountInput.trim() && payAsset ? parseAssetAmount(amountInput.trim(), payAsset) : null;
-  const amountBad = amountInput.trim() !== "" && (typed === null || typed <= 0n);
-  // Nothing held counts as too little: a price still shows, the swap does not.
-  const overTotal = typed !== null && !amountBad && (held == null || typed > held.total);
-  const overNote = typed !== null && held != null && !overTotal && typed > oneSwapMax;
-  const refundBlocked = typed !== null && roomIn != null && !overTotal && !overNote && !refundFits(roomIn, typed);
-  const amount = typed !== null && !amountBad && !overTotal && !overNote && !refundBlocked ? typed : null;
-
-  // The note this swap spends: an exact match first, else the smallest that covers it.
-  // A scan of a few notes, so no memo: the note found is the same object each render.
-  const note: LocalNote | null = pickSwapNote(held?.notes, amount);
-
+  // The vault's cash-out fee: a refund through a router with an exit is sized from it. Until it reads, the most it can be.
   const { data: feeRead } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
@@ -322,6 +339,22 @@ export function VaultSwapView() {
     query: { enabled: Boolean(network.pool) },
   });
   const feeBps = typeof feeRead === "number" ? feeRead : null;
+  const refundFee = swapRouterFor(network.chainId)?.version === 3 ? (feeBps ?? 100) : undefined;
+  const refundCap = roomIn ? maxSwapInForRefund(roomIn, refundFee) : null;
+  // The most one swap can spend: the largest note, and no more than its refund could bring back.
+  const oneSwapMax = held ? (refundCap != null && refundCap < held.largest ? refundCap : held.largest) : 0n;
+  const typed = amountInput.trim() && payAsset ? parseAssetAmount(amountInput.trim(), payAsset) : null;
+  const amountBad = amountInput.trim() !== "" && (typed === null || typed <= 0n);
+  // Nothing held counts as too little: a price still shows, the swap does not.
+  const overTotal = typed !== null && !amountBad && (held == null || typed > held.total);
+  const overNote = typed !== null && held != null && !overTotal && typed > oneSwapMax;
+  const refundBlocked = typed !== null && roomIn != null && !overTotal && !overNote && !refundFits(roomIn, typed, refundFee);
+  const amount = typed !== null && !amountBad && !overTotal && !overNote && !refundBlocked ? typed : null;
+
+  // The note this swap spends: an exact match first, else the smallest that covers it.
+  // A scan of a few notes, so no memo: the note found is the same object each render.
+  const note: LocalNote | null = pickSwapNote(held?.notes, amount);
+
   const { data: limit } = useReadContract({
     address: network.pool ?? undefined,
     abi: limitAbi,
@@ -339,14 +372,9 @@ export function VaultSwapView() {
     query: { enabled: Boolean(network.pool && toAsset) },
   });
 
-  const [relayOk, setRelayOk] = useState<boolean | null>(null);
-  useEffect(() => {
-    let live = true;
-    void relayFor(network.chainId).then((r) => live && setRelayOk(Boolean(r?.enabled)));
-    return () => {
-      live = false;
-    };
-  }, [network.chainId]);
+  const [relay, setRelay] = useState<{ chainId: number; status: RelayNetworkStatus | null } | null>(null);
+  const relayNow = relay?.chainId === network.chainId ? relay.status : null;
+  const relayOk = relay?.chainId === network.chainId ? Boolean(relay.status?.enabled) : null;
 
   // A quote counts only for the exact swap it was asked for (quoteKey), so a
   // stale one can never be sent for a newer amount, and only while it is fresh
@@ -354,6 +382,8 @@ export function VaultSwapView() {
   const [quote, setQuote] = useState<{ key: string; plan: SwapPlan; at: number } | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  // About the most of the note a refused quote would take: the error line names it.
+  const [quoteFits, setQuoteFits] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -372,6 +402,40 @@ export function VaultSwapView() {
   // The flip button turns half a circle on each flip.
   const [turns, setTurns] = useState(0);
 
+  // Another swap link opened in this tab only changes the fragment: fill that one in.
+  // Not while a swap is running: the form stays on the swap being sent.
+  useEffect(() => {
+    if (busy) return;
+    const onHash = () => {
+      const l = swapLinkFromHash(window.location.hash, networkKey);
+      if (!l) return;
+      if (l.on) keepSwapLink(window.location.hash.replace(/^#/, ""), l.on);
+      setLink(l);
+      setPayPick(l.from?.address ?? null);
+      setPayPinned(Boolean(l.from));
+      setToPick(l.to?.address ?? null);
+      setAmountInput(l.amount ?? "");
+      setQuote(null);
+      setError(null);
+      setDone(null);
+      setReceipt(null);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [busy, networkKey]);
+
+  function closeLink() {
+    dropSwapLink();
+    setLink(null);
+  }
+  // Once its swap lands a link is done: a reload must not fill the same swap in again.
+  function finishLink() {
+    closeLink();
+    if (swapLinkParams(window.location.hash).toString()) {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    }
+  }
+
   // A coarse clock for quote ages: every 5 seconds, paused while the page is hidden.
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => {
@@ -386,6 +450,18 @@ export function VaultSwapView() {
     };
   }, []);
   const refreshSlot = Math.floor(clock / QUOTE_TTL_MS);
+
+  // The relay's state, and on a chain where gas is dear, its floor for a swap: it moves with gas, so it refreshes with the quote.
+  const dearGas = hasSwapFloor(network.chainId);
+  const relaySlot = dearGas ? refreshSlot : 0;
+  useEffect(() => {
+    let live = true;
+    const chainId = network.chainId;
+    void relayFor(chainId, dearGas).then((status) => live && setRelay({ chainId, status }));
+    return () => {
+      live = false;
+    };
+  }, [network.chainId, dearGas, relaySlot]);
 
   // A fresh quote whenever what is being swapped changes (after a short pause while
   // typing), and again every QUOTE_TTL_MS while it shows. Any valid amount gets a
@@ -404,6 +480,7 @@ export function VaultSwapView() {
     const t = window.setTimeout(() => {
       setQuoting(true);
       setQuoteError(null);
+      setQuoteFits(null);
       const key = quoteKey;
       planVaultSwap(getRhPublicClient(), network.chainId, {
         assetIn: payAsset,
@@ -418,7 +495,9 @@ export function VaultSwapView() {
           // A refresh that fails leaves a fresh price up; it stops showing by itself.
           const now = Date.now();
           setQuote((q) => (q && q.key === key && quoteFresh(q.at, now) ? q : null));
-          setQuoteError(e instanceof Error ? e.message : "Could not get a price. Try again.");
+          // an RPC's own words are no use here; what this code threw is
+          setQuoteError(e instanceof Error && !(e instanceof BaseError) ? e.message : "Could not get a price. Try again.");
+          setQuoteFits(e instanceof SwapQuoteRefused ? e.fitsIn : null);
         })
         .finally(() => live && setQuoting(false));
     }, 400);
@@ -446,6 +525,7 @@ export function VaultSwapView() {
       ? (quoteAmount * room * 99n) / (shownPlan.amountOut * 100n)
       : null;
   const impact = shownPlan?.impactBps ?? null;
+  const pegGap = shownPlan?.pegBps ?? null;
 
   if (!router) return null;
 
@@ -474,6 +554,7 @@ export function VaultSwapView() {
       if (!refunded) {
         countPerson("swap", address, network.testnet);
         setReceipt({ pay: from, payAmount: paid, receive: into, receiveAmount: BigInt(outNote.amountWei), hash });
+        finishLink();
       }
       setDone(
         refunded ? SWAP_REFUNDED : `Swapped. ${formatAssetLabel(outNote.amountWei, outNote.asset)} is in your private balance.`
@@ -492,6 +573,7 @@ export function VaultSwapView() {
   function pickPay(a: Address) {
     if (toAsset && same(a, toAsset)) setToPick(payAsset);
     setPayPick(a);
+    setPayPinned(false);
     setAmountInput("");
     setQuote(null);
     setDone(null);
@@ -501,6 +583,7 @@ export function VaultSwapView() {
     if (payAsset && same(a, payAsset)) {
       if (toAsset && holdings.has(toAsset.toLowerCase())) {
         setPayPick(toAsset);
+        setPayPinned(false);
         setAmountInput("");
       } else return;
     }
@@ -516,6 +599,7 @@ export function VaultSwapView() {
     const next = shownPlan ? plainAmount(shownPlan.amountOut, toAsset) : "";
     setTurns((t) => t + 1);
     setPayPick(toAsset);
+    setPayPinned(false);
     setToPick(payAsset);
     setAmountInput(next);
     setQuote(null);
@@ -530,12 +614,68 @@ export function VaultSwapView() {
     setReceipt(null);
   }
 
-  const venue = network.chainId === 4217 ? "Tempo's stablecoin exchange" : "Uniswap on Robinhood Chain";
+  const venue = network.chainId === 4217 ? "Tempo's stablecoin exchange" : `Uniswap on ${network.label}`;
   // What Add takes of the swap tokens (WETH, say, arrives only by swapping into it).
   const addable = assets.filter((a) => shieldTokensFor(network.chainId).some((t) => same(t.address, a)));
+
+  // A swap link's next step (lib/swapLink): sign in, or add the token it pays
+  // with when the private balance in it is none or too little. Bring money over
+  // only where it lands that token (USDG on Robinhood Chain, USDC.e on Tempo).
+  const linkFrom = link?.on === networkKey ? link.from : null;
+  const linkHeld = linkFrom ? (holdings.get(linkFrom.address.toLowerCase())?.total ?? 0n) : 0n;
+  const linkStep = link
+    ? swapLinkStep(link, {
+        signedIn: Boolean(isConnected && address),
+        network: networkKey,
+        known: notesRead && !balanceSyncing,
+        held: linkHeld,
+        need: linkFrom && link.amount ? parseAssetAmount(link.amount, linkFrom.address) : null,
+        addable: Boolean(
+          linkFrom &&
+            (same(linkFrom.address, ZERO)
+              ? isNativeAddable(network.chainId, openGated)
+              : isAddableToken(network.chainId, linkFrom, openGated))
+        ),
+        bridge: Boolean(
+          linkFrom && bridgeVisible(network) && same(BRIDGE_DESTINATIONS[network.family]?.token.address ?? "", linkFrom.address)
+        ),
+        heldLabel: linkFrom ? formatAssetLabel(linkHeld, linkFrom.address) : undefined,
+      })
+    : null;
+  // A token the router lists but whose pools or vault limit haven't opened yet is left out, once the pools are read.
+  const poolsRead = livePool?.chainId === network.chainId;
+  const linkNotOpen =
+    link?.on === networkKey && poolsRead
+      ? [link.from, link.to].flatMap((t) =>
+          t && !offered(t.address) ? [`${t.symbol} is not open for private swaps yet, so it was left out.`] : []
+        )
+      : [];
+
   const payUsd = payAsset && typed !== null && typed > 0n ? usdOf(typed, payAsset, marks) : null;
   const getUsd = shownPlan && toAsset ? usdOf(shownPlan.amountOut, toAsset, marks) : null;
   const receiveText = shownPlan && toAsset ? formatAssetAmount(shownPlan.amountOut, toAsset) : "0";
+
+  // On a chain where gas is dear a swap's vault fee has to cover its gas (lib/relay/swapFloor), and the
+  // relay counts a stablecoin at face value. The floor follows the route, each hop past the first costing
+  // more, and setting part of a note aside first, which the relay can't see, so only this tab counts it.
+  const hops = shownPlan?.route.length || 1;
+  const splits = Boolean(note && amount !== null && amount < BigInt(note.amountWei));
+  const floorUsd =
+    relayNow?.swapFloorUsd != null
+      ? (swapFloorShown(relayNow.swapFloorUsd) * Number(swapFloorGas(hops, splits))) / Number(swapGasUnits(1))
+      : null;
+  const paidFace =
+    payAsset && typed !== null && typed > 0n
+      ? tokenFor(network.chainId, payAsset)?.kind === "stablecoin"
+        ? Number(formatUnits(typed, assetDecimals(payAsset)))
+        : payUsd
+      : null;
+  const belowFloor = floorUsd != null && paidFace != null && paidFace < floorUsd;
+  const gasHigh = dearGas && Boolean(relayNow?.gasHigh);
+
+  // What the swap gives against what it costs, at market prices, fees included.
+  const valueGap = payUsd != null && getUsd != null ? valueGapBps(payUsd, getUsd) : null;
+  const farFromMarket = swapChecked(network.chainId) && valueGap != null && valueGap >= VALUE_STOP_BPS;
 
   // One label for the main button, the first thing that stops the swap.
   const button: { key: string; label: ReactNode; ready: boolean } = busy
@@ -580,7 +720,13 @@ export function VaultSwapView() {
                   ? { key: "room", label: "Too large for the vault right now", ready: false }
                   : relayOk === false
                     ? { key: "relay", label: "The Gloam relay is off", ready: false }
-                    : { key: "swap", label: "Swap privately", ready: Boolean(shownPlan && relayOk === true) };
+                    : gasHigh
+                      ? { key: "gas", label: `${network.label} gas is high right now`, ready: false }
+                      : belowFloor
+                        ? { key: "floor", label: `Smallest swap right now: ${fmtUsd(Math.ceil(floorUsd!))}`, ready: false }
+                        : farFromMarket
+                          ? { key: "market", label: "Too far from the market price", ready: false }
+                          : { key: "swap", label: "Swap privately", ready: Boolean(shownPlan && relayOk === true) };
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -598,10 +744,23 @@ export function VaultSwapView() {
           </span>
         </div>
 
+        {link && (
+          <SwapLinkBanner
+            link={link}
+            currentNetwork={networkKey}
+            onSwitchNetwork={setNetworkKey}
+            onDismiss={closeLink}
+            step={linkStep}
+            notOpen={linkNotOpen}
+          />
+        )}
+
         {!isConnected || !address ? (
           <div className="space-y-4 rounded-[20px] bg-surface p-6">
             <p className="text-[14px] leading-relaxed text-soft">
-              Connect the wallet you use with Gloam to swap from your private balance.
+              {linkStep?.kind === "signin"
+                ? linkStep.text
+                : "Connect the wallet you use with Gloam to swap from your private balance."}
             </p>
             <WalletMenu />
           </div>
@@ -775,13 +934,14 @@ export function VaultSwapView() {
                     <Row term={`Vault fee (${formatFeePercent(feeBps ?? 0)})`}>
                       {formatAssetLabel(withdrawFeeOf(amount, feeBps ?? 0), payAsset)}
                     </Row>
-                    <Row term={`Price buffer (${formatFeePercent(swapBufferBps(network.chainId))})`}>
+                    <Row term={`Price buffer (${formatFeePercent(swapBufferBps(network.chainId, payAsset ?? undefined, toAsset ?? undefined))})`}>
                       about {formatAssetLabel(shownPlan.leftover, payAsset)} to the treasury
                     </Row>
                     {impact != null && (
                       <Row term="Price impact">{impact < 1 ? "<0.01%" : formatFeePercent(impact)}</Row>
                     )}
                     <Row term="Route">{routeLine(network.chainId, payAsset, toAsset, shownPlan, venue)}</Row>
+                    <Row term="Network fee">Paid by the Gloam relay</Row>
                     <Row term="Sent by">The Gloam relay, not your wallet</Row>
                   </dl>
                   </div>
@@ -789,14 +949,19 @@ export function VaultSwapView() {
               </div>
             )}
 
-            {(!notes.length ||
+            {((!notes.length && linkStep?.kind !== "add") ||
               priceError ||
               overRoom ||
               relayOk === false ||
+              belowFloor ||
+              farFromMarket ||
+              (pegGap != null && pegGap >= PEG_WARN_BPS) ||
+              (valueGap != null && valueGap >= VALUE_WARN_BPS) ||
               (impact != null && impact >= IMPACT_WARN_BPS) ||
               (note && amount !== null && amount < BigInt(note.amountWei))) && (
               <div className="gl-settle mt-4 space-y-2.5 px-1 text-[12.5px] leading-[1.6]">
-                {!notes.length && addable.length > 0 && (
+                {/* a swap link's banner already says what to add */}
+                {!notes.length && addable.length > 0 && linkStep?.kind !== "add" && (
                   <p className="text-mute">
                     You can check prices now. To swap, add {listOr(addable.map(assetLabel))} to your private balance
                     first.{" "}
@@ -808,7 +973,12 @@ export function VaultSwapView() {
                     </Link>
                   </p>
                 )}
-                {priceError && <p className="text-warn">{priceError}</p>}
+                {priceError && (
+                  <p className="text-warn">
+                    {priceError}
+                    {quoteFits != null && payAsset ? ` Try about ${formatAssetLabel(quoteFits, payAsset)} or less.` : ""}
+                  </p>
+                )}
                 {overRoom && room != null && toAsset && (
                   <p className="text-warn">
                     The vault takes at most {formatAssetLabel(room, toAsset)} right now.
@@ -823,12 +993,36 @@ export function VaultSwapView() {
                     better rate.
                   </p>
                 )}
+                {pegGap != null && pegGap >= PEG_WARN_BPS && !priceError && (
+                  <p className="text-warn">
+                    These two are about {formatFeePercent(pegGap)} apart right now, so this is less than a dollar for a dollar.
+                  </p>
+                )}
+                {valueGap != null && valueGap >= VALUE_WARN_BPS && !priceError && !(pegGap != null && pegGap >= PEG_WARN_BPS) && (
+                  <p className="text-warn">
+                    {farFromMarket
+                      ? `You would get about ${formatFeePercent(valueGap)} less than this is worth at market prices, so the swap won't go.`
+                      : `You get about ${formatFeePercent(valueGap)} less than this is worth at market prices, fees included.`}
+                  </p>
+                )}
+                {belowFloor && (
+                  <p className="text-mute">
+                    The relay pays the gas, so on {network.label} a swap&apos;s vault fee has to cover it
+                    {splits ? ", and the step that sets this part aside" : ""}. This floor moves with gas.
+                  </p>
+                )}
                 {relayOk === false && (
                   <p className="text-warn">Swaps go through the Gloam relay, so your wallet never shows. It is off right now; try again soon.</p>
                 )}
                 {note && amount !== null && amount < BigInt(note.amountWei) && !priceError && (
                   <p className="text-mute">The rest stays in your private balance: it is set aside privately first.</p>
                 )}
+              </div>
+            )}
+
+            {gasHigh && (
+              <div className="mt-4">
+                <RelayGasNotice status={relayNow} label={network.label} />
               </div>
             )}
 

@@ -121,10 +121,11 @@ function localLaunchText(): string | null {
   }
 }
 
-/** The launch time in the viewer's own time zone, when it isn't UTC. */
+/** The launch time in the viewer's own time zone, when it isn't UTC. Once live it is history, so it steps aside. */
 export function LocalLaunchTime() {
   const text = useSyncExternalStore(noopSubscribe, localLaunchText, () => null);
-  if (!text) return null;
+  const live = useMainnetLive();
+  if (!text || live) return null;
   return <>Your time: {text}</>;
 }
 

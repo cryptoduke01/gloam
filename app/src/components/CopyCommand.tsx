@@ -28,7 +28,7 @@ export function CopyCommand({ command }: { command: string }) {
       </span>
       <span className="tnum min-w-0 flex-1 py-1 leading-snug [overflow-wrap:anywhere]">{command}</span>
       <span
-        className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[12.5px] sm:px-2.5 font-medium transition-colors ${
+        className={`gl-tap inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[12.5px] sm:px-2.5 font-medium transition-colors ${
           copied
             ? "text-foreground"
             : "text-mute group-hover:bg-surface group-hover:text-foreground"

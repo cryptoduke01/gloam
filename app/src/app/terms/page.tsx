@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LegalLayout } from "@/components/LegalLayout";
 
 export const metadata: Metadata = { title: "Terms of Use" };
 
 export default function TermsPage() {
   return (
-    <LegalLayout title="Terms of Use" updated="October 23, 2026">
+    <LegalLayout title="Terms of Use" updated="November 1, 2026">
       <p>
         These Terms of Use (“Terms”) govern access to and use of the websites,
         applications, documentation, and interfaces operated under gloam.trade
@@ -21,8 +22,11 @@ export default function TermsPage() {
         Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) you use
         real assets, and you can lose them. Mainnet is beta software: deposits
         have limits, a cash out costs 0.25% of its amount, and the contracts
-        were reviewed internally before launch, with an external audit planned
-        but not yet done. Only deposit what you can afford to lose.
+        were reviewed internally before launch. Kann Audits then reviewed the
+        vault contracts (<Link href="/security">report, 1 November 2026</Link>)
+        and found no Critical, High or Medium issues. That review did not cover
+        every part of Gloam and does not remove risk. Only deposit what you can
+        afford to lose.
       </p>
       <p>
         On the testnets (Tempo Moderato testnet and Robinhood Chain testnet)

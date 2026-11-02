@@ -23,6 +23,7 @@ import {
 } from "./apiKeys";
 import { getPartner, PartnerError, type Partner } from "./partners";
 import { readSession, requestHost, SESSION_COOKIE, SignInError } from "./partnersAuth";
+import { logSafe } from "./logSafe";
 import { KvUnavailableError } from "./partnersKv";
 import { clientIp, hitRateLimit } from "./mcpRemote/rateLimit";
 import { RelayError } from "./relay/server";
@@ -75,7 +76,7 @@ export function apiFail(e: unknown, extra: Extra): NextResponse {
     code = "storage_unavailable";
     message = "Partner storage is not available on this server right now.";
   } else {
-    console.error("gloam_api", extra.requestId, e);
+    console.error("gloam_api", extra.requestId, logSafe(e));
   }
   return NextResponse.json(
     { v: API_VERSION, ok: false, error: { code, message }, requestId: extra.requestId },
@@ -218,6 +219,19 @@ export async function limitSignIn(req: Request): Promise<void> {
 export async function limitPortalWrite(wallet: string): Promise<void> {
   const rate = await hitRateLimit(`wallet:${wallet.toLowerCase()}`, "partner-write", PORTAL_WRITES_PER_MIN);
   if (!rate.allowed) throw new ApiError(429, "rate_limited", "Too many changes in a minute. Wait a moment and try again.");
+}
+
+/** New partner accounts one IP may make in a UTC day. */
+export const NEW_ACCOUNTS_PER_IP_PER_DAY = 3;
+
+/**
+ * Counts one new account against this IP's day, in one increment, before the account
+ * is made: sign-ups sent together are each counted. A 429 past the limit. Check the
+ * input first (checkNewPartner), so a sign-up refused for its input isn't counted.
+ */
+export async function takeNewAccount(req: Request): Promise<void> {
+  const rate = await hitRateLimit(clientIp(req), "partner-new", NEW_ACCOUNTS_PER_IP_PER_DAY, Date.now(), 86_400);
+  if (!rate.allowed) throw new ApiError(429, "rate_limited", "Too many new accounts from here today. Try again tomorrow.");
 }
 
 /** The signed-in wallet for a portal request, or a 401. */

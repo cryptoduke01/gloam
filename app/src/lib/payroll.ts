@@ -753,12 +753,19 @@ async function holdUnconfirmed(row: PayrollRow, why: string, emit: () => Promise
 
 /** The wallet prompt was turned down, so this send never went out. */
 function isDeclined(e: unknown): boolean {
-  let x = e as { name?: string; code?: number; message?: string; cause?: unknown } | undefined;
-  for (let i = 0; x && i < 6; i++, x = x.cause as typeof x) {
-    if (x.name === "UserRejectedRequestError" || x.code === 4001) return true;
-    if (typeof x.message === "string" && /user (rejected|denied)/i.test(x.message)) return true;
-  }
-  return false;
+  type Link = { name?: string; code?: number; message?: string; cause?: unknown };
+  const links: Link[] = [];
+  let x = e as Link | undefined;
+  for (let i = 0; x && i < 6; i++, x = x.cause as Link | undefined) links.push(x);
+  // A Gloam wallet's maybe-sent verdict (lib/embeddedErrors): taken, or may have been, never
+  // declined, whatever the text around it says (a wrapper's message carries its causes').
+  if (links.some((l) => l.name === "EmbeddedMaybeSentError")) return false;
+  return links.some(
+    (l) =>
+      l.name === "UserRejectedRequestError" ||
+      l.code === 4001 ||
+      (typeof l.message === "string" && /user (rejected|denied)/i.test(l.message))
+  );
 }
 
 /** Only for a payment the chain shows can never land (or that was never handed out). */

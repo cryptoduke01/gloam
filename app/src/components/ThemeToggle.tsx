@@ -44,7 +44,7 @@ export function ThemeSegmented({ className = "" }: { className?: string }) {
           role="radio"
           aria-checked={choice === o.k}
           onClick={() => setTheme(o.k)}
-          className={`h-8 rounded-full px-3.5 transition-colors ${
+          className={`gl-tap h-8 rounded-full px-3.5 transition-colors ${
             choice === o.k
               ? "bg-panel text-foreground shadow-card"
               : "text-mute hover:text-foreground"

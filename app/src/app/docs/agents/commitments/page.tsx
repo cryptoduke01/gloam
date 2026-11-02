@@ -315,8 +315,9 @@ const result = await checkPaymentReceipt(record, {
         <li>
           <strong>Beta.</strong> Mainnet runs on the final keys of the
           13-contributor trusted setup, with beta deposit limits. It had an
-          internal review on 20 October 2026; an external audit is planned and
-          not done. Start small.
+          internal review on 20 October 2026, and Kann Audits reviewed the vault
+          contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues.
+          The circuits and the SDK were not part of that review. Start small.
         </li>
       </ul>
 

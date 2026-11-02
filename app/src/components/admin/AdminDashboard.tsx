@@ -45,7 +45,7 @@ type MetricsPayload = {
   };
   /** Claim-link totals per UTC day, oldest first (lib/funnel). */
   claimLinks?: FunnelDay[];
-  /** Bridges and swaps tagged to Gloam at Relay (lib/relayVolume). */
+  /** Bridges and swaps through Gloam's Relay panel (lib/relayVolume). */
   relay?: RelayVolume | { error: string };
   /** Different wallets using Gloam, counted one way (lib/peopleStore). */
   people?: PeopleSummary;
@@ -1240,12 +1240,14 @@ type AdminPartner = {
   name: string;
   website: string | null;
   fees: { privatePaymentCents: number; cashoutBps: number; depositBps: number };
+  relayApproved: boolean;
   createdAt: number;
   activeKeys: number;
   totals: {
     privatePayments: number;
     cashOuts: number;
     deposits: number;
+    privateSwaps?: number;
     publicVolumeUsd: number;
     commissionUsd: number;
     unpriced: number;
@@ -1256,13 +1258,40 @@ type AdminPartner = {
 type PartnersPayload = {
   backend: "redis" | "memory" | "none";
   partners: AdminPartner[];
-  totals: { privatePayments: number; cashOuts: number; deposits: number; publicVolumeUsd: number; commissionUsd: number } | null;
+  totals: { privatePayments: number; cashOuts: number; deposits: number; privateSwaps?: number; publicVolumeUsd: number; commissionUsd: number } | null;
 };
 
 /** The partner program: every partner, their keys and the volume their keys brought in. */
 function PartnersPanel() {
   const [data, setData] = useState<PartnersPayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+
+  /** Approves an account for the relay's larger message budget, or takes that back. */
+  const setApproved = async (id: string, relayApproved: boolean) => {
+    setSaving(id);
+    setSaveErr(null);
+    try {
+      const res = await fetch("/api/partners/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, relayApproved }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: { partner?: { relayApproved?: boolean } }; error?: { message?: string } } | null;
+      if (!res.ok || !json?.ok) {
+        setSaveErr(json?.error?.message ?? `Saving failed (${res.status})`);
+        return;
+      }
+      const saved = json.data?.partner?.relayApproved === true;
+      setData((d) => (d ? { ...d, partners: d.partners.map((p) => (p.id === id ? { ...p, relayApproved: saved } : p)) } : d));
+    } catch {
+      setSaveErr("Network error saving the partner");
+    } finally {
+      setSaving(null);
+    }
+  };
 
   useEffect(() => {
     let live = true;
@@ -1312,13 +1341,13 @@ function PartnersPanel() {
     <>
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Partners" value={n(data.partners.length)} sub={`${n(data.partners.reduce((s, p) => s + p.activeKeys, 0))} active keys`} />
-        <Kpi label="Private payments" value={n(t?.privatePayments)} sub="relayed with a partner key" />
+        <Kpi label="Private payments" value={n(t?.privatePayments)} sub={`relayed with a partner key, and ${n(t?.privateSwaps ?? 0)} private swaps`} />
         <Kpi label="Public volume" value={fmtUsd(t?.publicVolumeUsd ?? 0)} sub={`${n((t?.cashOuts ?? 0) + (t?.deposits ?? 0))} cash outs and deposits`} />
         <Kpi label="Would-be fees" value={fmtUsd(t?.commissionUsd ?? 0)} sub={MAINNET_ENABLED ? "partner fees not charged yet" : "testnet, nothing charged"} />
       </section>
       <Panel title="Partners">
         <DataTable
-          headers={["Partner", "Owner", "Keys", "Private payments", "Cash outs", "Deposits", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
+          headers={["Partner", "Owner", "Keys", "Messages", "Private payments", "Cash outs", "Deposits", "Swaps", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
           rows={data.partners.map((p) => [
             <span key="n" className="text-foreground">
               {p.website ? (
@@ -1333,9 +1362,20 @@ function PartnersPanel() {
               {shortAddress(p.owner, 4)}
             </span>,
             n(p.activeKeys),
+            <button
+              key="r"
+              type="button"
+              disabled={saving === p.id}
+              onClick={() => void setApproved(p.id, !p.relayApproved)}
+              className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong disabled:opacity-50"
+              title={p.relayApproved ? "Their keys use the larger message budget. Click to take it back." : "Their keys share the small message budget. Click to approve."}
+            >
+              {saving === p.id ? "Saving" : p.relayApproved ? "Approved" : "Approve"}
+            </button>,
             n(p.totals?.privatePayments),
             n(p.totals?.cashOuts),
             n(p.totals?.deposits),
+            n(p.totals?.privateSwaps ?? 0),
             fmtUsd(p.totals?.publicVolumeUsd ?? 0),
             fmtUsd(p.totals?.commissionUsd ?? 0),
             `$${(p.fees.privatePaymentCents / 100).toFixed(2)} · ${pct(p.fees.cashoutBps)} · ${pct(p.fees.depositBps)}`,
@@ -1343,10 +1383,16 @@ function PartnersPanel() {
             new Date(p.createdAt).toLocaleDateString(),
           ])}
           empty={data.backend === "none" ? "Partner storage is not configured (set Upstash Redis)." : "No partners yet"}
-          minWidth={1100}
+          minWidth={1200}
         />
+        {saveErr && (
+          <p className="mt-3 text-[13px] text-danger" role="alert">
+            {saveErr}
+          </p>
+        )}
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
-          Fee setting is per private payment, cash outs, deposits. Volume counts payments relayed with a partner key and
+          Messages: payment messages from an approved account&apos;s keys use the relay&apos;s larger budget. Every other
+          account&apos;s keys share a small one. Fee setting is per private payment, cash outs, deposits. Volume counts payments relayed with a partner key and
           deposits partners reported (checked on chain). Store: {data.backend}.
         </p>
       </Panel>
@@ -1608,7 +1654,7 @@ type TesterRow = {
   createdAt: number;
 };
 
-const TESTER_NETWORK: Record<TesterRow["network"], string> = { both: "Both", tempo: "Tempo", robinhood: "Robinhood Chain" };
+const TESTER_NETWORK: Record<TesterRow["network"], string> = { both: "Any", tempo: "Tempo", robinhood: "Robinhood Chain" };
 
 function TestersPanel() {
   const [data, setData] = useState<{ backend: string; cap: number; applications: TesterRow[]; loadedAt: number } | null>(null);
@@ -1916,6 +1962,16 @@ function RelayPanel({
         </p>
       )}
 
+      {live?.historyError ? (
+        <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] leading-relaxed text-danger">
+          Relay&apos;s history didn&apos;t answer ({live.historyError}). These figures are what Gloam has on record so far, so the newest swaps may be missing.
+        </p>
+      ) : live?.history === "v2" ? (
+        <p className="rounded-xl bg-surface px-4 py-3 text-[14px] leading-relaxed text-soft">
+          Add RELAY_API_KEY_ID on Vercel before 24 November 2026. Relay retires the history read this page uses on that day, and new swaps stop counting here without it.
+        </p>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="Funnel">
           <BarChart rows={funnel} />
@@ -1929,7 +1985,7 @@ function RelayPanel({
             <DataTable
               headers={["Source", "Kind", "Finished", "Volume", "Relay fees"]}
               rows={live.bySource.map((r) => [relayChainName(r.chainId), r.kind === "swap" ? "Swap" : "Bridge", n(r.count), fmtUsd(r.inUsd), fmtUsd(r.feeUsd)])}
-              empty="Nothing tagged yet"
+              empty="Nothing counted yet"
               minWidth={460}
             />
           ) : (
@@ -1957,7 +2013,8 @@ function RelayPanel({
             />
             <p className="mt-4 text-[13px] leading-relaxed text-mute">
               UTC days, finished requests only, valued in dollars by Relay when each one was made.
-              {live.since ? ` Tagged at Relay since ${fmtWhen(live.since)}.` : " Nothing tagged at Relay yet."}
+              {live.since ? ` Counted since ${fmtWhen(live.since)}.` : " Nothing counted yet."}
+              {" Older bridges were never tagged at Relay, so they can't be recovered."}
               {live.truncated ? " More requests exist than one refresh reads, so totals are a floor." : ""}
             </p>
           </Panel>

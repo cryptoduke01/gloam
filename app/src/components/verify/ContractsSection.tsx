@@ -33,7 +33,7 @@ const ENTRIES = contractDirectory();
 const READ_TIMEOUT_MS = 20_000;
 
 const LOGOS: Record<ChainFamily, string> = {
-  robinhood: "/brand/logos/robinhood.png",
+  robinhood: "/brand/chains/4663.png",
   tempo: "/brand/logos/tempo.svg",
   base: "/brand/chains/8453.png",
   ethereum: "/brand/chains/1.png",

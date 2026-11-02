@@ -30,8 +30,8 @@ GLOAM_NETWORK=robinhood-mainnet GLOAM_AGENT_PRIVATE_KEY=0x... npx tsx agent-shie
 
 What to know before you use mainnet:
 
-- **Beta.** Gloam is beta software. Deposits are capped at 500 per deposit and
-  25,000 in total for each stablecoin ($GLOAM: 25,000 and 250,000). Cash outs and
+- **Beta.** Gloam is beta software. Deposits are capped at 50,000 per deposit and
+  2,500,000 in total for each stablecoin ($GLOAM: 2,500,000 and 25,000,000). Cash outs and
   private payments are never limited.
 - **Fees.** Deposits and private payments are free. Cashing out costs 0.25%
   (`cashOutFee(amount)` in the SDK).

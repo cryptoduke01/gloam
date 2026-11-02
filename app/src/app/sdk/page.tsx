@@ -573,7 +573,7 @@ export default function SdkPage() {
                 },
                 {
                   title: "Keys",
-                  body: "Mainnet, Base Sepolia and Ethereum Sepolia proofs use the final keys from the 13-contributor ceremony; the Robinhood Chain and Tempo testnets use development keys. Reviewed internally before launch; an external audit is planned.",
+                  body: "Mainnet, Base Sepolia and Ethereum Sepolia proofs use the final keys from the 13-contributor ceremony; the Robinhood Chain and Tempo testnets use development keys. Reviewed internally before launch; Kann Audits has since reviewed the vault contracts and found no Critical, High or Medium issues.",
                 },
                 {
                   title: "Nothing faked",

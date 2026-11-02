@@ -527,8 +527,8 @@ GLOAM_LIMITS_FILE=./limits.json
       </div>
       <ul>
         <li>
-          <strong>Beta limits on mainnet:</strong> 500 of a stablecoin per
-          deposit and 25,000 in total per stablecoin.
+          <strong>Beta limits on mainnet:</strong> 50,000 of a stablecoin per
+          deposit and 2,500,000 in total per stablecoin.
         </li>
         <li>
           <strong>ACP and the vault take the same money.</strong> ACP pays in
@@ -591,7 +591,9 @@ GLOAM_LIMITS_FILE=./limits.json
       <h3>Is mainnet ready for my agent?</h3>
       <p>
         Mainnet is beta software with deposit limits. The code was reviewed
-        internally before launch, and an external audit is in progress. Start an agent on small limits and raise them
+        internally before launch, and Kann Audits reviewed the vault contracts (<Link href="/security">report, 1 November 2026</Link>) and
+        found no Critical, High or Medium issues. The plugin, SDK and relay were not part of that
+        review. Start an agent on small limits and raise them
         as you go.
       </p>
     </DocsLayout>

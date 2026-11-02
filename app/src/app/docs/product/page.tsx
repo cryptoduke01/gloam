@@ -127,9 +127,14 @@ export default function DocsProductPage() {
             body: "The first private trade design stays off on every network. The mainnet vaults have no sealed swap code. Private swaps replaced it.",
           },
           {
+            n: "●",
+            title: "Vault review",
+            body: "Reviewed internally before launch, with no Critical or High findings open on 20 October. Kann Audits then reviewed the vault contracts (report, 1 November 2026) and found no Critical, High or Medium issues. The swap routers, circuits, app and relay were not part of it.",
+          },
+          {
             n: "○",
-            title: "External audit + multisig",
-            body: "Reviewed internally before launch, with no Critical or High findings open on 20 October. An external audit is planned, and the owner moves from one wallet to a multisig.",
+            title: "Multisig owner",
+            body: "The owner moves from one wallet to a multisig.",
           },
           {
             n: BASE_LIVE && ETHEREUM_LIVE ? "●" : "○",

@@ -5,7 +5,7 @@ import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, mainnetPo
 import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, ETHEREUM_MAINNET_TOKENS, ETHEREUM_SEPOLIA_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
 import { DEFAULT_MAX_GAS_GWEI } from "@/lib/relay/gasCeiling";
 import { getNetwork } from "@/lib/networks";
-import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
+import { VAULT_SWAP_ROUTERS, swapMainnets, swapV3Live } from "@/lib/vaultSwap";
 import { GLOAM_OWNER, GLOAM_RELAYERS, GLOAM_TREASURY, MAINNET_POSEIDON_T3 } from "@/lib/contractDirectory";
 
 export const metadata: Metadata = {
@@ -84,9 +84,11 @@ export default function DocsNetworksPage() {
         (<code>ShieldPoolPayments</code>) take shield, private send, cash out
         and proofs, and have no swap code.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link>{" "}
-        run through a separate router on Robinhood Chain and Tempo, which uses
-        only the vault&apos;s normal calls; Base and Ethereum have no swap
-        router yet.
+        run through a separate router on {swapMainnets()}, which uses
+        only the vault&apos;s normal calls
+        {swapV3Live(8453) && swapV3Live(1)
+          ? "."
+          : `; ${[...(swapV3Live(8453) ? [] : ["Base"]), ...(swapV3Live(1) ? [] : ["Ethereum"])].join(" and ")} ${swapV3Live(8453) || swapV3Live(1) ? "has" : "have"} no swap router yet.`}
       </p>
       <div className="overflow-x-auto">
         <table>
@@ -202,8 +204,8 @@ export default function DocsNetworksPage() {
               <td>Swaps on</td>
               <td>Uniswap v4 (USDG, $GLOAM, PONS, CASHCAT, WETH, stock tokens and more)</td>
               <td>Tempo&apos;s stablecoin exchange (the four stablecoins)</td>
-              <td>Not yet</td>
-              <td>Not yet</td>
+              <td>{swapV3Live(8453) ? "Uniswap v4 (USDC, USDT, EURC, ETH)" : "Not yet"}</td>
+              <td>{swapV3Live(1) ? "Uniswap v4 (USDC, USDT, USDG, EURC, ETH)" : "Not yet"}</td>
             </tr>
             <tr>
               <td>Gas</td>
@@ -285,16 +287,11 @@ export default function DocsNetworksPage() {
       </div>
       <ul>
         <li>
-          <strong>Beta deposit limits.</strong> Each stablecoin: 500 per deposit
-          and 25,000 in total. ETH on Base and Ethereum: 0.2 per deposit and 10
-          in total. $GLOAM: 25,000 per deposit and 250,000 in total. PONS: 3,900
-          and 98,000. CASHCAT: 9,600 and 240,000. The app shows the room left
-          before you sign.
-        </li>
-        <li>
-          <strong>Higher limits queued.</strong> A 100x raise of the beta
-          deposit limits is queued behind the public 3-day timelock and applies
-          around 1 November 2026. Until then the limits above hold.
+          <strong>Beta deposit limits.</strong> Each stablecoin: 50,000 per
+          deposit and 2,500,000 in total. ETH on Base and Ethereum: 20 per
+          deposit and 1,000 in total. $GLOAM: 2,500,000 per deposit and
+          25,000,000 in total. PONS: 390,000 and 9,800,000. CASHCAT: 960,000 and
+          24,000,000. The app shows the room left before you sign.
         </li>
         <li>
           <strong>Never limited:</strong> private payments and cash outs.
@@ -308,7 +305,8 @@ export default function DocsNetworksPage() {
           <strong>Fees.</strong> Deposits and private payments are free. A cash
           out costs 0.25%, kept by the pool. A private swap pays the same 0.25%
           on the amount swapped, plus a price buffer (0.5% on Robinhood Chain,
-          0.1% on Tempo) whose unused part goes to the swap treasury.
+          0.1% on Tempo{swapV3Live(8453) || swapV3Live(1) ? ", and on Base and Ethereum 0.1% between two dollar stablecoins and 0.5% otherwise" : ""})
+          whose unused part goes to the swap treasury.
         </li>
       </ul>
 
@@ -340,7 +338,7 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Treasury</strong>, <code>{GLOAM_TREASURY}</code>. Cash-out
-          fees go here since 24 October. Both swap routers also send what a swap
+          fees go here since 24 October. The swap routers also send what a swap
           does not use here; that address is fixed in each router and cannot
           change. The routers have no upgrade. Tempo&apos;s has no owner;
           Robinhood Chain&apos;s owner can add a pool with 3 days of public
@@ -378,8 +376,8 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Mainnet assets</strong>, USDG, $GLOAM, PONS and CASHCAT to add
-          privately, with beta limits of 3,900 PONS per deposit and 98,000 in
-          total, and 9,600 CASHCAT per deposit and 240,000 in total, the limits
+          privately, with beta limits of 390,000 PONS per deposit and 9,800,000 in
+          total, and 960,000 CASHCAT per deposit and 24,000,000 in total, the limits
           live now. Stock tokens, WETH and the other swap tokens come in through a
           private swap.
         </li>
@@ -582,7 +580,11 @@ export default function DocsNetworksPage() {
           not on Robinhood Chain mainnet)
         </li>
         <li>
-          <strong>Beta limits, both networks</strong>, each stablecoin 500 per
+          <strong>Beta limits on Base mainnet</strong>, each stablecoin 50,000
+          per deposit and 2,500,000 in total; ETH 20 per deposit and 1,000 in total
+        </li>
+        <li>
+          <strong>Beta limits on Base Sepolia</strong>, each stablecoin 500 per
           deposit and 25,000 in total; ETH 0.2 per deposit and 10 in total
         </li>
         <li>
@@ -595,7 +597,7 @@ export default function DocsNetworksPage() {
       <ul>
         <li>
           <strong>Base Sepolia runs the mainnet keys.</strong> It is a testnet,
-          but the same contract, keys, limits and cash-out fee as Base mainnet,
+          but the same contract, keys and cash-out fee as Base mainnet,
           so proofs for chain 84532 use the final keys, not the dev keys the
           other testnets use.
         </li>
@@ -616,11 +618,10 @@ export default function DocsNetworksPage() {
           would be frozen in the vault; other assets keep working.
         </li>
         <li>
-          <strong>Not on Base yet.</strong>{" "}
-          Private swaps (next, through a router
-          on Uniswap v4) and bringing money over from another chain (the Relay
-          bridge). Payments, payroll, payment requests, claim links and proofs
-          work as on the other chains.{" "}
+          <strong>{swapV3Live(8453) ? "As on the other chains." : "Not on Base yet."}</strong>{" "}
+          {swapV3Live(8453) ? "" : "Private swaps, next, through a router on Uniswap v4. "}Bringing money
+          over from another chain (the Relay bridge), payments, payroll, payment
+          requests, claim links and proofs work as on the other chains.{" "}
           {BASE_MAINNET_MEMO
             ? "Base and Base Sepolia each have a payment-message board, so a payment can be found by scanning with your Gloam address."
             : "Base Sepolia has its payment-message board, so a payment can be found by scanning with your Gloam address; Base mainnet gets its own when it is deployed."}
@@ -657,8 +658,8 @@ export default function DocsNetworksPage() {
           Tether&apos;s, USDG and PYUSD are issued by Paxos.
         </li>
         <li>
-          <strong>Beta limits</strong>, each stablecoin 500 per deposit and
-          25,000 in total; ETH 0.2 per deposit and 10 in total
+          <strong>Beta limits</strong>, each stablecoin 50,000 per deposit and
+          2,500,000 in total; ETH 20 per deposit and 1,000 in total
         </li>
         <li>
           <strong>BDX</strong>, 100,000 per deposit and 2,000,000 in total, set through the
@@ -699,10 +700,12 @@ export default function DocsNetworksPage() {
           asset would be frozen in the vault; other assets keep working.
         </li>
         <li>
-          <strong>Not on Ethereum yet.</strong>{" "}
-          {ETHEREUM_MAINNET_MEMO
-            ? "Private swaps, and bringing money over into Ethereum (Ethereum stays a chain you can bring money over from)."
-            : "Private swaps, bringing money over into Ethereum (Ethereum stays a chain you can bring money over from), and the payment-message board: until it is deployed, a payment there goes by claim link or sealed code."}
+          <strong>{swapV3Live(1) && ETHEREUM_MAINNET_MEMO ? "As on the other chains." : "Not on Ethereum yet."}</strong>{" "}
+          {[
+            ...(swapV3Live(1) ? [] : ["Private swaps."]),
+            ...(ETHEREUM_MAINNET_MEMO ? [] : ["The payment-message board: until it is deployed, a payment there goes by claim link or sealed code."]),
+          ].join(" ")}{" "}
+          Bringing money over into Ethereum works, and Ethereum stays a chain you can bring money over from.
         </li>
       </ul>
 
@@ -796,8 +799,10 @@ export default function DocsNetworksPage() {
         the final keys from the multi-party ceremony that closed on 17 October
         with 13 contributors, and beta deposit limits cap what the pools take.
         The code was reviewed internally before launch; that review finished on
-        20 October with no Critical or High findings open. An external audit is
-        planned, not done. The mainnet pools are new, so their anonymity set is
+        20 October with no Critical or High findings open. Kann Audits then
+        reviewed the vault contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High
+        or Medium issues; the swap routers, circuits, app and relay were not
+        part of it. The mainnet pools are new, so their anonymity set is
         thin at first. The testnets run on development keys with test funds, and
         stay open for practice. See the{" "}
         <Link href="/docs/production">production gate</Link> for what is done

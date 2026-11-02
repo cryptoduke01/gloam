@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LegalLayout } from "@/components/LegalLayout";
 
 export const metadata: Metadata = { title: "Disclosures" };
 
 export default function DisclosuresPage() {
   return (
-    <LegalLayout title="Disclosures" updated="October 26, 2026">
+    <LegalLayout title="Disclosures" updated="November 1, 2026">
       <p>
         Please read these disclosures carefully before using Gloam or any related
         interface.
@@ -21,22 +22,24 @@ export default function DisclosuresPage() {
       <p>
         Smart contracts may contain bugs, economic design flaws, or be exploited.
         Upgrades, admin keys, oracles, bridges, and sequencers introduce
-        additional risk. Audits, if any, do not eliminate risk.
+        additional risk. Audits do not eliminate risk.
       </p>
       <h2>Mainnet is beta</h2>
       <p>
         Since Gloam&apos;s mainnet launch on 21 October 2026, the mainnet pools
         on Robinhood Chain and Tempo have been live, and since 26 October 2026
         the pools on Base and Ethereum. They are beta software.
-        The contracts were reviewed internally before launch; an external
-        audit is planned and has not been done.
+        The contracts were reviewed internally before launch. Kann Audits then
+        reviewed the vault contracts (<Link href="/security">report, 1 November
+        2026</Link>) and found no Critical, High or Medium issues. Its findings
+        are acknowledged and not fixed; changes land in the next vault. The
+        swap routers, circuits, app and relay were not part of that review.
       </p>
       <p>
-        Deposits are capped during the beta: 500 per deposit and 25,000 in
-        total for each stablecoin, 0.2 per deposit and 10 in total for ETH on
-        Base and Ethereum, and 25,000 per deposit and 250,000 in total for
-        $GLOAM. A raise of these limits is queued behind the public three-day
-        timelock. Cash outs and private payments are never limited.
+        Deposits are capped during the beta: 50,000 per deposit and 2,500,000
+        in total for each stablecoin, 20 per deposit and 1,000 in total for ETH
+        on Base and Ethereum, and 2,500,000 per deposit and 25,000,000 in total
+        for $GLOAM. Cash outs and private payments are never limited.
         Deposits and private payments are free; a cash out costs 0.25% of its
         amount.
       </p>

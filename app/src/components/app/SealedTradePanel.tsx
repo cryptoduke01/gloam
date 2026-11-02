@@ -563,7 +563,7 @@ export function SealedTradePanel({
             <p className="t-title text-foreground">Private trade is offline</p>
             <p className="mt-2 text-[14px] leading-relaxed text-mute">
               The vault is up, but private trade is not switched on yet. Use
-              Shield or Cash out until then.
+              Add privately or Cash out until then.
             </p>
           </div>
         )}

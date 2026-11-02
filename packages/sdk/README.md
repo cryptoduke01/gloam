@@ -24,6 +24,7 @@ Add shielded balances, private payments, and selective disclosure to any app or 
 - [The intent model](#the-intent-model)
 - [Cash out (unshield)](#cash-out-unshield)
 - [Private payments (transfer)](#private-payments-transfer)
+- [Private swaps](#private-swaps)
 - [Selective disclosure](#selective-disclosure)
 - [Private agents](#private-agents)
 - [Private agent payments (x402)](#private-agent-payments-x402)
@@ -78,10 +79,10 @@ Gloam runs on four chains, each with a mainnet and a testnet. They are separate 
 
 | Network | Key | Chain id | Pool | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- | --- |
-| Robinhood Chain | `robinhood-mainnet` | `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `94194599`) | USDG (500 / 25,000), $GLOAM (25,000 / 250,000), PONS (3,900 / 98,000), CASHCAT (9,600 / 240,000); once its timelocked limit lands: ETH (11 / 110), AI (400,000 / 4,000,000), ORBIO (1,000,000 / 10,000,000), GRIFT (no limit) | Final |
-| Tempo | `tempo-mainnet` | `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `45172561`) | USDC.e, pathUSD, USDT0, OUSD (500 / 25,000 each) | Final |
-| Base | `base-mainnet` | `8453` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `53109632`) | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
-| Ethereum | `ethereum-mainnet` | `1` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `26276183`) | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
+| Robinhood Chain | `robinhood-mainnet` | `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `94194599`) | USDG (50,000 / 2,500,000), $GLOAM (2,500,000 / 25,000,000), PONS (390,000 / 9,800,000), CASHCAT (960,000 / 24,000,000); once its timelocked limit lands: ETH (11 / 110), AI (400,000 / 4,000,000), ORBIO (1,000,000 / 10,000,000), GRIFT (no limit) | Final |
+| Tempo | `tempo-mainnet` | `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `45172561`) | USDC.e, pathUSD, USDT0, OUSD (50,000 / 2,500,000 each) | Final |
+| Base | `base-mainnet` | `8453` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `53109632`) | USDC, EURC, USDT (50,000 / 2,500,000 each), ETH (20 / 1,000), BDX (no limit once its timelocked change lands) | Final |
+| Ethereum | `ethereum-mainnet` | `1` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `26276183`) | USDC, USDT, USDG, PYUSD, EURC (50,000 / 2,500,000 each), ETH (20 / 1,000), BDX (no limit once its timelocked change lands) | Final |
 | Robinhood Chain testnet | `robinhood` | `46630` | `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740` | Test ETH, test USDG, stock tokens | Dev |
 | Tempo testnet (Moderato) | `tempo` | `42431` | `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` | PathUSD and other test stablecoins | Dev |
 
@@ -99,9 +100,9 @@ Each `GloamNetwork` carries `chainId`, `pool`, `deployBlock`, a viem `chain`, `r
 What is different on mainnet:
 
 - **Final keys.** The mainnet verifiers hold the final keys of the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`). The testnets keep the single-party dev keys. A proof made with one set never verifies against the other, so prove with `circuitArtifactUrls(circuit, chainId)`, which picks the right set for the chain.
-- **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router on Robinhood Chain and Tempo mainnet; this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
-- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for $GLOAM. Those are the launch values. On Robinhood Chain, ETH, AI and ORBIO are 0 on the vault until each one's timelocked limit lands, so a deposit reverts until then and `assertDepositWithinLiveLimit` says so. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026, so from 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`). Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
-- **Fees.** Deposits and private payments are free. A cash out costs 0.25%: the pool keeps `cashOutFee(amount)` and sends the rest.
+- **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps go through a separate router, on the mainnets listed in the [docs](https://gloam.trade/docs/private-swaps); from 0.5.0 this SDK builds them too ([Private swaps](#private-swaps)). On Robinhood Chain mainnet, stock tokens go in and out of the private balance through those swaps; this SDK does not list them as deposit assets. Robinhood Chain mainnet takes no native ETH deposit until its timelocked limit lands (below).
+- **Beta deposit limits.** 50,000 per deposit and 2,500,000 in total for each stablecoin, 20 and 1,000 for ETH on Base and Ethereum, 2,500,000 and 25,000,000 for $GLOAM. On Robinhood Chain, ETH, AI and ORBIO are 0 on the vault until each one's timelocked limit lands, so a deposit reverts until then and `assertDepositWithinLiveLimit` says so. From 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`); the `depositLimit` on each asset holds the limit read on chain on 2 November 2026. Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
+- **Fees.** Deposits and private payments are free. A cash out costs 0.25% at launch: the pool keeps `cashOutFee(amount, bps)` and sends the rest. The owner can change the fee through the vault's timelock, so from 0.5.0 `readCashOutFeeBps(client, pool)` reads it live; the swap planner always does, and `buildUnshieldIntent` does when you pass `client`.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
 
 The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below. The vault has the same address on every mainnet, so it can't say which chain you mean: from 0.4.4 a builder given a mainnet vault as `poolAddress` and no `chainId` throws and asks for it, before it proves.
@@ -112,10 +113,10 @@ Base is the third chain. Base mainnet is live since 26 October 2026: from 0.4.1,
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
-| Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
+| Base | `base-mainnet` | `8453` | USDC, EURC, USDT (50,000 / 2,500,000 each), ETH (20 / 1,000), BDX (no limit once its timelocked change lands) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
-Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). Private swaps and the bridge into Base come later.
+Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets and 0.25% cash-out fee as Base mainnet and its own beta limits, so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). The bridge (through Relay) brings USDC into Base mainnet since 26 October 2026; private swaps on Base come later.
 
 ### Ethereum
 
@@ -123,13 +124,13 @@ Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `m
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
-| Ethereum | `ethereum-mainnet` | `1` | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
+| Ethereum | `ethereum-mainnet` | `1` | USDC, USDT, USDG, PYUSD, EURC (50,000 / 2,500,000 each), ETH (20 / 1,000), BDX (no limit once its timelocked change lands) | Final |
 
 - **USDT approvals.** Tether's `approve()` refuses to change one non-zero allowance into another. Before a USDT deposit, ask `approvalSteps(chainId, token, allowance, amount)`: it returns the exact `approve(pool, value)` calls to send in order (`[0, amount]` when a stale allowance is in the way, `[]` when the allowance already covers it).
 - **EURC is a euro stablecoin.** Never count it as a dollar.
 - **Gas.** A private send costs about 1.9M gas and a cash out about 0.5M to 0.7M. On Ethereum that adds up, so the Gloam relay stops relaying while gas is above its ceiling (3 gwei by default) and says so; you can still submit yourself.
 - **RPC.** `ETHEREUM_MAINNET_CHAIN` reads through MEV Blocker (`rpc.mevblocker.io`), which keeps old state and serves `eth_getLogs` over 10,000-block ranges. Use your own RPC for heavy reads.
-- No private swaps on Ethereum yet, and no bridge into Ethereum.
+- The bridge (through Relay) brings USDC into Ethereum, as into Base. Private swaps there follow the next router: see the [docs](https://gloam.trade/docs/private-swaps).
 ### Ethereum Sepolia
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
@@ -317,6 +318,63 @@ await wallet.writeContract({
 ```
 
 Private payments are free and have no limit. Every network, mainnet included, has an encrypted payment board (`GloamPayMemo`), so a recipient finds a payment with their Gloam address; see [Take payments and read their notes](#take-payments-and-read-their-notes).
+
+## Private swaps
+
+From 0.5.0 the SDK quotes, builds and finishes private swaps, with the same planning as the Gloam app (routers, pools, routes, buffers and quote stops; a parity test holds the two together). A swap takes one note out of the vault through a one-time escrow, trades it on a public DEX, and puts the new note back in, in one transaction the Gloam relay sends. **It hides who swapped. The tokens and the amounts are public**, like any trade on that DEX.
+
+Where it runs: Robinhood Chain (router v2) and Tempo today. Base and Ethereum get the next router (GloamVaultSwapV4c); until its address is switched on for a chain, `quoteSwap` and `buildSwapIntent` refuse that chain with `no_swap`. `swapChainIds()` lists the chains where a swap can be made now.
+
+```ts
+import {
+  quoteSwap, buildSwapIntent, sendSwap, relaySwapCall, relayStatus, swapJson,
+  syncTree, artifactProver, circuitArtifactUrls,
+} from "@gloamtrade/sdk";
+
+// 1. Quote one whole note. Every stop the app and the relay apply comes back in `stop`.
+const relay = (await relayStatus()).find((s) => s.chainId === net.chainId) ?? null;
+const quote = await quoteSwap({ client, chainId: net.chainId, assetIn: note.asset, assetOut, amountIn: note.amountWei, relayStatus: relay });
+if (quote.stop) throw new Error(quote.stop.message); // e.g. refund_wont_fit (quote.limits.maxIn), over_room, swap_small
+
+// 2. Prove it: the note's unshield to the swap's escrow, the new note and a refund note.
+const synced = await syncTree(client, { pool: net.pool, fromBlock: net.deployBlock });
+const intent = await buildSwapIntent({
+  client, chainId: net.chainId, quote, assetOut,
+  note: { secretHex: note.secret, amountWei: note.amountWei, asset: note.asset },
+  path: (await synced.pathForCommitment(note.commitment))!,
+  shieldProver: artifactProver(circuitArtifactUrls("shield", net.chainId)),
+  unshieldProver: artifactProver(circuitArtifactUrls("unshield", net.chainId)),
+  relayStatus: relay,
+});
+
+// 3. Store the recovery record, then send. sendSwap won't send until `save` resolved.
+const sent = await sendSwap({
+  intent, client,
+  save: (rec) => db.put(`swap:${rec.spent.nullifier}`, JSON.stringify(swapJson(rec))),
+  submit: (call) => relaySwapCall(call),       // or new GloamApiClient({ apiKey }).swapSubmitter()
+});
+sent.outcome?.state; // "swapped": intent.recovery.out is your new note
+```
+
+**Getting money back.** The note's unshield proof stays valid until the note is spent, so anyone could send it on its own; the money then waits at the swap's escrow. The `SwapRecovery` (it holds the secrets of the new note and the refund note) is how you always get it back, so store it before sending and keep it until `readSwapOutcome` says `swapped`, `refunded` or `closed`:
+
+| `readSwapOutcome(client, rec).state` | What to do |
+| --- | --- |
+| `swapped` | `rec.out` is your new note |
+| `refunded` | `rec.refund` is your note again (the input less the vault's fee and a 0.1% margin) |
+| `refund_ready` | `buildSwapRefund(rec, { client, shieldProver })`, then send its `relay` call |
+| `exit_ready` | the refund note can't take the money (the vault's fee rose): `buildSwapExit(rec, { client, to })` sends it to `to`, in the clear, on routers with an exit |
+| `pending` | the swap may still land, until its deadline on routers with one |
+| `reverted`, `expired` | the swap can't land; spend the note (a private send to yourself) to end its unshield proof, and keep the record until then |
+| `closed` | the note was spent another way, or left by its exit; nothing waits |
+
+The exit key is derived from the refund note's secret (`exitAccount`), the same as the app, so the refund note is all you keep. A swap spends one whole note: to swap part of one, split it first with a private send to yourself (`buildPrivateSendIntent`) and swap the note of the right size.
+
+**What is checked before any proof**, so the relay doesn't refuse a swap you could have known about: a known router and its live pools, the right chain (`wrong_chain`) and vault (`wrong_vault`), the note unspent and its root known, price impact over 2% (`too_thin`, with `fitsIn`) and two dollar stablecoins more than 2% apart (`off_peg`) on every chain, value more than 4% below market when you pass `marks`, the refund note fitting the vault's limit (`refund_wont_fit`, with `maxIn`), the vault taking the output and having room (`vault_closed`, `over_room`), and through the relay: its floor where gas is dear (`swap_small`, Ethereum), and its state when you pass `relayStatus`. The relay wants a minute left before a swap's deadline (`expired`). Refusals are `SwapRefusedError` with a `code`.
+
+The impact, peg and value stops apply on every chain by default. The Gloam app holds Base and Ethereum to them and only warns on Robinhood Chain and Tempo, where a person reads the warning before swapping; code that swaps on its own gets the stop. Set them with `stops: { maxImpactBps, maxPegGapBps, maxValueGapBps }` (basis points; 10000 turns one off, and Base and Ethereum keep the app's 2% and 4% either way).
+
+**Sending from your own wallet** works too: `intent.wallet` is `{ to, data, value }` for the router. It puts that wallet next to the swap on the explorer, so the relay is the default. With a partner key, `GloamApiClient.relaySwap(call)` sends through the partner relay and counts the swap to you (never charged); `swapQuote` and `swapNetworks` are the partner API's read-only quote and router list.
 
 ## Selective disclosure
 
@@ -556,8 +614,27 @@ ETHEREUM_SEPOLIA_USDC, ETHEREUM_SEPOLIA_USDG, ETHEREUM_SEPOLIA_PYUSD, ETHEREUM_S
 | `buildUnshieldIntent(p)` | Witness + proof, then `unshield(...)` (cash out) | Live, mainnet and testnet |
 | `buildPrivateSendIntent(p)` | Transfer witness, then `transfer(...)`; returns payment + change notes | Live, mainnet and testnet |
 | `buildPrivateTradeIntent(p)` | Sealed-swap witness, then `sealedSwap(...)` | Retired; refused on mainnet |
+| `buildSwapIntent(p)` | Unshield to the swap's escrow + two shields, then the router's `swap(...)` (relay or wallet) | Live where a router is switched on (0.5.0) |
 
 Each builder returns a `GloamIntent` whose `exec` is guaranteed populated. Every builder takes `chainId` (default Robinhood Chain testnet, required with a mainnet vault as `poolAddress`) and `poolAddress` (default: Gloam's pool on that chain). `buildPrivateTradeIntent` produces a valid intent for the testnets, but the sealed trade is retired and switched off on every live pool, so its call reverts.
+
+### Private swaps (new in 0.5.0)
+
+```ts
+quoteSwap(p): Promise<SwapQuote>                         // price of one whole note, with `stop` (or throws SwapRefusedError: no price); p.stops sets the impact, peg and value stops
+buildSwapIntent(p): Promise<SwapIntent>                  // { relay, wallet, recovery, plan, warnings }; refuses before any proof
+sendSwap({ intent, save, submit, client })               // saves the recovery, then sends, then reads the outcome
+relaySwapCall(call, opts?)                               // POST a swap, refund or exit to the Gloam relay
+readSwapOutcome(client, rec)                             // swapped | refunded | refund_ready | exit_ready | pending | reverted | expired | closed
+buildSwapRefund(rec, { client, shieldProver })           // money at the escrow back as the refund note
+buildSwapExit(rec, { client, to })                       // money at the escrow out to `to` (routers with an exit)
+findSwapUnshieldTx(client, rec), parseSwapRecovery(raw), swapJson(value)
+swapRouterFor(chainId, router?), vaultSwapRouter(chainId), swapChainIds(), vaultSwapAssets(chainId)
+routesBetween(a, b, router), isKnownRoute(...), planVaultSwap(client, chainId, ask)   // the app's planner
+escrowAddress(router, assetIn, key), exitDigest(...), exitAccount(refundSecret), refundAmountFor(amount, feeBps?)
+readCashOutFeeBps(client, pool), cashOutFeeLive(client, pool, amount)                  // the vault's fee, read live
+VAULT_SWAP_V3_LIVE, VAULT_SWAP_V3_ADDRESS                // the next router's switch (null until set) and pinned addresses
+```
 
 ### Notes
 
@@ -710,11 +787,11 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 
 ## Guardrails and honesty
 
-- **Mainnet is beta.** Robinhood Chain (`4663`), Tempo (`4217`), Base (`8453`) and Ethereum (`1`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open; an external audit is planned and not done yet. Start small.
+- **Mainnet is beta.** Robinhood Chain (`4663`), Tempo (`4217`), Base (`8453`) and Ethereum (`1`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open. Kann Audits then reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues. The circuits and this SDK were not part of that review. Start small.
 - **A new pool has a small crowd.** Privacy depends on how many notes you hide among. On a brand new mainnet pool that crowd is thin at first, so do not treat a quick deposit and cash out of the same amount as unlinkable.
 - **Testnet runs on dev keys.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys. Base Sepolia (`84532`) and Ethereum Sepolia (`11155111`) are testnets too, but on the final keys.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.
-- **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps are live in the Gloam app on Robinhood Chain and Tempo mainnet; the SDK does not build them yet. Shield, private send, cash out, and disclosure are live and proof-gated.
+- **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps go through the swap routers instead, in the app and in this SDK (`buildSwapIntent`): they hide who swapped, not the tokens or the amounts. The routers were not part of the external review. Shield, private send, cash out, swaps and disclosure are proof-gated.
 - **Note secrets are the sole spend authority.** Persist and protect them. `localStorage` is fine for a demo, not for real value. Never hand one to an agent: the `@gloamtrade/mcp` server keeps them in an encrypted store and gives the agent handles.
 - **A received x402 payment is not yours until you sweep it.** The payer knows the payment note's secret. Use `settleGloamPayment` and serve only on `grantAccess`.
 

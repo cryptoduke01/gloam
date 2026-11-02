@@ -8,7 +8,7 @@ Tagline: private by default, provable on demand. Hero line: private money on pub
 - Why the tech fits: a payment has one owner, so the owner proves it on their own device with zero-knowledge proofs and nobody else holds a key. Committee systems (Zama FHE, Arcium MPC) and operator systems (Tempo Zones) suit shared secrets, not single-owner payments.
 - Not new cryptography: the Zcash-lineage pool. New, as far as our research found: the payroll total proof, proofs scoped to one reader with an expiry (`context` input), and private payments for agents (MPP method proposal, x402, MCP with spending limits).
 - Stock tokens: Robinhood Chain testnet only, held and sent privately there. Private swaps are live on Robinhood Chain and Tempo mainnet: a swap goes from the private balance through a one-time escrow to a public DEX and back. Who swapped stays private; the pair and the amounts are public. The old sealed trade stays retired.
-- Never claim "first" or "only". Mainnet is live in beta: say it has beta deposit limits, was reviewed internally (20 October 2026) and that an external audit is planned. Never say "audited". Never say a swap hides its amounts, or call it anonymous or untraceable. $GLOAM: facts only (a mainnet pool asset on Robinhood Chain; half of Gloam's fees buy it back). Say "no admin withdraw, timelocked rule changes", not "no admin" or "trustless".
+- Never claim "first" or "only". Mainnet is live in beta: say it has beta deposit limits, was reviewed internally (20 October 2026) and that Kann Audits reviewed the vault contracts (report, 1 November 2026) and found no Critical, High or Medium issues. Never say "fully audited", "audited and safe" or "audited protocol", never imply the routers, circuits, app or relay were covered, and never say its findings are fixed. Never say a swap hides its amounts, or call it anonymous or untraceable. $GLOAM: facts only (a mainnet pool asset on Robinhood Chain; half of Gloam's fees buy it back). Say "no admin withdraw, timelocked rule changes", not "no admin" or "trustless".
 - Comparison and honest gaps: `/docs/compare`, `/docs/privacy-model`, `/docs/production`. Every address on every network, read live and as a CSV: `/verify#contracts` (from `app/src/lib/contractDirectory.ts`).
 
 ## Canonical
@@ -29,19 +29,20 @@ Tagline: private by default, provable on demand. Hero line: private money on pub
 
 ## Live
 
-Mainnet (final keys, beta deposit limits: 500 per deposit and 25,000 total per stablecoin, ETH on Base and Ethereum 0.2 per deposit and 10 total, $GLOAM 25,000 per deposit and 250,000 total; a 100x raise is queued behind the 3-day timelock for around 1 November 2026) and the testnets (dev keys, test funds):
+Mainnet (final keys, beta deposit limits: 50,000 per deposit and 2,500,000 total per stablecoin, ETH on Base and Ethereum 20 per deposit and 1,000 total, $GLOAM 2,500,000 per deposit and 25,000,000 total) and the testnets (dev keys, test funds):
 
 - Shield, private send, cash out, private payroll (one-off and scheduled), payment requests, the Gloam relay
 - Mainnet assets: USDG, $GLOAM, PONS and CASHCAT on Robinhood Chain, with ETH, AI, ORBIO and GRIFT listed and opening as each deposit limit lands through the timelock; USDC.e, pathUSD, USDT0 and OUSD on Tempo; USDC, EURC, USDT and ETH on Base; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum. Deposits and private payments are free; a cash out costs 0.25%
 - Proofs of funds, payment and payroll totals, checked at `/verify`
 - Agent payments over x402 and MPP, MCP server with spending limits
 - Stock tokens held and sent privately on the Robinhood Chain testnet (testnet only)
-- Private swaps from the private balance on the Robinhood Chain and Tempo mainnets (routers 0x34AB06208586A737Bf1607fa996Bc9162271c52d on Robinhood Chain, 0xfCa1887e77f738ef9C5751974b3f3873d029F2DC on Tempo); the old sealed trade stays retired
+- Private swaps from the private balance on the Robinhood Chain and Tempo mainnets (routers 0x34AB06208586A737Bf1607fa996Bc9162271c52d on Robinhood Chain, 0xfCa1887e77f738ef9C5751974b3f3873d029F2DC on Tempo); the next router is built and not deployed, and nothing about it is live until DEPLOY-ROUTER.md says so; the old sealed trade stays retired
 - App root: `app/` · never revive `docs.gloam.trade`
 
 ## Audits
 
-- Reviews so far are internal: two rounds with fixes deployed, then the pre-mainnet review of 20 October 2026, closed with no Critical or High findings open. The multi-party ceremony is done (13 contributors, drand round 6561386, release `ceremony-final`). An external audit is planned, not done.
+- Internal: two rounds with fixes deployed, then the pre-mainnet review of 20 October 2026, closed with no Critical or High findings open. The multi-party ceremony is done (13 contributors, drand round 6561386, release `ceremony-final`).
+- External: Kann Audits reviewed the vault contracts at commit `aac9e18` (report dated 1 November 2026; page `/security`, file `app/public/audits/gloam-kann-security-review-2026-11-01.pdf`, keep that path if it is reissued). No Critical, High or Medium issues. Findings are acknowledged and not fixed: changes land in the next vault. The swap routers, `GloamPayMemo`, generated verifiers, circuits, app, relay, MCP and SDK were out of scope. The finding counts live only in `FINDINGS` in `app/src/app/security/page.tsx`; other copy says "no Critical, High or Medium" and gives no total.
 
 ## Rules
 

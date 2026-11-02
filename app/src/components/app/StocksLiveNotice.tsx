@@ -48,12 +48,20 @@ function close() {
   listeners.forEach((l) => l());
 }
 
+/**
+ * Whether this browser closed the notice. The vault's stocks line waits for it,
+ * so one screen never says private stocks are live twice.
+ */
+export function useStocksNoticeClosed(): boolean {
+  return useSyncExternalStore(subscribe, isClosed, () => true);
+}
+
 export function StocksLiveNotice() {
   const { network, networkKey, setNetworkKey, settled } = useNetwork();
   const pathname = usePathname();
   const tab = useSearchParams().get("tab");
   // The server and the first client render say closed, so nobody who closed it sees it flash.
-  const closed = useSyncExternalStore(subscribe, isClosed, () => true);
+  const closed = useStocksNoticeClosed();
 
   if (closed || !settled || network.testnet || !isMainnetLive() || !isNetworkKey(MAINNET)) return null;
   // Already on the Swap this points to.
