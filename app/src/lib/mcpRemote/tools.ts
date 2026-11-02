@@ -12,7 +12,7 @@ import { MAINNET_ENABLED, getNetwork, NETWORK_KEYS, isNetworkKey, networkName, t
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
 import { parseUnits, type Address } from "viem";
 import { swapMainnets, swapRouterFor, vaultSwapRouter } from "@/lib/vaultSwap";
-import { SWAP_PUBLIC_LINE, SwapQuoteError, quoteSwapServer, type SwapQuote } from "@/lib/swapQuote";
+import { SWAP_PUBLIC_LINE, SWAP_QUOTE_PER_MINUTE, SwapQuoteError, quoteSwapServer, type SwapQuote } from "@/lib/swapQuote";
 import { knownTokens } from "@/lib/tokens";
 import { formatGwei, maxGasPriceWei } from "@/lib/relay/gasCeiling";
 import { fetchOnchainMetrics } from "@/lib/onchainMetrics";
@@ -37,8 +37,6 @@ export const LOCAL_SERVER = "npx -y @gloamtrade/mcp";
 
 /** Per IP, per minute, for the tools that do real work. */
 const VERIFY_PER_MINUTE = 20;
-/** Each swap quote is a few dozen chain reads. */
-const SWAP_QUOTE_PER_MINUTE = 20;
 const STATS_TIMEOUT_MS = 45_000;
 
 export type ToolContext = {

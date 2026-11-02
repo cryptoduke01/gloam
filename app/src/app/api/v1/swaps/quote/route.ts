@@ -1,7 +1,9 @@
-import { ApiError, jsonBody, withApiKey } from "@/lib/partnersApi";
+import { ApiError, jsonBody, requireKeyEnv, withApiKey } from "@/lib/partnersApi";
+import { keyEnvForNetwork } from "@/lib/apiKeys";
 import { getNetwork, isNetworkKey, type GloamNetwork } from "@/lib/networks";
+import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { networkForChain } from "@/lib/relay/server";
-import { SwapQuoteError, quoteSwapServer } from "@/lib/swapQuote";
+import { SWAP_QUOTE_PER_MINUTE, SwapQuoteError, quoteSwapServer } from "@/lib/swapQuote";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,18 +27,33 @@ function networkOf(body: Record<string, unknown>): GloamNetwork {
 }
 
 /**
- * Quote a private swap: { chainId | network, assetIn, assetOut, amountIn, via? }.
+ * Quote a private swap: { chainId | network, assetIn, assetOut, amountIn, via?, maxImpactBps? }.
  * amountIn is the note's value in base units, as a string. Read only: nothing is
  * proved or sent. The answer has the price, the route, and `stop`, the first thing
- * that would keep this swap from going (null when nothing does). Per-key rate
- * limits come from withApiKey.
+ * that would keep this swap from going (null when nothing does). A live key quotes
+ * the mainnets, a test key the testnets. Each quote is a few dozen chain reads, so on
+ * top of withApiKey's limits it has its own: SWAP_QUOTE_PER_MINUTE per partner account
+ * (all its keys together) and per IP. The SDK's quoteSwap prices the same way from
+ * your own RPC, with no such limit.
  */
 export async function POST(req: Request) {
-  return withApiKey(req, async () => {
+  return withApiKey(req, async ({ key, partner }) => {
     const body = await jsonBody(req, MAX_BODY_BYTES);
     const net = networkOf(body);
+    requireKeyEnv(key, keyEnvForNetwork(net), net.label);
+    for (const [who, bucket] of [
+      [`partner|${partner.id}`, "api-swap-quote"],
+      [clientIp(req), "api-swap-quote-ip"],
+    ] as const) {
+      const rl = await hitRateLimit(who, bucket, SWAP_QUOTE_PER_MINUTE, Date.now(), 60);
+      if (!rl.allowed) {
+        throw new ApiError(429, "rate_limited", `At most ${SWAP_QUOTE_PER_MINUTE} swap quotes a minute. Retry in ${rl.retryAfterSec} seconds, or quote with the SDK's quoteSwap on your own RPC.`);
+      }
+    }
     try {
-      return { data: await quoteSwapServer(net, { assetIn: body.assetIn, assetOut: body.assetOut, amountIn: body.amountIn, via: body.via }) };
+      return {
+        data: await quoteSwapServer(net, { assetIn: body.assetIn, assetOut: body.assetOut, amountIn: body.amountIn, via: body.via, maxImpactBps: body.maxImpactBps }),
+      };
     } catch (e) {
       if (e instanceof SwapQuoteError) throw new ApiError(e.status, e.code, e.message);
       throw e;

@@ -19,7 +19,9 @@ import { getAddress, isAddress, type Address, type PublicClient } from "viem";
 import { NETWORK_KEYS, getNetwork, type GloamNetwork, type NetworkKey } from "./networks";
 import { knownTokens } from "./tokens";
 import {
+  IMPACT_STOP_BPS,
   IMPACT_WARN_BPS,
+  PEG_STOP_BPS,
   PEG_WARN_BPS,
   QUOTE_TTL_MS,
   SWAP_OFF_PEG,
@@ -28,6 +30,7 @@ import {
   depositRoom,
   isSwapAsset,
   maxSwapInForRefund,
+  pegGapBps,
   planVaultSwap,
   refundFits,
   swapDeadlineSeconds,
@@ -67,6 +70,7 @@ export type SwapStop = {
     | "no_route"
     | "too_small"
     | "too_thin"
+    | "impact_unknown"
     | "off_peg"
     | "no_fill"
     | "price_moving"
@@ -95,7 +99,12 @@ export type SwapQuoteAsk = {
   amountIn: unknown;
   /** "relay" (default): the relay's own stops apply too. "wallet": a swap the caller sends itself. */
   via?: unknown;
+  /** The most price impact to accept, in basis points, on every chain. Default IMPACT_STOP_BPS, as the SDK's quoteSwap. */
+  maxImpactBps?: unknown;
 };
+
+/** Swap quotes per minute, per IP and per partner account: each one is a few dozen chain reads. */
+export const SWAP_QUOTE_PER_MINUTE = 20;
 
 export type SwapQuote = {
   network: string;
@@ -123,6 +132,8 @@ export type SwapQuote = {
   limits: { maxIn: string | null; outRoom: string | null };
   relay: { enabled: boolean; gasHigh: boolean } | null;
   floorUsd: number | null;
+  /** The stops this quote was held to, in basis points, on every chain. */
+  stops: { maxImpactBps: number; maxPegGapBps: number };
   valueChecked: false;
   valueNote: string;
   deadlineSeconds: number;
@@ -237,6 +248,10 @@ export async function quoteSwapServer(net: GloamNetwork, ask: SwapQuoteAsk, deps
   const via = ask.via == null ? "relay" : ask.via;
   if (via !== "relay" && via !== "wallet") throw new SwapQuoteError(400, "bad_request", 'via must be "relay" or "wallet".');
   if (assetIn === assetOut) throw new SwapQuoteError(400, "same_asset", "Pick two different assets.");
+  const maxImpactBps = ask.maxImpactBps == null ? IMPACT_STOP_BPS : Number(ask.maxImpactBps);
+  if (!Number.isInteger(maxImpactBps) || maxImpactBps < 0 || maxImpactBps > 10_000) {
+    throw new SwapQuoteError(400, "bad_request", "maxImpactBps must be a whole number of basis points from 0 to 10000.");
+  }
   if (!isSwapAsset(net.chainId, assetIn, router.address) || !isSwapAsset(net.chainId, assetOut, router.address)) {
     throw new SwapQuoteError(400, "swap_asset", "This asset cannot be swapped here.");
   }
@@ -273,8 +288,18 @@ export async function quoteSwapServer(net: GloamNetwork, ask: SwapQuoteAsk, deps
     room(assetIn),
     room(assetOut),
   ]);
-  if (planned.ok) plan = planned.p;
-  else {
+  if (planned.ok) {
+    // Tempo's exchange swaps dollar stablecoins only and names no peg: read it from the plan (the 0.1% buffer included)
+    plan = router.venue === "tempo" ? { ...planned.p, pegBps: pegGapBps(planned.p.available, planned.p.amountOut) } : planned.p;
+    // The impact and peg stops on every chain, as the SDK applies them by default (the app's planner holds Base and Ethereum to them).
+    if (router.venue === "v4" && plan.impactBps != null && plan.impactBps > maxImpactBps) {
+      stop = { code: "too_thin", message: SWAP_TOO_THIN };
+    } else if (router.venue === "v4" && plan.impactBps == null && maxImpactBps < 10_000 && plan.available >= 100n) {
+      stop = { code: "impact_unknown", message: "The price impact of this swap could not be measured." };
+    } else if (plan.pegBps != null && plan.pegBps > PEG_STOP_BPS) {
+      stop = { code: "off_peg", message: SWAP_OFF_PEG };
+    }
+  } else {
     const e = planned.e;
     if (e instanceof SwapQuoteRefused) {
       stop =
@@ -368,6 +393,7 @@ export async function quoteSwapServer(net: GloamNetwork, ask: SwapQuoteAsk, deps
     relay,
     floorUsd,
     valueChecked: false,
+    stops: { maxImpactBps, maxPegGapBps: PEG_STOP_BPS },
     valueNote: VALUE_NOTE,
     deadlineSeconds: swapDeadlineSeconds(net.chainId),
     quotedAt: nowMs,
