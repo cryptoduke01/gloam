@@ -524,6 +524,12 @@ export default function DocsPrivateSwapsPage() {
           <code>gloam_execute_private_swap</code> (proved on your machine, sent through the relay, under
           the agent&apos;s spending limits) and <code>gloam_finish_swap</code>. The hosted server quotes only.
         </li>
+        <li>
+          A link: a trading app can open the Swap tab with a swap filled in (
+          <code>?tab=swap#from=USDG&amp;to=TSLA&amp;amount=100</code>). The person checks the quote and
+          taps Swap privately. See{" "}
+          <Link href="/docs/partners#swap-link">trade privately with one link</Link>.
+        </li>
       </ul>
     </DocsLayout>
   );
