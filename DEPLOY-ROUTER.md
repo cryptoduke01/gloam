@@ -284,11 +284,14 @@ and an exit can still be sent from any wallet. A scheduled cash out that meets i
 | Tempo | 1, in its gas units | 1 send, about 0.0005 |
 
 One sender (an IP, or a partner account) may hold a share of the cap in an hour, refunds and
-exits apart: the larger of 40% of the cap and 200 sends like the one it is sending, at the gas it
-is held at. So a 200-person payroll from one browser always fits its own share, and only the
-chain's cap can stop it: that fits 200 payments up to about 0.11 gwei on Ethereum, 0.045 on
-Robinhood Chain and 0.022 on Base. A partner account no admin approved also counts as the IP it
-calls from, so a second free account from one IP adds nothing.
+exits apart: the larger of 40% of the cap and 200 sends like the one it is sending (their dry-run
+gas at the network's gas price, unpadded), but never more than 60%. So one sender always leaves
+part of the hour to everyone else, and a 200-person payroll from one browser fits its share up to
+about 0.084 gwei on Ethereum, 0.034 on Robinhood Chain and 0.016 on Base (about 0.04, 0.02 and
+0.006 on 2 November). A partner account no admin approved also counts as the IP it calls from, so
+a second free account from one IP adds nothing. Where there's no swap floor (Base, Robinhood Chain,
+Tempo), the refunds and exits an IP asks for hold against a budget of their own, 2% of the cap or
+five of them at today's gas, whichever is more, so that IP's own sends never stand in their way.
 `GLOAM_RELAY_HOURLY_SPEND_<chainId>` sets a chain's cap in its gas coin, or `off`, and
 `GLOAM_RELAY_SENDER_SHARE_<chainId>` a sender's share in percent, or `off`. One IP may ask for
 120 sends in 10 minutes on Ethereum, against 400 elsewhere: `GLOAM_RELAY_IP_SENDS_<chainId>`, or
