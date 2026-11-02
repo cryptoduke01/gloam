@@ -85,7 +85,8 @@ eq(cleanRef("not a url"), null);
     eq(isTrackEvent(t), false, String(t));
     eq((await post(t)).status, 400, `refused: ${String(t)}`);
   }
-  eq(TRACK_EVENTS.every((t) => isTrackEvent(t) && /^[a-z][a-z0-9_]{0,47}$/.test(t) && t !== "total"), true, "every event the app sends is a plain name");
+  const names: readonly string[] = TRACK_EVENTS;
+  eq(names.every((t) => /^[a-z][a-z0-9_]{0,47}$/.test(t) && t !== "total" && isTrackEvent(t)), true, "every event the app sends is a plain name");
   eq(isTrackEvent("pageview") && isTrackEvent("shield_success") && isTrackEvent("bridge_private_sent"), true);
 }
 
