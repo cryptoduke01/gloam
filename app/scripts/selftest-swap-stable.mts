@@ -896,34 +896,149 @@ await test("a send the cap turns away takes none of the network's slots, so a re
   assert.equal(sends.length, 3, "the refund went, in the last slot but one");
 });
 
-await test("one sender holds at most its share of the cap; other senders and cash outs still go", async () => {
+await test("one sender holds at most its share, a payroll of 200 always fits it, and the last of the cap is for refunds and exits", async () => {
   fresh();
   chain.receipt = "none";
-  // 0.000098 held a send. Cap 0.001: a sender's share 0.0004 (four), new sends 0.0008
-  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.001";
+  // 0.000098 held a send. Cap 0.03: 40% is 0.012, under 200 sends' worth (0.0196), so a
+  // sender's share is 200 sends; new sends stop at 0.024, cash outs at 0.0276
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.03";
+  const until = async (send: () => Promise<unknown>, most: number) => {
+    let sent = 0;
+    for (; sent < most; sent++) {
+      const r = await send().catch((e: unknown) => e);
+      if (typeof r !== "string") return { sent, refused: (r as Error).message };
+    }
+    return { sent, refused: null };
+  };
   const A = "198.51.100.21";
-  const outcomes: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    const r = await relayTransfer(net, transferBody(), A).catch((e) => e);
-    outcomes.push(typeof r === "string" ? "sent" : (r as Error).message === SENDER_SHARE_MESSAGE ? "share" : String(r));
-  }
-  assert.deepEqual(outcomes, ["sent", "sent", "sent", "sent", "share", "share"]);
+  assert.deepEqual(await until(() => relayTransfer(net, transferBody(), A), 300), { sent: 200, refused: SENDER_SHARE_MESSAGE }, "a payroll of 200 fits");
   // a cash out from the same sender counts toward its share too
   chain.dryRunGas = 300_000n;
   await assert.rejects(relayUnshield(net, cashOut(usd(10)), A), (e: unknown) => (e as Error).message === SENDER_SHARE_MESSAGE);
   chain.dryRunGas = DRY_RUN_GAS;
   // another sender takes the rest of the new-send share, and then new sends stop for everyone
-  const B = "198.51.100.22";
-  for (let i = 0; i < 4; i++) assert.equal(typeof (await relayTransfer(net, transferBody(), B)), "string");
-  await assert.rejects(relayTransfer(net, transferBody(), "198.51.100.23"), (e: unknown) => (e as Error).message === SPEND_CAP_MESSAGE);
-  // money coming back still goes: a cash out from someone else, and a refund
+  const B = await until(() => relayTransfer(net, transferBody(), "198.51.100.22"), 300);
+  assert.ok(B.sent > 30 && B.refused === SPEND_CAP_MESSAGE, JSON.stringify(B));
+  // a third sender's small cash outs fill what cash outs may use, and stop short of the cap
   chain.dryRunGas = 300_000n;
-  assert.equal(typeof (await relayUnshield(net, cashOut(usd(10)), "198.51.100.24")), "string");
+  const C = await until(() => relayUnshield(net, cashOut(1n), "198.51.100.23"), 400);
+  assert.ok(C.sent > 100 && C.refused === SPEND_CAP_MESSAGE, JSON.stringify(C));
+  await assert.rejects(relayUnshield(net, cashOut(usd(10)), "198.51.100.24"), (e: unknown) => (e as Error).message === SPEND_CAP_MESSAGE);
   chain.dryRunGas = DRY_RUN_GAS;
+  // money on its way back from a swap still goes, from what is kept for it
+  const before = sends.length;
   chain.spent = true;
   chain.held = usd(1_000);
   await relayVaultSwap(net, refundBody(usd(1_000)), A);
-  assert.equal(sends.length, 10, "a refund holds against no sender's share");
+  assert.equal(sends.length, before + 1, "a refund holds against no sender's share, and the last of the cap is its");
+});
+
+await test("a payroll of 200 fits one sender's share at twice today's gas too", async () => {
+  fresh();
+  chain.receipt = "none";
+  chain.gasPrice = 74_000_000n;
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.06";
+  let sent = 0;
+  for (let i = 0; i < 200; i++) {
+    await relayTransfer(net, transferBody(), "198.51.100.41");
+    sent++;
+  }
+  assert.equal(sent, 200);
+  await assert.rejects(relayTransfer(net, transferBody(), "198.51.100.41"), (e: unknown) => (e as Error).message === SENDER_SHARE_MESSAGE);
+});
+
+await test("accounts sharing one IP share that IP's share; an approved account holds only its own", async () => {
+  fresh();
+  chain.receipt = "none";
+  // as above: a share is 200 sends, and the chain takes them all
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.03";
+  const IP = "198.51.100.51";
+  for (let i = 0; i < 120; i++) await relayTransfer(net, transferBody(), ["partner:ptr_one111", IP]);
+  let second = 0;
+  for (;;) {
+    const r = await relayTransfer(net, transferBody(), ["partner:ptr_two222", IP]).catch((e: unknown) => e);
+    if (typeof r !== "string") {
+      assert.equal((r as Error).message, SENDER_SHARE_MESSAGE);
+      break;
+    }
+    second++;
+  }
+  assert.equal(second, 80, "the IP's 200, between both accounts");
+  // the app from that IP is the same sender
+  await assert.rejects(relayTransfer(net, transferBody(), IP), (e: unknown) => (e as Error).message === SENDER_SHARE_MESSAGE);
+  // an approved account is held to its own share only
+  assert.equal(typeof (await relayTransfer(net, transferBody(), ["partner:ptr_ok3333"])), "string");
+});
+
+await test("a shared store that fails between two holds gets the first one back", async () => {
+  fresh();
+  chain.receipt = "none";
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.1";
+  const store = new Map<string, string>();
+  let failNext: ((cmd: (string | number)[]) => boolean) | null = null;
+  const run = (cmd: (string | number)[]): { result?: unknown; error?: string } => {
+    if (failNext?.(cmd)) {
+      failNext = null;
+      throw new Error("selftest: dropped");
+    }
+    const [name, key, ...rest] = cmd.map(String);
+    switch (name.toUpperCase()) {
+      case "SET":
+        if (rest.includes("NX") && store.has(key!)) return { result: null };
+        store.set(key!, rest[0]!);
+        return { result: "OK" };
+      case "GET":
+        return { result: store.get(key!) ?? null };
+      case "DEL":
+        return { result: store.delete(key!) ? 1 : 0 };
+      case "EVAL": {
+        // the lock's release: delete if it still holds the token
+        const [lockKey, token] = [String(cmd[3]), String(cmd[4])];
+        if (store.get(lockKey) === token) store.delete(lockKey);
+        return { result: 1 };
+      }
+      case "INCR":
+      case "INCRBY": {
+        const n = Number(store.get(key!) ?? 0) + (name.toUpperCase() === "INCR" ? 1 : Number(rest[0]));
+        store.set(key!, String(n));
+        return { result: n };
+      }
+      case "EXPIRE":
+        return { result: 1 };
+      default:
+        return { error: `selftest: ${name}` };
+    }
+  };
+  const rpc = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (!url.startsWith("https://redis.selftest.invalid")) return rpc(input, init);
+    const body = JSON.parse(String(init?.body)) as (string | number)[] | (string | number)[][];
+    try {
+      const out = url.endsWith("/pipeline") ? (body as (string | number)[][]).map(run) : run(body as (string | number)[]);
+      return new Response(JSON.stringify(out), { status: 200 });
+    } catch {
+      return new Response("down", { status: 503 });
+    }
+  }) as typeof fetch;
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.selftest.invalid";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "selftest";
+  const held = (bucket: string) => [...store.entries()].filter(([k]) => k.includes(`:${bucket}:`)).reduce((a, [, v]) => a + Number(v), 0);
+  try {
+    // the sender's share is held, then the chain's cap fails to answer once
+    failNext = (cmd) => String(cmd[0]) === "INCRBY" && String(cmd[1]).includes(":relay-spend:") && Number(cmd[2]) > 0;
+    await assert.rejects(relayTransfer(net, transferBody(), "198.51.100.61"), isCode("relay_off"));
+    assert.equal(held("relay-spend-sender-1"), 0, "the sender's hold came back");
+    assert.equal(held("relay-spend"), 0);
+    assert.equal(held("relay-net"), 0, "no slot was taken");
+    // and with the store answering again, the same send goes
+    assert.equal(typeof (await relayTransfer(net, transferBody(), "198.51.100.61")), "string");
+    assert.ok(held("relay-spend-sender-1") > 0 && held("relay-net") === 1);
+  } finally {
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    globalThis.fetch = rpc;
+  }
 });
 
 off(1);
