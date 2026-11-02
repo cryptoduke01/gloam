@@ -1326,7 +1326,7 @@ export function MoveView() {
     if (!note.cashOut) return;
     setError(null);
     setScheduledNotice(null);
-    const result = await cancelCashOut(note.cashOut.job);
+    const result = await cancelCashOut(note.cashOut.job, note);
     if (result === "cancelled") {
       // Back in the balance as plain money: a cancelled piece is not one still to schedule.
       await cancelledPiece(note.id);

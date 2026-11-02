@@ -323,7 +323,7 @@ await test("in Redis a finished job goes back to the short record, without its p
     const store = scheduledStore();
     const j = job({ sendAfter: Date.now() + 40 * DAY_MS, dated: true });
     await store.create(j);
-    assert.equal(await cancelJob(store, j.id, Date.now()), "cancelled");
+    assert.equal(await cancelJob(store, j.id, Date.now(), j.nullifier), "cancelled");
     const rec = `gloam:cashout:job:${j.id}`;
     assert.equal(r.ttls.get(rec), JOB_DONE_TTL_SEC);
     assert.equal(unpackJob(r.kv.get(rec)!)!.proof, "0x");
@@ -386,7 +386,7 @@ await test("a job can be cancelled, or its proof renewed, months ahead", async (
   const store = memoryJobStore();
   const a = job({ sendAfter: T0 + 60 * DAY_MS, dated: true });
   await store.put(a);
-  assert.equal(await cancelJob(store, a.id, T0), "cancelled");
+  assert.equal(await cancelJob(store, a.id, T0, a.nullifier), "cancelled");
   assert.equal((await store.get(a.id))!.proof, "0x", "the relay no longer holds a proof it could send");
   const b = job({ sendAfter: T0 + 60 * DAY_MS, dated: true });
   await store.put(b);
@@ -651,7 +651,8 @@ await test("a job can only be read or cancelled with its id, and reading it show
   assert.deepEqual(Object.keys(seen).sort(), ["chainId", "id", "ok", "sendAfter", "status", "updatedAt"]);
   const stranger = "00000000-0000-4000-8000-00000000abcd";
   assert.equal((await route.GET(callRoute("GET", `/api/relay/scheduled?id=${stranger}`))).status, 404);
-  assert.equal((await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=${stranger}`))).status, 404);
+  const owner = (nullifier: string) => ({ body: JSON.stringify({ nullifier }) });
+  assert.equal((await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=${stranger}`, owner(`0x${"11".repeat(32)}`)))).status, 404);
   assert.equal((await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=nope`))).status, 400);
   assert.equal((await route.DELETE(callRoute("DELETE", `/api/relay/scheduled`))).status, 400, "no id, no list");
   assert.equal((await store.get(id))!.status, "scheduled", "none of that touched it");
@@ -1347,7 +1348,7 @@ await test("the same across a reload: the mark is on disk, the block holds, and 
 await test("a tab closed after the relay cancelled but before the note heard: the next load finds out and moves it", async () => {
   const { note, sent, job } = await scheduled();
   // the DELETE reached the relay, and this tab closed before writing anything
-  await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=${job.id}`));
+  await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=${job.id}`, { body: JSON.stringify({ nullifier: sent.nullifier }) }));
   assert.equal(byId(note.id).cashOut!.state, "scheduled");
   assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === note.id), "still out of the balance");
   await reconcileTopUps(cashEnv(job.id));
@@ -1535,7 +1536,7 @@ await test("a cash out later, and a private cash out's piece, go the same way: m
     assert.ok(held.proofOutAt, "marked");
     assert.equal(held.handoverUntil, undefined, "the lease ended with the reply");
     await checkUnshieldForLater(active, sent);
-    assert.equal(await cancelCashOut(job.id), "cancelled");
+    assert.equal(await cancelCashOut(job.id, byId(note.id)), "cancelled");
     await cancelledPiece(note.id);
     assert.equal(proofLoose(byId(note.id)), true);
     assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === note.id), "blocked");
@@ -1580,7 +1581,7 @@ await test("a cash out scheduled before the mark existed is caught when it comes
   const { note, sent, job } = await laterCashOut(false);
   await updateLocalNote(note.id, { proofOutAt: undefined });
   assert.equal(byId(note.id).proofOutAt, undefined);
-  assert.equal(await cancelCashOut(job.id), "cancelled");
+  assert.equal(await cancelCashOut(job.id, byId(note.id)), "cancelled");
   await cancelledPiece(note.id);
   assert.ok(byId(note.id).proofOutAt, "the mark says a proof left, so clearing it keeps that");
   assert.equal(proofLoose(byId(note.id)), true);
