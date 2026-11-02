@@ -58,7 +58,7 @@ import {
   type SponsorClient,
   waitForSponsoredHash,
 } from "../src/lib/embeddedGas";
-import { failedBeforeSend, surelyNotSent, walletErrorText } from "../src/lib/walletErrors";
+import { failedBeforeSend, surelyNotSent, walletDeclined, walletErrorText } from "../src/lib/walletErrors";
 import type { EmbeddedSigner, SponsoredTx } from "../src/lib/turnkeyBridge";
 
 let passed = 0;
@@ -153,7 +153,7 @@ function providerFor(opts: { signer?: EmbeddedSigner | null; sponsorChains?: Rea
     transportFor,
     signer: () => (opts.signer === undefined ? signerWith() : opts.signer),
     sponsorChains: opts.sponsorChains,
-    vaultFor: () => VAULT,
+    sponsorTargetsFor: () => ({ vault: VAULT, tokens: [USDC] }),
     initialChainId: opts.initialChainId,
     onChainChanged: (id) => opts.changes?.push(id),
   });
@@ -326,16 +326,22 @@ await test("gas: only the vault deposit and its approve are sponsored, never any
     ["0x1111111111111111111111111111111111111111", "0xdeadbeef"],
     // the deposit's calldata sent to another contract
     ["0x2222222222222222222222222222222222222222", depositData(1n)],
+    // approve(vault) sent to a contract that isn't a token Add lists (one whose approve could burn gas)
+    ["0x3333333333333333333333333333333333333333", approveData],
   ];
   for (const [to, data] of others) {
     await assert.rejects(p.request({ method: "eth_sendTransaction", params: [{ from: ME.address, to, data }] }), EmbeddedNotSentError);
   }
   assert.equal(sponsored.length, 0);
-  assert.equal(sponsorableCall({ to: VAULT, data: depositData(1n), value: 0n, vault: VAULT }), true);
-  assert.equal(sponsorableCall({ to: USDC, data: approveData, value: 0n, vault: VAULT }), true);
-  assert.equal(sponsorableCall({ to: USDC, data: approveData, value: 1n, vault: VAULT }), false, "an approve carrying value");
-  assert.equal(sponsorableCall({ to: VAULT, data: depositData(1n), value: 0n, vault: null }), false, "no vault on the chain");
-  assert.equal(sponsorableCall({ to: VAULT, data: "0x", value: 0n, vault: VAULT }), false);
+  const targets = { vault: VAULT as `0x${string}`, tokens: [USDC as `0x${string}`] };
+  assert.equal(sponsorableCall({ to: VAULT, data: depositData(1n), value: 0n, targets }), true);
+  assert.equal(sponsorableCall({ to: USDC, data: approveData, value: 0n, targets }), true);
+  assert.equal(sponsorableCall({ to: USDC.toLowerCase(), data: approveData, value: 0n, targets }), true, "the token's address in any case");
+  assert.equal(sponsorableCall({ to: "0x3333333333333333333333333333333333333333", data: approveData, value: 0n, targets }), false, "approve(vault) on a contract that isn't a listed token");
+  assert.equal(sponsorableCall({ to: USDC, data: approveData, value: 0n, targets: { ...targets, tokens: [] } }), false, "no listed tokens: no approve");
+  assert.equal(sponsorableCall({ to: USDC, data: approveData, value: 1n, targets }), false, "an approve carrying value");
+  assert.equal(sponsorableCall({ to: VAULT, data: depositData(1n), value: 0n, targets: null }), false, "no vault on the chain");
+  assert.equal(sponsorableCall({ to: VAULT, data: "0x", value: 0n, targets }), false);
 });
 
 await test("gas: a call whose estimate reverts is never sponsored, even a vault deposit with a gas limit given", async () => {
@@ -496,7 +502,7 @@ await test("a sponsored send: submit, wait for the activity, then hand back the 
 });
 
 await test("a submit refused before any work is 'never sent'", async () => {
-  for (const [status, code] of [[400, 3], [401, 16], [403, 7], [404, 5], [412, 9], [429, 8]] as const) {
+  for (const [status, code] of [[400, 3], [401, 16], [403, 7], [404, 5], [429, 8]] as const) {
     const e = await turnkey({ submit: { status, body: { code, message: "refused", details: [] } } }).send().catch((x: unknown) => x);
     assert.ok(e instanceof EmbeddedNotSentError, `${status}/${code}`);
     assert.ok(surelyNotSent(e), `${status}/${code} reads as never sent`);
@@ -513,9 +519,12 @@ await test("a 504 (or any 5xx) on the submit may have been taken: kept, never 'n
     assert.ok(!surelyNotSent(e), `${status}/${code} keeps the note`);
     assert.equal(walletErrorText(e), SPONSOR_UNSURE_TEXT);
   }
-  // a 4xx with a code that doesn't mean "refused before any work" is not proof either
-  const odd = await turnkey({ submit: { status: 409, body: { code: 6, message: "already exists" } } }).send().catch((x: unknown) => x);
-  assert.ok(!surelyNotSent(odd));
+  // a 4xx with a code that doesn't mean "refused before any work" is not proof either, nor
+  // FailedPrecondition (9), which Turnkey's error table doesn't list
+  for (const [status, code] of [[409, 6], [412, 9]] as const) {
+    const odd = await turnkey({ submit: { status, body: { code, message: "odd" } } }).send().catch((x: unknown) => x);
+    assert.ok(!surelyNotSent(odd), `${status}/${code}`);
+  }
   const html = await turnkey({ submit: { status: 502, html: "<html>bad gateway</html>" } }).send().catch((x: unknown) => x);
   assert.ok(!surelyNotSent(html));
   const lost = await turnkey({ submit: "lost" }).send().catch((x: unknown) => x);
@@ -543,12 +552,46 @@ await test("a failed poll after the send was taken is never 'never sent', even a
   assert.ok(!surelyNotSent(d));
 });
 
+await test("a 5xx whose text says 'request rejected' is still maybe sent, never 'declined'", async () => {
+  const e = await turnkey({ submit: { status: 503, body: { code: 14, message: "upstream request rejected", details: [] } } }).send().catch((x: unknown) => x);
+  assert.ok(e instanceof EmbeddedMaybeSentError);
+  assert.equal(walletDeclined(e), false, "the walk stops at the maybe-sent verdict");
+  assert.equal(surelyNotSent(e), false);
+  // wrapped by viem, the way the app meets it
+  const wrapped = Object.assign(new Error("Transaction failed"), { name: "TransactionExecutionError", cause: e });
+  assert.equal(walletDeclined(wrapped), false);
+  assert.equal(surelyNotSent(wrapped), false);
+  assert.equal(walletErrorText(wrapped), SPONSOR_UNSURE_TEXT);
+  // a person who declines is still read as declining
+  assert.equal(walletDeclined(Object.assign(new Error("User rejected the request."), { code: 4001 })), true);
+});
+
+await test("turnkeyErrorCode decides when Turnkey gives one; anything unrecognised stays maybe sent", async () => {
+  const detail = (c: string) => ({ "@type": "type.googleapis.com/errors.v1.TurnkeyErrorDetail", turnkeyErrorCode: c });
+  // refusals Turnkey documents, with or without a gRPC code next to them
+  for (const c of ["REQUEST_INVALID", "UNAUTHENTICATED", "FORBIDDEN", "ORGANIZATION_NOT_FOUND", "RATE_LIMIT_EXCEEDED", "SIGNING_QUOTA_EXCEEDED"]) {
+    assert.equal(submitRefused(400, { message: "x", details: [detail(c)] }), true, c);
+    assert.equal(submitRefused(400, { code: 3, details: [detail(c)] }), true, `${c} with a gRPC code`);
+  }
+  assert.equal(submitRefused(400, { turnkeyErrorCode: "REQUEST_INVALID" }), true, "at the top of the body");
+  // a gRPC code that would mean refused, but a turnkeyErrorCode that doesn't: maybe sent
+  assert.equal(submitRefused(400, { code: 3, details: [detail("INTERNAL")] }), false);
+  assert.equal(submitRefused(429, { code: 8, details: [detail("SOME_NEW_CODE")] }), false, "an unknown code is never proof");
+  assert.equal(submitRefused(400, { code: 3, details: [detail("REQUEST_INVALID"), detail("RPC_CALL_ERROR")] }), false, "every code must say refused");
+  // the gRPC codes may go away: with a turnkeyErrorCode, a refusal is still known
+  const e = await turnkey({ submit: { status: 403, body: { message: "not authorized", details: [detail("REQUEST_NOT_AUTHORIZED")] } } }).send().catch((x: unknown) => x);
+  assert.ok(e instanceof EmbeddedNotSentError && surelyNotSent(e));
+  const f = await turnkey({ submit: { status: 400, body: { message: "odd", details: [detail("RPC_CALL_ERROR")] } } }).send().catch((x: unknown) => x);
+  assert.ok(f instanceof EmbeddedMaybeSentError && !surelyNotSent(f));
+});
+
 await test("only the first submit's answer can say 'refused': submitRefused", () => {
   assert.equal(submitRefused(400, { code: 3 }), true);
   assert.equal(submitRefused(429, { code: 8 }), true);
   assert.equal(submitRefused(504, { code: 4 }), false);
   assert.equal(submitRefused(500, { code: 3 }), false, "a 5xx never counts");
   assert.equal(submitRefused(400, { code: "3" }), false);
+  assert.equal(submitRefused(412, { code: 9 }), false, "FailedPrecondition isn't in Turnkey's table");
   assert.equal(submitRefused(400, null), false);
   assert.equal(submitRefused(200, { code: 3 }), false);
 });

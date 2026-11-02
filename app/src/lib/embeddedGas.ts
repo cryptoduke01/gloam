@@ -21,8 +21,8 @@
  *  - Elsewhere the wallet pays from its own ETH when it holds enough. When it
  *    doesn't, and the chain is in NEXT_PUBLIC_TURNKEY_SPONSOR_CHAINS, Turnkey's
  *    gas station sends it and Gloam's Turnkey account pays the fee, for two
- *    calls only: the deposit into that chain's Gloam vault, and the approve that
- *    lets the vault take the token (sponsorableCall). Never anything else, and
+ *    calls only: the deposit into that chain's Gloam vault, and the approve, on
+ *    a token Add lists there, that lets the vault take it (sponsorableCall). Never anything else, and
  *    never a call whose gas estimate failed. That needs Gas Sponsorship on in
  *    the Turnkey dashboard, with its spend limits.
  *  - Otherwise nothing is sent, and the wallet says how to get money in
@@ -123,17 +123,22 @@ const APPROVE_ABI = parseAbi(["function approve(address spender, uint256 amount)
 const DEPOSIT_SELECTORS = new Set<string>(VAULT_ABI.map((f) => toFunctionSelector(f).toLowerCase()));
 const APPROVE_SELECTOR: string = toFunctionSelector(APPROVE_ABI[0]).toLowerCase();
 
+/** What a sponsored send may call on a chain: its Gloam vault, and the tokens Add lists there. */
+export type SponsorTargets = { vault: Address; tokens: readonly Address[] };
+
 /**
  * The only calls Gloam pays a Gloam wallet's fee for: a deposit into this chain's
  * Gloam vault (shieldBound, or shield on the older testnet pools), and an approve
- * whose spender is that vault, carrying no value. Anything else (a public send, a
- * bridge order, any other contract) is the wallet's own to pay for.
+ * sent to one of the tokens Add lists on that chain, whose spender is the vault,
+ * carrying no value. Anything else (a public send, a bridge order, an approve on
+ * any other contract) is the wallet's own to pay for.
  */
-export function sponsorableCall(p: { to: string; data?: Hex; value: bigint; vault: Address | null }): boolean {
-  if (!p.vault || !isAddress(p.to) || !p.data || p.data.length < 10) return false;
+export function sponsorableCall(p: { to: string; data?: Hex; value: bigint; targets: SponsorTargets | null }): boolean {
+  const vault = p.targets?.vault;
+  if (!vault || !isAddress(p.to) || !p.data || p.data.length < 10) return false;
   const selector = p.data.slice(0, 10).toLowerCase();
   if (DEPOSIT_SELECTORS.has(selector)) {
-    if (!isAddressEqual(p.to as Address, p.vault)) return false;
+    if (!isAddressEqual(p.to as Address, vault)) return false;
     try {
       decodeFunctionData({ abi: VAULT_ABI, data: p.data });
       return true;
@@ -142,9 +147,10 @@ export function sponsorableCall(p: { to: string; data?: Hex; value: bigint; vaul
     }
   }
   if (selector === APPROVE_SELECTOR && p.value === 0n) {
+    if (!p.targets!.tokens.some((t) => isAddress(t) && isAddressEqual(t, p.to as Address))) return false;
     try {
       const { args } = decodeFunctionData({ abi: APPROVE_ABI, data: p.data });
-      return isAddressEqual(args[0], p.vault);
+      return isAddressEqual(args[0], vault);
     } catch {
       return false;
     }
@@ -179,24 +185,68 @@ export const SPONSOR_UNSURE_TEXT =
   "The network fee service didn't confirm this send. It may still go through: check your activity in a minute before trying again.";
 
 /**
- * gRPC codes Turnkey answers with when it turned a request down before doing any
- * work: a bad or unauthorized request, a missing resource, a failed precondition,
- * or a rate limit. Anything else (an unknown or internal error, a deadline, an
- * unavailable service) says nothing about whether the send was taken.
+ * The gRPC codes Turnkey documents for its 4xx answers (docs.turnkey.com/api-reference/overview/errors,
+ * read 2 November 2026): InvalidArgument 3, NotFound 5, PermissionDenied 7,
+ * ResourceExhausted 8, Unauthenticated 16. Each means the request was turned down
+ * before any work. Turnkey says not to rely on these, so turnkeyErrorCode wins
+ * whenever an answer carries one.
  */
-const REFUSED_BEFORE_WORK = new Set([3, 5, 7, 8, 9, 16]);
+const REFUSED_GRPC = new Set([3, 5, 7, 8, 16]);
+
+/**
+ * turnkeyErrorCode values Turnkey documents for a request it turned down before
+ * doing anything: an invalid request, no or a bad signature, not allowed, an unknown
+ * organization or key, a rate limit or quota. Anything else, including codes added
+ * later, is read as "may have been taken".
+ */
+const REFUSED_TURNKEY = new Set([
+  "REQUEST_INVALID",
+  "INVALID_TRANSACTION",
+  "INVALID_ORGANIZATION_ID",
+  "ORGANIZATION_MISMATCH",
+  "UNAUTHENTICATED",
+  "SIGNATURE_MISSING",
+  "SIGNATURE_INVALID",
+  "API_KEY_EXPIRED",
+  "FORBIDDEN",
+  "REQUEST_NOT_AUTHORIZED",
+  "INVALID_ACTIVITY_CALLER",
+  "ORGANIZATION_NOT_FOUND",
+  "PUBLIC_KEY_NOT_FOUND",
+  "CREDENTIAL_NOT_FOUND",
+  "RATE_LIMIT_EXCEEDED",
+  "SIGNING_QUOTA_EXCEEDED",
+]);
+
+/** The turnkeyErrorCode values an error answer carries, at its top or in its details. */
+function turnkeyErrorCodes(body: unknown): string[] {
+  const b = body as { turnkeyErrorCode?: unknown; details?: unknown } | null;
+  const out: string[] = [];
+  if (typeof b?.turnkeyErrorCode === "string") out.push(b.turnkeyErrorCode);
+  if (Array.isArray(b?.details)) {
+    for (const d of b.details) {
+      const c = (d as { turnkeyErrorCode?: unknown } | null)?.turnkeyErrorCode;
+      if (typeof c === "string") out.push(c);
+    }
+  }
+  return out;
+}
 
 /**
  * Whether the first submit of a sponsored send was refused before Turnkey did any
- * work, from the HTTP status and the body it answered with. Only a 4xx carrying one
- * of those codes counts: a 5xx, a body that isn't Turnkey's JSON, or no answer at
- * all could come after the activity was made. Never use it on a later call (the
- * activity poll, the status poll): once an activity exists, the send may go out.
+ * work, from the HTTP status and the body it answered with. Only a 4xx counts, and
+ * only when its turnkeyErrorCode is one that means refused (or, with none given,
+ * its gRPC code is). A 5xx, a body that isn't Turnkey's JSON, an unknown code, or no
+ * answer at all could come after the activity was made. Never use it on a later
+ * call (the activity poll, the status poll): once an activity exists, the send may
+ * go out.
  */
 export function submitRefused(status: number, body: unknown): boolean {
   if (status < 400 || status >= 500) return false;
+  const turnkey = turnkeyErrorCodes(body);
+  if (turnkey.length) return turnkey.every((c) => REFUSED_TURNKEY.has(c));
   const code = (body as { code?: unknown } | null)?.code;
-  return typeof code === "number" && REFUSED_BEFORE_WORK.has(code);
+  return typeof code === "number" && REFUSED_GRPC.has(code);
 }
 
 export type SponsorStatus = {

@@ -31,7 +31,7 @@ import {
   type PublicClient,
   type Transport,
 } from "viem";
-import { TEMPO_FEE_CHAIN_IDS, gasBudget, noGasText, pickGasRoute, sponsorableCall } from "./embeddedGas";
+import { TEMPO_FEE_CHAIN_IDS, gasBudget, noGasText, pickGasRoute, sponsorableCall, type SponsorTargets } from "./embeddedGas";
 import { EmbeddedNotSentError } from "./embeddedErrors";
 import type { EmbeddedSigner } from "./turnkeyBridge";
 
@@ -56,8 +56,8 @@ export type EmbeddedProviderDeps = {
   signer: () => EmbeddedSigner | null;
   /** Chains whose sends Turnkey may sponsor (lib/embeddedGas SPONSOR_CHAINS). */
   sponsorChains?: ReadonlySet<number>;
-  /** The Gloam vault on a chain, the only contract a sponsored send may call (with the approve for it). */
-  vaultFor?: (chainId: number) => Address | null;
+  /** A chain's Gloam vault and the tokens Add lists there: the only calls a sponsored send may make. */
+  sponsorTargetsFor?: (chainId: number) => SponsorTargets | null;
   initialChainId?: number;
   /** Called after the provider moves to another chain. */
   onChainChanged?: (chainId: number) => void;
@@ -132,7 +132,7 @@ export function makeEmbeddedProvider(deps: EmbeddedProviderDeps): EmbeddedProvid
       cost = units !== null && fee !== null ? gasBudget(chainId, units, fee) : null;
     }
 
-    const sponsorable = sponsorableCall({ to, data, value, vault: deps.vaultFor?.(chainId) ?? null });
+    const sponsorable = sponsorableCall({ to, data, value, targets: deps.sponsorTargetsFor?.(chainId) ?? null });
     const route = pickGasRoute({ chainId, balance, value, cost, sponsorable, sponsorChains: s.sponsoredSend ? sponsorChains : new Set() });
     if (route.kind === "none") throw new EmbeddedNotSentError(noGasText(route.why, chain.name, chain.nativeCurrency.symbol));
     if (route.kind === "sponsored") {
