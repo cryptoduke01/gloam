@@ -30,6 +30,8 @@ import {
   encodeAbiParameters,
   getContractAddress,
   keccak256,
+  pad,
+  toEventSelector,
   toHex,
   type Address,
   type Hex,
@@ -662,6 +664,8 @@ export type VaultSwapRefundInfo = {
   exitKey?: Address;
   /** v3: the swap's deadline, in seconds, as a decimal string. */
   deadline?: string;
+  /** The transaction that paid the escrow, once found (lib/vaultSwapRun): what a refund or an exit shows the relay. */
+  unshieldTx?: Hex;
   /** The relay's send of this swap, once it answered: a sync reads how it ended if this tab never heard. */
   sent?: { hash: Hex; at: number };
 };
@@ -694,6 +698,38 @@ export function refundEscrowKey(info: VaultSwapRefundInfo, nullifier: Hex, refun
 const balanceOfAbi = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
 ] as const;
+
+/** The vault's event for a note leaving it. The amount is the note's, before the vault's fee. */
+export const UNSHIELDED_EVENT = {
+  type: "event",
+  name: "Unshielded",
+  inputs: [
+    { name: "nullifier", type: "bytes32", indexed: true },
+    { name: "asset", type: "address", indexed: true },
+    { name: "to", type: "address", indexed: true },
+    { name: "amount", type: "uint256", indexed: false },
+  ],
+} as const;
+
+const UNSHIELDED_TOPIC = toEventSelector(UNSHIELDED_EVENT);
+
+/** Whether a receipt's logs show `vault` paying this note out to `escrow`, for this amount. */
+export function receiptPaysEscrow(
+  logs: readonly { address: string; topics: readonly string[]; data: string }[],
+  vault: string,
+  paid: { nullifier: Hex; asset: Address; escrow: Address; amount: bigint }
+): boolean {
+  const word = (a: string) => pad(a.toLowerCase() as Hex, { size: 32 });
+  return logs.some(
+    (l) =>
+      same(l.address, vault) &&
+      l.topics[0] === UNSHIELDED_TOPIC &&
+      same(l.topics[1] ?? "", paid.nullifier) &&
+      same(l.topics[2] ?? "", word(paid.asset)) &&
+      same(l.topics[3] ?? "", word(paid.escrow)) &&
+      BigInt(l.data || "0x0") === paid.amount
+  );
+}
 
 /**
  * Whether a swap's money waits at its escrow (someone sent the note's unshield on its
@@ -1165,10 +1201,10 @@ async function v4ExactOut(
  * note's unshield on its own (GloamVaultSwap): the amount less the vault's
  * highest possible cash-out fee (1%), so it is never more than arrives.
  *
- * With `feeBps`, on Base and Ethereum: the amount less the vault's fee now and 0.1%,
- * so a refund costs about what the swap would have. A raise of the fee waits out a
- * 3-day timelock; should a proof outlive that, the refund won't land and the app offers
- * the exit (escrowHolds).
+ * With `feeBps`, for a router with an exit: the amount less the vault's fee now and
+ * 0.1%, so a refund costs about what the swap would have. A raise of the fee waits out
+ * a 3-day timelock; should a proof outlive that, the refund won't land and the app
+ * offers the exit (escrowHolds).
  */
 export function refundAmountFor(amount: bigint, feeBps?: number): bigint {
   if (feeBps === undefined) return amount - amount / 100n;

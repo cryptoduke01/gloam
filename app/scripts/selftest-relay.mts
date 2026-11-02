@@ -163,6 +163,11 @@ function redisAnswer(cmd: (string | number)[]): { result?: unknown; error?: stri
       d.set(a[0]!, String(n));
       return { result: n };
     }
+    case "INCRBY": {
+      const n = Number(d.get(a[0]!) ?? 0) + Number(a[1]);
+      d.set(a[0]!, String(n));
+      return { result: n };
+    }
     case "EXPIRE":
       return { result: 1 };
     default:

@@ -3,6 +3,7 @@ import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
 import {
   RelayError,
+  checkChainRateLimit,
   checkRateLimit,
   memoTicket,
   networkForChain,
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
     const net = networkForChain(body.chainId);
     const requester = clientIp(req);
     await checkRateLimit(requester);
+    await checkChainRateLimit(net, requester);
 
     let hash: `0x${string}`;
     switch (body.action) {

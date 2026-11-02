@@ -165,6 +165,8 @@ export async function relayVaultSwap(p: {
   deposit: { proof: Hex; commitment: Hex; asset: Address; amount: bigint };
   refund: { proof: Hex; commitment: Hex; asset: Address; amount: bigint };
   route: readonly PoolKey[];
+  /** A refund: the transaction that paid its escrow. */
+  unshieldTx?: Hex;
   /** v3: the swap's exit key and deadline. */
   exitKey?: Address;
   deadline?: bigint;
@@ -180,6 +182,8 @@ export async function relayVaultSwapExit(p: {
   key: Required<EscrowKey>;
   to: Address;
   signature: Hex;
+  /** The transaction that paid its escrow. */
+  unshieldTx: Hex;
 }): Promise<Hex> {
   return (await post({ action: "swapExit", ...p })).hash;
 }

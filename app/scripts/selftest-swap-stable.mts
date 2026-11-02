@@ -13,9 +13,11 @@
  *    the relay refuses one that doesn't before it sends anything, with the price feed
  *    stale too; a refund never faces it, Base has none, and the status says what it is
  *  - a swap with its deadline about to pass is refused before the dry run
- *  - reverted swaps have a budget on Ethereum: past it new swaps pause. A refund under the
- *    floor spends from a budget of its own, only once its dry run passed; one over the
- *    floor always goes, and a refund locks on its escrow
+ *  - a refund and an exit go only for an escrow the vault paid, by the unshield's receipt
+ *  - gas budgets on Ethereum: reverted swaps and refunds counted apart, by gas, held at send
+ *    time, and one note or escrow waits alone. A refund or exit at or over the floor always goes
+ *  - an hourly spend cap per chain, with the last of it kept for money coming back, and a
+ *    lower limit per IP where gas is dear
  *  - an exit takes only a swap's assets, and each kind of send has a most gas
  *
  * fetch is stubbed: the relay talks to an in-process fake chain, and the relay key is a
@@ -24,7 +26,7 @@
  * Run from app/:  ../mcp/node_modules/.bin/tsx --tsconfig tsconfig.json scripts/selftest-swap-stable.mts
  */
 import assert from "node:assert/strict";
-import { getAddress, keccak256, parseUnits, toFunctionSelector, toHex, type Address, type Hex } from "viem";
+import { getAddress, keccak256, pad, parseUnits, toEventSelector, toFunctionSelector, toHex, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
 
 delete process.env.UPSTASH_REDIS_REST_URL;
@@ -43,6 +45,7 @@ const {
   SWAP_SEND_MARGIN_SECONDS,
   SWAP_TOO_THIN,
   SwapQuoteRefused,
+  UNSHIELDED_EVENT,
   VALUE_STOP_BPS,
   VALUE_WARN_BPS,
   VAULT_SWAP_ROUTERS,
@@ -68,8 +71,9 @@ const {
   vaultFeeOf,
   vaultSwapRouter,
 } = await import("../src/lib/vaultSwap");
-const { FEED_MAX_AGE_SEC, hasSwapFloor, smallestSwapUsd, swapFloorMessage, swapFloorShown, swapGasUnits } = await import("../src/lib/relay/swapFloor");
-const { RelayError, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, countRevertedSwap, relayStatus, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
+const { FEED_MAX_AGE_SEC, SPLIT_GAS_UNITS, hasSwapFloor, smallestSwapUsd, swapFloorGas, swapFloorMessage, swapFloorShown, swapGasUnits } = await import("../src/lib/relay/swapFloor");
+const { NOTE_WAIT_MESSAGE, RelayError, SPEND_CAP_MESSAGE, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, checkChainRateLimit, relayStatus, relayTransfer, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
+const { hourlySpendWei, ipSendsLimit } = await import("../src/lib/relay/spendCap");
 const { resetGasReads } = await import("../src/lib/relay/gasCeiling");
 const { getNetwork } = await import("../src/lib/networks");
 const { knownTokens } = await import("../src/lib/tokens");
@@ -274,6 +278,8 @@ await test("the floor: gas against the vault fee", () => {
   assert.ok(at(3) > 4_600 && at(3) < 4_700);
   assert.equal(smallestSwapUsd({ gasPriceWei: gwei(1), ethUsd: 2_290, feeBps: 0, hops: 1 }), Number.POSITIVE_INFINITY);
   assert.ok(Math.abs(swapFloorShown(100) - 110) < 1e-9);
+  assert.equal(swapFloorGas(1, false), swapGasUnits(1), "the swap alone");
+  assert.equal(swapFloorGas(2, true), swapGasUnits(2) + SPLIT_GAS_UNITS, "and the step that sets part of a note aside, which the app counts");
   assert.ok(!swapFloorMessage("Ethereum", 57.6).includes("—"), "no em dash");
   assert.ok(swapFloorMessage("Ethereum", 57.6).includes("$58"));
   assert.ok(hasSwapFloor(1) && !hasSwapFloor(8453) && !hasSwapFloor(4663) && !hasSwapFloor(4217));
@@ -292,6 +298,7 @@ const SEL = {
   round: toFunctionSelector("latestRoundData()"),
   balanceOf: toFunctionSelector("balanceOf(address)"),
 };
+const UNSHIELDED_TOPIC = toEventSelector(UNSHIELDED_EVENT);
 const word = (v: bigint | number | boolean) => `0x${BigInt(v).toString(16).padStart(64, "0")}`;
 const DRY_RUN_GAS = 1_700_000n;
 const chain = {
@@ -300,10 +307,13 @@ const chain = {
   ethUsd: 2_290n * 10n ** 8n,
   feedAt: () => Math.floor(Date.now() / 1000) - 300,
   held: 0n,
-  receipt: "success" as "success" | "reverted",
+  receipt: "success" as "success" | "reverted" | "none",
+  gasUsed: 1_000_000n,
   dryRun: "ok" as "ok" | "revert",
   dryRunGas: DRY_RUN_GAS,
 };
+/** The vault's payments to escrows the fake chain has seen, by transaction hash. */
+const paidTxs = new Map<string, { status: string; logs: { address: string; topics: string[]; data: string }[] }>();
 const sends: string[] = [];
 const reads: string[] = [];
 const Z32 = `0x${"00".repeat(32)}`;
@@ -312,7 +322,7 @@ const BLOCK = {
   transactionsRoot: Z32, stateRoot: Z32, receiptsRoot: Z32, miner: `0x${"00".repeat(20)}`, difficulty: "0x0", totalDifficulty: "0x0", extraData: "0x",
   size: "0x1", gasLimit: "0x1c9c380", gasUsed: "0x0", timestamp: "0x1", baseFeePerGas: "0x1", transactions: [], uncles: [],
 };
-type RpcReq = { id: number; method: string; params?: { data?: string; input?: string; to?: string }[] };
+type RpcReq = { id: number; method: string; params?: ({ data?: string; input?: string; to?: string } | string)[] };
 function answer(r: RpcReq, chainId: number): unknown {
   switch (r.method) {
     case "eth_chainId":
@@ -320,7 +330,7 @@ function answer(r: RpcReq, chainId: number): unknown {
     case "eth_blockNumber":
       return "0x1";
     case "eth_getBlockByNumber":
-      return BLOCK;
+      return { ...BLOCK, baseFeePerGas: toHex(chain.gasPrice) };
     case "eth_getTransactionCount":
       return "0x0";
     case "eth_maxPriorityFeePerGas":
@@ -337,14 +347,20 @@ function answer(r: RpcReq, chainId: number): unknown {
       sends.push(hash);
       return hash;
     }
-    case "eth_getTransactionReceipt":
+    case "eth_getTransactionReceipt": {
+      const hash = String(r.params?.[0]);
+      const paid = paidTxs.get(hash);
+      if (!paid && chain.receipt === "none") return null;
+      const logs = (paid?.logs ?? []).map((l, i) => ({ ...l, blockHash: BLOCK.hash, blockNumber: "0x1", logIndex: toHex(i), removed: false, transactionHash: hash, transactionIndex: "0x0" }));
       return {
-        transactionHash: `0x${"ab".repeat(32)}`, transactionIndex: "0x0", blockHash: BLOCK.hash, blockNumber: "0x1", from: `0x${"00".repeat(20)}`, to: POOL,
-        cumulativeGasUsed: "0x1", gasUsed: "0x1", effectiveGasPrice: "0x1", contractAddress: null, logs: [], logsBloom: BLOCK.logsBloom,
-        status: chain.receipt === "success" ? "0x1" : "0x0", type: "0x2",
+        transactionHash: hash, transactionIndex: "0x0", blockHash: BLOCK.hash, blockNumber: "0x1", from: `0x${"00".repeat(20)}`, to: POOL,
+        cumulativeGasUsed: toHex(chain.gasUsed), gasUsed: toHex(chain.gasUsed), effectiveGasPrice: toHex(chain.gasPrice), contractAddress: null, logs, logsBloom: BLOCK.logsBloom,
+        status: paid ? paid.status : chain.receipt === "success" ? "0x1" : "0x0", type: "0x2",
       };
+    }
     case "eth_call": {
-      const data = (r.params?.[0]?.data ?? r.params?.[0]?.input ?? "") as string;
+      const call = r.params?.[0] as { data?: string; input?: string };
+      const data = (call?.data ?? call?.input ?? "") as string;
       const sel = data.slice(0, 10);
       reads.push(sel);
       if (sel === SEL.spent) return word(chain.spent);
@@ -390,6 +406,31 @@ function swapBody(asset: Address, out: Address, amount: bigint, route: readonly 
   };
 }
 const direct = [ETHEREUM_SWAP_POOLS[4]!];
+
+/** What a swap body's escrow is, as the relay works it out. */
+function escrowOf(b: ReturnType<typeof swapBody>, router: Address = VAULT_SWAP_V3_ADDRESS[1]!): Address {
+  return escrowAddress(router, b.spend.asset as Address, {
+    nullifier: b.spend.nullifier as Hex, amountIn: BigInt(b.spend.amount), outCommitment: b.deposit.commitment as Hex, assetOut: b.deposit.asset as Address,
+    amountOut: BigInt(b.deposit.amount), refundCommitment: b.refund.commitment as Hex, refundAmount: BigInt(b.refund.amount),
+    routeHash: keccak256(encodeRoute(direct)), exitKey: b.exitKey as Address, deadline: BigInt(b.deadline as string),
+  });
+}
+
+/** An Unshielded the fake chain will show in a receipt, for a transaction it now knows. */
+function vaultPaid(nullifier: string, asset: string, to: string, amount: bigint, opts: { vault?: string; status?: string } = {}): Hex {
+  const hash = keccak256(toHex(`unshield-${paidTxs.size}`));
+  const topics = [UNSHIELDED_TOPIC, nullifier, pad(asset as Hex, { size: 32 }), pad(to as Hex, { size: 32 })];
+  paidTxs.set(hash, { status: opts.status ?? "0x1", logs: [{ address: opts.vault ?? POOL, topics, data: word(amount) }] });
+  return hash;
+}
+
+/** A refund the relay would send: the note spent, the money at its escrow, and the vault's payment on record. */
+function refundBody(amount: bigint) {
+  const b = swapBody(E.USDC, E.USDT, amount, direct);
+  return { ...b, unshieldTx: vaultPaid(b.spend.nullifier, b.spend.asset, escrowOf(b), amount) };
+}
+
+const settled = () => new Promise((r) => setTimeout(r, 40));
 const isCode = (code: string) => (e: unknown) => e instanceof RelayError && e.code === code;
 function fresh() {
   sends.length = 0;
@@ -399,8 +440,13 @@ function fresh() {
   chain.held = 0n;
   chain.feedAt = () => Math.floor(Date.now() / 1000) - 300;
   chain.receipt = "success";
+  chain.gasUsed = 1_000_000n;
   chain.dryRun = "ok";
   chain.dryRunGas = DRY_RUN_GAS;
+  paidTxs.clear();
+  (globalThis as { __gloamMcpRate?: Map<string, unknown> }).__gloamMcpRate?.clear();
+  delete process.env.GLOAM_RELAY_HOURLY_SPEND_1;
+  delete process.env.GLOAM_RELAY_IP_SENDS_1;
   resetSwapFloorReads();
   resetGasReads();
 }
@@ -455,12 +501,11 @@ await test("a stale or broken price feed refuses the swap rather than paying bli
   chain.ethUsd = was;
 });
 
-await test("a refund has no floor: money waiting comes back at any size", async () => {
+await test("a refund under the floor still goes, while its budget lasts", async () => {
   fresh();
   chain.spent = true;
   chain.held = usd(10);
-  const body = swapBody(E.USDC, E.USDT, usd(10), direct);
-  await relayVaultSwap(net, body);
+  await relayVaultSwap(net, refundBody(usd(10)));
   assert.equal(sends.length, 1);
 });
 
@@ -476,7 +521,8 @@ await test("a swap with its deadline about to pass is refused before the dry run
   fresh();
   chain.spent = true;
   chain.held = usd(100);
-  await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(100), direct, { deadline: "1" }));
+  const old = swapBody(E.USDC, E.USDT, usd(100), direct, { deadline: "1" });
+  await relayVaultSwap(net, { ...old, unshieldTx: vaultPaid(old.spend.nullifier, old.spend.asset, escrowOf(old), usd(100)) });
   assert.equal(sends.length, 1, "a refund of a swap long past its deadline");
 });
 
@@ -501,78 +547,213 @@ await test("the relay's status names the floor on Ethereum and nowhere else", as
   on(1);
 });
 
-await test("twelve reverted swaps in an hour pause new ones on Ethereum, and only there", async () => {
+await test("a refund or an exit goes only for an escrow the vault paid", async () => {
   fresh();
-  for (let i = 0; i < 12; i++) await countRevertedSwap(net);
-  await assert.rejects(relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(100), direct)), (e: unknown) => isCode("swaps_paused")(e) && (e as Error).message === SWAPS_PAUSED_MESSAGE);
+  chain.spent = true;
+  chain.held = usd(100);
+  const code = "unshield_tx";
+  const asked = swapBody(E.USDC, E.USDT, usd(100), direct);
+  const escrow = escrowOf(asked);
+  const { nullifier, asset } = asked.spend;
+  const wrong: [string, Hex][] = [
+    ["another escrow", vaultPaid(nullifier, asset, "0x00000000000000000000000000000000000e5c20", usd(100))],
+    ["another amount", vaultPaid(nullifier, asset, escrow, usd(99))],
+    ["another note", vaultPaid(`0x${"99".repeat(32)}`, asset, escrow, usd(100))],
+    ["another asset", vaultPaid(nullifier, E.USDT, escrow, usd(100))],
+    ["another contract's log", vaultPaid(nullifier, asset, escrow, usd(100), { vault: "0x00000000000000000000000000000000000bad00" })],
+    ["a reverted transaction", vaultPaid(nullifier, asset, escrow, usd(100), { status: "0x0" })],
+    ["a hash the chain doesn't have", `0x${"77".repeat(32)}`],
+  ];
+  await assert.rejects(relayVaultSwap(net, asked), isCode(code), "none named: a tab from before this");
+  for (const [what, unshieldTx] of wrong) await assert.rejects(relayVaultSwap(net, { ...asked, unshieldTx }), isCode(code), what);
   assert.equal(sends.length, 0);
-  for (let i = 0; i < 12; i++) await countRevertedSwap(base);
-  await relayVaultSwap(base, { ...swapBody(B.USDC, B.USDT, usd(1), [BASE_SWAP_POOLS[2]!]), router: VAULT_SWAP_V3_ADDRESS[8453] });
-  assert.equal(sends.length, 1, "Base has no such budget");
-  // money waiting still comes back
-  sends.length = 0;
-  chain.spent = true;
-  chain.held = usd(100);
-  await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(100), direct));
-  assert.equal(sends.length, 1, "a refund goes");
+  await relayVaultSwap(net, { ...asked, unshieldTx: vaultPaid(nullifier, asset, escrow, usd(100)) });
+  assert.equal(sends.length, 1);
 });
 
-await test("a reverted receipt counts against the budget by itself", async () => {
+await test("reverted swaps count by gas, apart from refunds, and past the budget new swaps pause, on Ethereum only", async () => {
   fresh();
-  const { hitRateLimit, readRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
-  const reverted = () => readRateLimit("chain:1", "relay-swap-reverted", Date.now(), 3600);
-  assert.equal(await readRateLimit("chain:8453", "relay-swap-reverted", Date.now(), 3600), 0, "Base never counts");
-  // a swap that lands and reverts, on Base: nothing counted, and its lock is released
   chain.receipt = "reverted";
-  const body = { ...swapBody(B.USDC, B.USDT, usd(1), [BASE_SWAP_POOLS[2]!]), router: VAULT_SWAP_V3_ADDRESS[8453] };
-  await relayVaultSwap(base, body);
-  await new Promise((r) => setTimeout(r, 50));
-  assert.equal(await readRateLimit("chain:8453", "relay-swap-reverted", Date.now(), 3600), 0);
+  chain.gasUsed = 5_500_000n;
+  for (let i = 0; i < 4; i++) {
+    await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct));
+    await settled();
+  }
+  await assert.rejects(relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct)), (e: unknown) => isCode("swaps_paused")(e) && (e as Error).message === SWAPS_PAUSED_MESSAGE);
+  assert.equal(sends.length, 4);
+  // refunds have their own count: these were swaps, so money waiting still goes
   chain.spent = true;
-  chain.held = usd(100);
-  const counted = await reverted();
-  await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(100), direct));
-  await new Promise((r) => setTimeout(r, 50));
-  assert.equal(await reverted(), counted + 1, "a swap call that reverted, refund or not");
-  await hitRateLimit("selftest", "relay-swap-reverted", 5, Date.now(), 3600);
-  assert.equal(await readRateLimit("selftest", "relay-swap-reverted", Date.now(), 3600), 1, "reads what a hit counted");
-  assert.equal(await readRateLimit("selftest", "relay-swap-reverted", Date.now(), 3600), 1, "and counts nothing itself");
+  chain.held = usd(10);
+  await relayVaultSwap(net, refundBody(usd(10)));
+  assert.equal(sends.length, 5);
+  chain.spent = false;
+  await relayVaultSwap(base, { ...swapBody(B.USDC, B.USDT, usd(1), [BASE_SWAP_POOLS[2]!]), router: VAULT_SWAP_V3_ADDRESS[8453] });
+  assert.equal(sends.length, 6, "Base has no such budget");
 });
 
-await test("a refund under the floor spends from a budget; one that fails its dry run costs none, and one over the floor always goes", async () => {
+await test("a swap that lands gives its gas back, and one nobody saw land stays held", async () => {
+  fresh();
+  chain.receipt = "success";
+  for (let i = 0; i < 20; i++) {
+    await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct));
+    await settled();
+  }
+  assert.equal(sends.length, 20, "far past the budget's size, as every one gave its hold back");
+  fresh();
+  chain.receipt = "none"; // sent, no receipt: 2.21M gas each, held
+  let sent = 0;
+  for (let i = 0; i < 12; i++) {
+    const r = await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct)).catch((e) => e);
+    if (typeof r === "string") sent++;
+    else assert.ok(isCode("swaps_paused")(r), String(r));
+  }
+  assert.equal(sent, 9, "held at send time: a burst stops at the budget, with no receipt read");
+});
+
+await test("one note reverting again waits by itself, and doesn't stop anyone else", async () => {
+  fresh();
+  chain.receipt = "reverted";
+  const once = swapBody(E.USDC, E.USDT, usd(1_000), direct);
+  const again = (i: number) => ({ ...swapBody(E.USDC, E.USDT, usd(1_000), direct), spend: once.spend, _: i });
+  for (let i = 0; i < 2; i++) {
+    await relayVaultSwap(net, again(i));
+    await settled();
+  }
+  await assert.rejects(relayVaultSwap(net, again(3)), (e: unknown) => isCode("note_wait")(e) && (e as Error).message === NOTE_WAIT_MESSAGE);
+  assert.equal(sends.length, 2);
+  await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct));
+  assert.equal(sends.length, 3, "another note goes");
+});
+
+await test("a refund under the floor spends from a budget of its own; one that fails its dry run costs none, and one over the floor always goes", async () => {
   fresh();
   chain.spent = true;
   chain.held = usd(10);
   chain.dryRun = "revert";
-  for (let i = 0; i < 40; i++) await assert.rejects(relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(10), direct)), RelayError);
+  for (let i = 0; i < 40; i++) await assert.rejects(relayVaultSwap(net, refundBody(usd(10))), RelayError);
   chain.dryRun = "ok";
-  assert.equal(sends.length, 0);
+  assert.equal(sends.length, 0, "and none of that was counted");
+  chain.gasUsed = 2_000_000n;
   let refused = 0;
-  for (let i = 0; i < 31; i++) {
-    await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(10), direct)).catch((e) => {
+  for (let i = 0; i < 20; i++) {
+    await relayVaultSwap(net, refundBody(usd(10))).catch((e) => {
       assert.ok(isCode("swaps_paused")(e), String(e));
       refused++;
     });
+    await settled();
   }
-  assert.ok(refused >= 1 && refused <= 2, "thirty an hour, counted only for what would go, one spent by an earlier test");
+  assert.ok(refused > 0 && sends.length === 20 - refused, "the budget held");
   const went = sends.length;
-  assert.equal(went, 31 - refused);
   chain.held = usd(1_000);
-  await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct));
-  assert.equal(sends.length, went + 1, "a refund worth its gas isn't held up by that");
+  await relayVaultSwap(net, refundBody(usd(1_000)));
+  assert.equal(sends.length, went + 1, "at or over the floor it goes regardless");
 });
 
 await test("a refund locks on its escrow", async () => {
   fresh();
   chain.spent = true;
   chain.held = usd(1_000);
-  const mine = swapBody(E.USDC, E.USDT, usd(1_000), direct);
+  const mine = refundBody(usd(1_000));
   // the same nullifier under another escrow
-  const theirs = { ...swapBody(E.USDC, E.USDT, usd(1_000), direct), spend: mine.spend };
+  const other = swapBody(E.USDC, E.USDT, usd(1_000), direct, { spend: mine.spend });
+  const theirs = { ...other, unshieldTx: vaultPaid(mine.spend.nullifier, mine.spend.asset, escrowOf(other), usd(1_000)) };
+  chain.receipt = "none"; // both still out, so both locks stay held
   await relayVaultSwap(net, theirs);
   await relayVaultSwap(net, mine);
   assert.equal(sends.length, 2, "two escrows, two locks");
   await assert.rejects(relayVaultSwap(net, mine), isCode("in_flight"));
+});
+
+await test("the hourly spend cap: new sends stop short of it, money coming back gets the rest, a hold is given back", async () => {
+  fresh();
+  // about 0.0444 gwei offered on a 2.21M gas limit: 0.000098 held a send, of which 0.000037 stays once it lands
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.0003";
+  chain.receipt = "none";
+  let sent = 0;
+  for (let i = 0; i < 6; i++) {
+    const r = await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct)).catch((e) => e);
+    if (typeof r === "string") sent++;
+    else assert.ok(isCode("spend_cap")(r) && (r as Error).message === SPEND_CAP_MESSAGE, String(r));
+  }
+  assert.equal(sent, 2, "new sends stop at 80% of the cap: 0.00024 here, and a third would pass it");
+  const n = sends.length;
+  chain.spent = true;
+  chain.held = usd(1_000);
+  await relayVaultSwap(net, refundBody(usd(1_000)));
+  assert.equal(sends.length, n + 1, "a refund uses what is kept for it");
+  await assert.rejects(relayVaultSwap(net, refundBody(usd(1_000))), isCode("spend_cap"), "and that has an end too");
+  // any kind of send, and the status stays up
+  chain.spent = false;
+  await assert.rejects(relayTransfer(net, { proof, root: `0x${"22".repeat(32)}`, nullifier: `0x${"ee".repeat(32)}`, commitments: [`0x${"e1".repeat(32)}`, `0x${"e2".repeat(32)}`] }), isCode("spend_cap"));
+  fresh();
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.0005";
+  chain.receipt = "success";
+  chain.gasUsed = 1_000_000n;
+  sent = 0;
+  for (let i = 0; i < 6; i++) {
+    await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct)).then(() => sent++, () => {});
+    await settled();
+  }
+  assert.equal(sent, 6, "what a send didn't use comes back: 0.000037 each, not 0.000098");
+});
+
+await test("amounts held in the shared store add, come back, and fail closed", async () => {
+  const { SharedCountUnavailable, addRateCount, readRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
+  const store = new Map<string, number>();
+  let up = true;
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (_u: string | URL | Request, init?: RequestInit) => {
+    if (!up) throw new Error("connection dropped");
+    const cmds = JSON.parse(String(init?.body)) as (string | number)[][];
+    return new Response(
+      JSON.stringify(
+        cmds.map(([name, key, by]) => {
+          if (name === "INCRBY") store.set(String(key), (store.get(String(key)) ?? 0) + Number(by));
+          return { result: name === "EXPIRE" ? 1 : (store.get(String(key)) ?? null) };
+        })
+      ),
+      { status: 200 }
+    );
+  }) as typeof fetch;
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.selftest.invalid";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "selftest";
+  try {
+    const t = 1_800_000_000_000;
+    const opts = { failClosed: true };
+    assert.equal(await addRateCount("chain:1", "relay-spend", 700, t, 3600, opts), 700);
+    assert.equal(await addRateCount("chain:1", "relay-spend", 300, t, 3600, opts), 1000);
+    assert.equal(await addRateCount("chain:1", "relay-spend", -650, t, 3600, opts), 350);
+    assert.equal(await readRateLimit("chain:1", "relay-spend", t, 3600, opts), 350);
+    assert.equal(await addRateCount("chain:1", "relay-spend", 5, t + 3_600_000, 3600, opts), 5, "the next hour starts over");
+    up = false;
+    await assert.rejects(addRateCount("chain:1", "relay-spend", 1, t, 3600, opts), SharedCountUnavailable);
+  } finally {
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    globalThis.fetch = real;
+  }
+});
+
+await test("the cap and the limit per IP are set by chain", async () => {
+  assert.equal(hourlySpendWei(1, {}), 50_000_000_000_000_000n);
+  assert.equal(hourlySpendWei(8453, {}), 10_000_000_000_000_000n);
+  assert.equal(hourlySpendWei(4663, {}), 20_000_000_000_000_000n);
+  assert.equal(hourlySpendWei(4217, {}), 10n ** 18n);
+  assert.equal(hourlySpendWei(84532, {}), null, "a testnet has none");
+  assert.equal(hourlySpendWei(1, { GLOAM_RELAY_HOURLY_SPEND_1: "0.5" }), 5n * 10n ** 17n);
+  assert.equal(hourlySpendWei(1, { GLOAM_RELAY_HOURLY_SPEND_1: "off" }), null);
+  assert.equal(hourlySpendWei(1, { GLOAM_RELAY_HOURLY_SPEND_1: "lots" }), 50_000_000_000_000_000n, "not a number keeps the default");
+  assert.equal(hourlySpendWei(1, { GLOAM_RELAY_HOURLY_SPEND_1: "0" }), 50_000_000_000_000_000n);
+  assert.equal(ipSendsLimit(1, {}), 120);
+  assert.equal(ipSendsLimit(8453, {}), null);
+  assert.equal(ipSendsLimit(1, { GLOAM_RELAY_IP_SENDS_1: "5" }), 5);
+  assert.equal(ipSendsLimit(1, { GLOAM_RELAY_IP_SENDS_1: "off" }), null);
+  fresh();
+  process.env.GLOAM_RELAY_IP_SENDS_1 = "3";
+  for (let i = 0; i < 3; i++) await checkChainRateLimit(net, "203.0.113.9");
+  await assert.rejects(checkChainRateLimit(net, "203.0.113.9"), isCode("rate_limit"));
+  await checkChainRateLimit(net, "203.0.113.10");
+  await checkChainRateLimit(base, "203.0.113.9");
 });
 
 await test("an exit takes only a swap's assets, and each kind of send has a most gas", async () => {
@@ -580,24 +761,28 @@ await test("an exit takes only a swap's assets, and each kind of send has a most
   on(1);
   chain.spent = true;
   chain.held = usd(1_000);
-  const exit = (asset: Address) => ({
-    router: VAULT_SWAP_V3_ADDRESS[1],
-    asset,
-    to: "0x00000000000000000000000000000000000e4170",
-    signature: `0x${"aa".repeat(65)}`,
-    key: {
+  const exit = (asset: Address) => {
+    const key = {
       nullifier: `0x${(++nul).toString(16).padStart(64, "0")}`, amountIn: "1000000000", outCommitment: `0x${"55".repeat(32)}`, assetOut: E.USDT, amountOut: "1",
       refundCommitment: `0x${"77".repeat(32)}`, refundAmount: "1", routeHash: `0x${"88".repeat(32)}`, exitKey: "0x00000000000000000000000000000000000e417e", deadline: "1",
-    },
-  });
+    };
+    const escrow = escrowAddress(VAULT_SWAP_V3_ADDRESS[1]!, asset, {
+      ...key, nullifier: key.nullifier as Hex, amountIn: 1_000_000_000n, outCommitment: key.outCommitment as Hex, assetOut: key.assetOut as Address, amountOut: 1n,
+      refundCommitment: key.refundCommitment as Hex, refundAmount: 1n, routeHash: key.routeHash as Hex, exitKey: key.exitKey as Address, deadline: 1n,
+    });
+    return { router: VAULT_SWAP_V3_ADDRESS[1], asset, to: "0x00000000000000000000000000000000000e4170", signature: `0x${"aa".repeat(65)}`, key, unshieldTx: vaultPaid(key.nullifier, asset, escrow, 1_000_000_000n) };
+  };
   await assert.rejects(relayVaultSwapExit(net, exit("0x0000000000000000000000000000000000000bad")), isCode("swap_asset"));
   assert.equal(sends.length, 0);
   chain.dryRunGas = 150_000n;
+  const { unshieldTx: _none, ...noProof } = exit(E.USDC);
+  await assert.rejects(relayVaultSwapExit(net, noProof), isCode("unshield_tx"), "an exit shows the vault's payment too");
+  assert.equal(sends.length, 0);
   await relayVaultSwapExit(net, exit(E.USDC));
   assert.equal(sends.length, 1);
   chain.dryRunGas = 20_000_000n;
   await assert.rejects(relayVaultSwapExit(net, exit(E.USDC)), isCode("gas_most"));
-  await assert.rejects(relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(1_000), direct)), isCode("gas_most"));
+  await assert.rejects(relayVaultSwap(net, refundBody(usd(1_000))), isCode("gas_most"));
   assert.equal(sends.length, 1, "nothing more went out");
   chain.dryRunGas = DRY_RUN_GAS;
   assert.equal(sendGasMost(1, "unshield"), 1_200_000n);

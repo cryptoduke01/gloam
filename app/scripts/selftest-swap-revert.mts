@@ -291,18 +291,43 @@ const moves = (source: LocalNote) => getAllNotes().filter((n) => n.id.startsWith
 
 // ---------------------------------------------------------------- what marks a note
 
-await test("a swap the relay refused never went out: both notes dropped, nothing marked", async () => {
+const refused = {
+  relay: async () => {
+    throw new RelaySubmitError("The price moved since the quote.", "OverInput");
+  },
+};
+
+await test("a swap the relay refused keeps both notes, out of the balance, and marks nothing yet", async () => {
   const pool = mockVault();
-  const { source, out, refund, error } = await swap(pool, 20_000_000n, {
-    relay: async () => {
-      throw new RelaySubmitError("The price moved since the quote.", "OverInput");
-    },
-  });
+  const { source, out, refund, error } = await swap(pool, 20_000_000n, refused);
   assert.match(error!.message, /price moved/);
-  assert.equal(byId(out.id), undefined);
-  assert.equal(byId(refund.id), undefined);
+  assert.equal(note(out.id).sweepPending, true);
+  assert.equal(note(refund.id).sweepPending, true);
   assert.equal(note(source.id).swapProofAt, undefined);
   assert.equal(spendPlanFor(note(source.id), BigInt(source.amountWei)), "direct");
+  assert.deepEqual(countedIds(source), [source.id], "the balance shows the note once");
+});
+
+await test("a refused swap's unshield landing alone later comes back as its refund note", async () => {
+  const pool = mockVault();
+  const { source, refund } = await swap(pool, 20_000_000n, refused);
+  assert.ok(pool.replay(source), "its proof stayed valid");
+  await reconcileClaims(pool.env());
+  await new Promise((r) => setTimeout(r, 5));
+  await reconcileClaims(pool.env());
+  assert.equal(note(refund.id).sweepPending, false, "the refund note landed");
+  assert.equal(note(refund.id).status, "open");
+  assert.equal(note(source.id).status, "recovered");
+  assert.equal(total(source), BigInt(refund.amountWei), "counted once");
+});
+
+await test("a refused swap's notes go once its note has moved", async () => {
+  const pool = mockVault();
+  const { source, out, refund } = await swap(pool, 20_000_000n, refused);
+  pool.spent.add(lc(source.nullifier!)); // spent some other way, with nothing at the escrow
+  await reconcileClaims(pool.env());
+  assert.equal(note(refund.id).status, "recovered", "that proof can't land now");
+  assert.equal(note(out.id).status, "recovered");
 });
 
 await test("a swap that may have gone out keeps its notes for the sync, and marks nothing", async () => {
