@@ -12,13 +12,15 @@
  *             which brings money back and is not a swap
  *   memo      a payment message, not counted
  *   swapExit  a swap's money leaving by its exit key, not counted
+ * A refund or an exit is claimed for the partner without being counted, so its
+ * transaction can't later be attributed as a swap or a deposit.
  * Whether a swap is new is read from the vault, never taken from the request.
  *
  * Server only. The relay functions and the vault read are injectable for tests.
  */
 import type { Address, Hex } from "viem";
 import { logSafe } from "./logSafe";
-import { recordActivity, type ActivityKind, type ActivityRecord, type Partner } from "./partners";
+import { claimTransaction, recordActivity, type ActivityKind, type ActivityRecord, type Partner } from "./partners";
 import type { GloamNetwork } from "./networks";
 import { swapRouterFor } from "./vaultSwap";
 import {
@@ -52,6 +54,8 @@ export type PartnerRelayDeps = {
   /** The vault's spent(nullifier), read on the relay's own node. */
   isSpent: (net: GloamNetwork, nullifier: Hex) => Promise<boolean>;
   record: typeof recordActivity;
+  /** Claims a transaction for the partner without counting it (a refund, an exit). */
+  claim: typeof claimTransaction;
 };
 
 export const partnerRelayDeps: PartnerRelayDeps = {
@@ -63,6 +67,7 @@ export const partnerRelayDeps: PartnerRelayDeps = {
   isSpent: async (net, nullifier) =>
     Boolean(await relayPublicClient(net).readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [nullifier] })),
   record: recordActivity,
+  claim: claimTransaction,
 };
 
 export class UnknownRelayAction extends RelayError {
@@ -83,6 +88,8 @@ export async function relayForPartner(
   let hash: Hex;
   let kind: ActivityKind | null = null;
   let edge: { asset: Address; amount: bigint } | null = null;
+  /** Sent and not counted, but claimed for this partner (a refund, an exit). */
+  let claimed: Hex | null = null;
   switch (body.action) {
     case "transfer":
       hash = await deps.relayTransfer(net, body);
@@ -116,14 +123,21 @@ export async function relayForPartner(
         kind = "private_swap";
         // The swap's input: public inputs of its unshield proof, which the relay's dry run checked.
         edge = swapEdge;
-      }
+      } else claimed = hash;
       break;
     }
     case "swapExit":
       hash = await deps.relayVaultSwapExit(net, body);
+      claimed = hash;
       break;
     default:
       throw new UnknownRelayAction();
+  }
+
+  if (claimed) {
+    const tx = claimed;
+    // The transaction is already sent: a storage error never fails the response.
+    await deps.claim(partner, net.chainId, tx).catch((e: unknown) => console.error("gloam_api_claim", logSafe(e)));
   }
 
   let attribution: Attribution;

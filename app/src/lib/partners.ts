@@ -448,6 +448,16 @@ export async function recordActivity(args: {
   return { recorded: true, record };
 }
 
+/**
+ * Claims a transaction for a partner without counting it: a swap's refund or exit sent
+ * with its key. It brings money back and is no one's swap or deposit, and once claimed
+ * it can't be attributed as either. True when this call claimed it.
+ */
+export async function claimTransaction(partner: Pick<Partner, "id">, chainId: number, txHash: Hex): Promise<boolean> {
+  const [claim] = await kv([["SET", k("tx", chainId, txHash.toLowerCase()), partner.id, "NX", "EX", TX_TTL_SEC]]);
+  return claim === "OK";
+}
+
 /** Who a transaction is attributed to, if anyone. */
 export async function attributedTo(chainId: number, txHash: string): Promise<string | null> {
   const v = await kv1(["GET", k("tx", chainId, txHash.toLowerCase())]);
