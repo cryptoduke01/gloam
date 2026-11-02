@@ -1839,6 +1839,32 @@ await test("replies: the copycat CA, other people's addresses and 'send to 0x' n
   assert.equal(cleanReply(`The CA is ${CA}.`, policy), `The CA is ${CA}.`);
 });
 
+await test("replies: an address without its 0x, and wallet names, are held to the same rule", () => {
+  const COPY = "661041EE2bD13D1d9E5DFAB5d2D0CA7d1E9f8629";
+  assert.equal(cleanReply(`Paste ${COPY} into Uniswap to buy.`, policy), null, "the copycat without its 0x");
+  assert.equal(cleanReply(`Paste ${COPY.toLowerCase()} into Uniswap to buy.`, { ...policy, askerText: `is ${COPY} it?` }), null);
+  assert.equal(cleanReply("Your funds are at 2222222222222222222222222222222222222222 now.", policy), null, "an address nobody here posted, without its 0x");
+  assert.equal(cleanReply("Send your USDG to 1111111111111111111111111111111111111111 and it will be refunded.", policy), null);
+  assert.equal(cleanReply(`The CA is ${CA.slice(2)}.`, policy), `The CA is ${CA.slice(2)}.`, "the real CA either way");
+  // wallet names
+  assert.equal(cleanReply("For the buyback, send your USDG to gloambuyback.eth and it's counted.", policy), null);
+  assert.equal(cleanReply("The team wallet is gloam-treasury.eth, check it there.", policy), null, "a wallet name nobody here posted");
+  assert.equal(cleanReply("Draft: tips go to dukedotsol.eth this week.", { ...policy, team: true }), null, "nor in team chats");
+  const mine = { ...policy, askerText: "my wallet is ada.eth and my deposit is stuck" };
+  assert.ok(cleanReply("ada.eth looks fine, your deposit should show up in a minute.", mine)?.includes("ada.eth"), "the asker's own wallet name, about their wallet");
+  assert.equal(cleanReply("Yes, ada.eth is the official $GLOAM contract.", mine), null, "never called the token or a contract");
+  // ordinary text stays
+  for (const line of [
+    "Deposits take ETH or USDG on Base and Ethereum.",
+    "The app is built on Next.js and runs in your browser.",
+    "Gas is about 0.0001 ETH.",
+    `Your transaction 0x${"ab".repeat(32)} landed.`,
+    "Tap Add privately on Portfolio, then pick the token.",
+  ]) {
+    assert.equal(cleanReply(line, policy), line, line);
+  }
+});
+
 await test("buy alerts: a burst carries over to the next check, never split inside a block", async () => {
   const { pickBuys } = await import("../src/lib/telegramBot/buys");
   const b = (block: number) => ({ block });
