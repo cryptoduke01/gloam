@@ -95,9 +95,9 @@ pinned escrow code.
 
 | Chain | Router | Pools | Deploy gas |
 | --- | --- | --- | --- |
-| Robinhood Chain | `0x9CdA89fA6E6f796a1623C2086b2C710DCa64486d` | 45 | 4.7M |
-| Base | `0x3A99f461bdbfc86fbd4e84ee80Bfb2fd73f3576a` | 7 | 3.6M |
-| Ethereum | `0x2E0c06Ac42Cc6f0ecC3eDc86bC0d67F3c2DC7E6A` | 13 | 3.8M |
+| Robinhood Chain | `0x9CdA89fA6E6f796a1623C2086b2C710DCa64486d` | 45 | 4.8M |
+| Base | `0x3A99f461bdbfc86fbd4e84ee80Bfb2fd73f3576a` | 7 | 3.7M |
+| Ethereum | `0x2E0c06Ac42Cc6f0ecC3eDc86bC0d67F3c2DC7E6A` | 13 | 3.9M |
 | Tempo | `0x991efFC6cA44BD578000d32C1351d78298BdBC0a` | no pools, its DEX | see the card |
 
 These hold for the contracts in `test/fixtures/router-next.json`, which
@@ -232,7 +232,7 @@ Real proofs against the live vault, on a fork (`app/scripts/fork-router-v3.mts`)
 | A swap, two hops | 1.61M to 1.70M |
 | A swap, three hops | 1.70M |
 | A refund | 1.17M to 1.20M |
-| An exit | 131k to 134k |
+| An exit | 121k to 140k |
 
 The relay pays. At $2,290 ETH a one-hop swap costs about **$3.89 per gwei**.
 
