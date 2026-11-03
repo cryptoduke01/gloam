@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
  * ?type=daily (default): per day, network, source and kind, the last 120 days.
  * ?type=transactions: each counted cash out, deposit and swap (the latest 200),
  * public facts only. Private payments are never listed one by one: they are in the
- * daily counts only. ?tier=mainnet (default) or testnet.
+ * daily counts only, and only for days that have ended (UTC). ?tier=mainnet
+ * (default) or testnet.
  */
 export async function GET(req: NextRequest) {
   return portal(async () => {
@@ -21,7 +22,8 @@ export async function GET(req: NextRequest) {
     if (type !== "daily" && type !== "transactions") throw new ApiError(400, "bad_type", 'type must be "daily" or "transactions".');
     const tier = q.get("tier") ?? "mainnet";
     if (!isTier(tier)) throw new ApiError(400, "bad_tier", 'tier must be "mainnet" or "testnet".');
-    const stats = await readPartnerStats(partner.id, type === "daily" ? { days: STATS_DAYS_MAX, tier } : { recent: 200, days: 1, tier, forPartner: true });
+    // the partner's own view either way: no private payment listed, and today's not counted until the day ends
+    const stats = await readPartnerStats(partner.id, type === "daily" ? { days: STATS_DAYS_MAX, tier, forPartner: true } : { recent: 200, days: 1, tier, forPartner: true });
     const csv = type === "daily" ? dailyCsv([{ id: partner.id, name: partner.name, daily: stats.daily }]) : activityCsv([{ id: partner.id, name: partner.name, recent: stats.recent }]);
     const date = new Date().toISOString().slice(0, 10);
     return new NextResponse(csv, {
