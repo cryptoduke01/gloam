@@ -486,6 +486,36 @@ await test("B2 fixed: a transaction the relay sent counts from relay bindings on
   sentByRelay(h, false);
 });
 
+await test("B2: a proof copied from a landed relay transaction and posted to the relay with another code binds nothing that counts", async () => {
+  const h = FX.cashOuts[3]!;
+  sentByRelay(h);
+  const landed = rcpt(h).blockTimestamp * 1000;
+  // the relay sent it with no code; Mallory reads its calldata once it lands and posts the proof
+  // to the relay under her code (the relay refuses the spent note, but the tie is written as the send starts)
+  for (const at of [landed + 300, landed + 5_000]) {
+    assert.equal(await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: malloryCode, flow: "pay", at }), true);
+    await throwsApi(settle(h), 404, "not_registered");
+    unregister([h]);
+  }
+  // nor a scheduled job asked for the spent note after it landed
+  await A.bindScheduledJob({ jobId: "job-late", chainId: RH.chainId, nullifier: nullifierOf(h), code: malloryCode, at: landed + 2_000 });
+  await throwsApi(settle(h), 404, "not_registered");
+  assert.equal(await P.attributedTo(RH.chainId, h), null);
+  // a tie made in the second before the block began still counts
+  unregister([h]);
+  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: offrampCode, flow: "pay", at: landed - 1 });
+  assert.equal((await settle(h)).record.linkCode, offrampCode);
+  unclaim([h]);
+  unregister([h]);
+  sentByRelay(h, false);
+  // on Ethereum and Base no tie to a proof is kept at all: only the relay's tie by transaction hash
+  const g = globalThis as { __gloamPartnersMem?: Map<string, unknown> };
+  for (const chainId of [1, 11155111, 8453, 84532]) {
+    assert.equal(await A.bindRelaySpend({ chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: offrampCode, flow: "pay", at: landed - 60_000 }), false);
+    assert.equal(g.__gloamPartnersMem?.has(k("relaynf", chainId, linkNullifierHash(nullifierOf(h)).toLowerCase())), false);
+  }
+});
+
 await test("F1, B2 fixed: a cash out scheduled for later is bound to its job's spend when scheduled, before the run sends it", async () => {
   const h = FX.cashOuts[2]!;
   sentByRelay(h);
