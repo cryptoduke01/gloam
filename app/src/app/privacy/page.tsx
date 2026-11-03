@@ -352,10 +352,11 @@ export default function PrivacyPage() {
         their link: its transaction hash, network, token, amount and time, and
         which of their link codes it came through. All of that is public on chain
         already. For a private payment from their link: only a count per day,
-        added once the day has ended (UTC). Never its hash, amount, time,
-        recipient or the code it came through, and it never changes the
-        &quot;last activity&quot; they see, so they can&apos;t tell which payment
-        was yours. They never see your wallet or IP address.
+        added once the day has ended (UTC), in their dashboard, its spreadsheets
+        and their API alike. Never its hash, amount, time, recipient or the code
+        it came through, and it never changes the &quot;last activity&quot; they
+        see, so they can&apos;t tell which payment was yours. They never see your
+        wallet or IP address.
       </p>
       <p>
         <strong>Partners&apos; own addresses.</strong>{" "}A partner can give us

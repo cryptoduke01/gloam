@@ -648,24 +648,29 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
         <li>
           <strong>Through the Gloam relay</strong> (the default for payments and
           cash outs, and the only way for swaps): the payer&apos;s app hands your
-          code to the relay with the proof. The relay ties the code to the
-          transaction it sends itself, and counts it once it lands. A cash out the
-          relay sends later keeps your code with it until the relay sends it. Only
-          the relay&apos;s own transaction can carry its tie: a copy of the proof
-          sent by anyone else is not counted to anyone through the relay.
+          code to the relay with the proof. Before it sends, the relay ties your
+          code to that exact proof; once sent, to the transaction&apos;s hash; and
+          it counts the transaction once it lands. A cash out the relay sends later
+          is tied to your code when it is scheduled. A transaction the relay sent is
+          counted only from the relay&apos;s own tie, never from anything else, so
+          nobody can get in ahead of it, even by reading the transaction while it
+          is pending.
         </li>
         <li>
           <strong>From the payer&apos;s own wallet:</strong> before the wallet is
           asked, the app registers the payment with your code and a one-way hash of
           something only that send has: a private payment&apos;s new note
           commitment, or a cash out&apos;s proof. The transaction counts only if it
-          carries that value and the registration came no later than its block.
-          Knowing the payment in advance is not enough to register it. If two
-          different codes register the same payment, it counts for neither. A
-          registration that matches no transaction is gone after an hour. On
-          Ethereum, which has a public mempool where a pending transaction can be
-          read before its block, payments from the payer&apos;s own wallet are not
-          counted to links; only ones sent through the relay are.
+          carries that value and the registration came before its block&apos;s
+          second began. Knowing the payment in advance is not enough to register
+          it. If two different codes register the same payment in time, it counts
+          for neither; a registration made too late plays no part. A registration
+          that matches no transaction is gone after an hour. A payment sent from a
+          wallet in the same second as its block doesn&apos;t count; that is the
+          price of the rule. Gloam takes wallet registrations only where a
+          transaction can&apos;t be read before its block (Robinhood Chain, Tempo
+          and their testnets). On Ethereum and Base, where pending transactions
+          are public early, only payments sent through the relay count to links.
         </li>
         <li>
           <strong>What counts:</strong> Gloam reads each transaction on its chain
@@ -673,8 +678,10 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
           the link: a private payment or a cash out to a wallet for a pay link, a
           private swap through Gloam&apos;s router for a swap link. A transaction
           counts once, for one partner, within seven days of landing. Nobody can
-          claim someone else&apos;s transaction afterwards: once it is on chain, it
-          is too late to tie it to a code.
+          tie someone else&apos;s transaction to a code once it can be seen: a
+          relay-sent one counts only from the relay&apos;s tie, made before it sends,
+          and a wallet registration counts only if it was made before anyone could
+          read the transaction.
         </li>
         <li>
           <strong>What is kept:</strong> the transaction&apos;s public facts only:
@@ -688,10 +695,10 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
           one, with their transaction, network, token, amount, time and the link
           code they came through, since those are public on chain anyway. Private
           payments only as a count per day, and only for days that have ended
-          (UTC): never one by one, never with a hash, an amount, a time or the code
-          they came through, and never in &quot;last activity&quot;. So a payment
-          can&apos;t be tied to an invoice or a moment, even if you make one code per
-          invoice.
+          (UTC), in the portal, its CSV files and the API alike: never one by one,
+          never with a hash, an amount, a time or the code they came through, and
+          never in &quot;last activity&quot;. So a payment can&apos;t be tied to an
+          invoice or a moment, even if you make one code per invoice.
         </li>
         <li>
           <strong>Nothing is charged,</strong> the same as for your API key.
