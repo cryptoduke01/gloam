@@ -101,6 +101,13 @@ What the proofs show:
 - A proof of funds (`gloamfunds1:`) does not show the balance. It does carry
   the nullifiers of the notes behind it, so the reader can check they are
   unspent, and a reader who keeps them can tell when those notes are spent later.
+  The notes behind it are marked, and a cash out of one first moves it to a
+  fresh note with a private send to itself, as the app does, so the proof does
+  not lead to where the money went or how much. If that move fails, nothing is
+  cashed out. The move and the cash out land close together, so their timing
+  can still hint at a link. Proofs made with an earlier version of this plugin
+  left no mark: to be safe, pay those notes to the agent's own Gloam address
+  (then `checkIncoming`) before cashing them out.
 - A proof of payment (`gloampay1:`) shows that a private payment of an amount
   was made into a note, and when. It does not show who received it: the payer
   chose the payee note's key, so the payer could make the same proof. Ask the
