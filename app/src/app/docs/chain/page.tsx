@@ -209,7 +209,7 @@ export default function DocsNetworksPage() {
             </tr>
             <tr>
               <td>Gas</td>
-              <td>ETH, also a pool asset once its limit lands</td>
+              <td>ETH, also a pool asset</td>
               <td>Paid in stablecoins</td>
               <td>ETH, also a pool asset</td>
               <td>ETH, also a pool asset; the relay waits while gas is above {DEFAULT_MAX_GAS_GWEI[1]} gwei</td>

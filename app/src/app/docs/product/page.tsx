@@ -74,7 +74,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Shield",
-            body: `Mainnet: USDG, $GLOAM, PONS and CASHCAT on Robinhood Chain, then ETH, AI and ORBIO once their limits land; USDC.e, pathUSD, USDT0 and OUSD on Tempo${BASE_LIVE ? "; USDC, EURC, USDT and ETH on Base" : ""}${ETHEREUM_LIVE ? "; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum" : ""}, under beta deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.`,
+            body: `Mainnet: USDG, $GLOAM, PONS, CASHCAT, ETH, AI and ORBIO on Robinhood Chain; USDC.e, pathUSD, USDT0 and OUSD on Tempo${BASE_LIVE ? "; USDC, EURC, USDT and ETH on Base" : ""}${ETHEREUM_LIVE ? "; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum" : ""}, under beta deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.`,
           },
           {
             n: "●",

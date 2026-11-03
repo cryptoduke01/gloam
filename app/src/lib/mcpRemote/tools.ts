@@ -114,7 +114,7 @@ const TESTNET_PROP_TEXT = `Gloam network: ${andList([
 
 const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
   "tempo-mainnet": '"tempo-mainnet" (Tempo mainnet: USDC.e, pathUSD, USDT0, OUSD)',
-  "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet: USDG, GLOAM, PONS, CASHCAT; ETH, AI and ORBIO once their limits land)',
+  "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet: USDG, GLOAM, PONS, CASHCAT, ETH, AI and ORBIO)',
   "base-mainnet": '"base-mainnet" (Base mainnet: USDC, EURC, USDT, ETH)',
   "ethereum-mainnet": '"ethereum-mainnet" (Ethereum mainnet: USDC, USDT, USDG, PYUSD, EURC, ETH)',
 };
@@ -123,7 +123,7 @@ const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
 const MAINNET_DEPOSITS_TEXT = (
   [
     ["tempo-mainnet", "USDC.e, pathUSD, USDT0 and OUSD on Tempo"],
-    ["robinhood-mainnet", "USDG, GLOAM, PONS and CASHCAT on Robinhood Chain, then ETH, AI and ORBIO once their limits land"],
+    ["robinhood-mainnet", "USDG, GLOAM, PONS, CASHCAT, ETH, AI and ORBIO on Robinhood Chain"],
     ["base-mainnet", "USDC, EURC, USDT and ETH on Base"],
     ["ethereum-mainnet", "USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum"],
   ] as const

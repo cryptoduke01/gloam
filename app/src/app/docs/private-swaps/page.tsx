@@ -89,9 +89,9 @@ export default function DocsPrivateSwapsPage() {
                 <>
                   <td>
                     USDG, $GLOAM, {V3_RH ? "ETH, WETH" : "ETH (held as WETH)"}, USDe, U, cbBTC, VIRTUAL,
-                    PONS, CASHCAT and 20 Robinhood stock tokens (SPY, NVDA, TSLA,
-                    AAPL and more), any one for another. AI and ORBIO join once
-                    their pools are live and the vault takes them.
+                    PONS, CASHCAT, AI, ORBIO and 20 Robinhood stock tokens (SPY, NVDA,
+                    TSLA, AAPL and more), any one for another. AI and ORBIO swap
+                    through their USDG pools, live since 3 November 2026.
                   </td>
                   <td>
                     Uniswap v4, in up to three hops over the router&apos;s

@@ -11,7 +11,7 @@ Every tool that touches a chain takes a `network`:
 | `network` | What it is | Assets | Keys |
 | --- | --- | --- | --- |
 | `tempo-mainnet` | Tempo mainnet | USDC.e, pathUSD, USDT0, OUSD | Final ceremony keys |
-| `robinhood-mainnet` | Robinhood Chain mainnet | USDG, GLOAM, PONS, CASHCAT; ETH, AI, ORBIO and GRIFT once each timelocked limit lands | Final ceremony keys |
+| `robinhood-mainnet` | Robinhood Chain mainnet | USDG, GLOAM, PONS, CASHCAT, ETH, AI, ORBIO; GRIFT once its timelocked limit lands | Final ceremony keys |
 | `base-mainnet` | Base mainnet | USDC, EURC, USDT, ETH | Final ceremony keys |
 | `ethereum-mainnet` | Ethereum mainnet | USDC, USDT, USDG, PYUSD, EURC, ETH | Final ceremony keys |
 | `tempo` | Tempo testnet (Moderato) | PathUSD and other test stablecoins | Dev keys |

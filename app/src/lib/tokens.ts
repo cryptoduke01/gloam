@@ -117,9 +117,9 @@ const CASHCAT: OnchainToken = { id: "cashcat", symbol: "CASHCAT", name: "Cash Ca
 
 /**
  * Robinhood Chain mainnet (4663): exactly what the mainnet pool lists. USDG and
- * $GLOAM, San Verano's $GRIFT once its limit lands, PONS and CASHCAT (open now),
- * then AI and ORBIO once theirs land. Native ETH is listed too (supportsNativeShield)
- * and opens the same way (isNativeAddable). The app reads every limit from the pool
+ * $GLOAM, PONS, CASHCAT, AI and ORBIO (AI and ORBIO open since 2026-11-03), and
+ * San Verano's $GRIFT once its limit lands. Native ETH is listed too
+ * (supportsNativeShield) and opened with AI and ORBIO (isNativeAddable). The app reads every limit from the pool
  * (see ShieldView); the values are in RH_MAINNET_ASSETS (packages/sdk).
  */
 export const RH_MAINNET_TOKENS: OnchainToken[] = [

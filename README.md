@@ -51,7 +51,7 @@ Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) sin
 | --- | --- | --- | --- | --- |
 | Live since | 21 October 2026 | 21 October 2026 | 26 October 2026 | 26 October 2026 |
 | Pool | `ShieldPoolPayments`, payments only | `ShieldPoolPayments`, payments only | `ShieldPoolPayments`, payments only | `ShieldPoolPayments`, payments only |
-| Assets | USDG, $GLOAM, PONS, CASHCAT; ETH, AI, ORBIO and GRIFT once each timelocked limit lands | USDC.e, pathUSD, USDT0, OUSD | USDC, EURC, USDT, ETH | USDC, USDT, USDG, PYUSD, EURC, ETH |
+| Assets | USDG, $GLOAM, PONS, CASHCAT, ETH, AI, ORBIO; GRIFT once its timelocked limit lands | USDC.e, pathUSD, USDT0, OUSD | USDC, EURC, USDT, ETH | USDC, USDT, USDG, PYUSD, EURC, ETH |
 | Gas | ETH | Paid in stablecoins | ETH | ETH; the relay waits while gas is above its ceiling |
 | Keys | Final keys from the trusted setup | Final keys from the trusted setup | Final keys from the trusted setup | Final keys from the trusted setup |
 | Private swaps | Router v2 (`GloamVaultSwapV4b`) swaps the 29 tokens it lists, stock tokens and ETH (as WETH) included, over allowlisted Uniswap v4 pools. Router v1 (`GloamVaultSwapV4`) stays for refunds | USDC.e, pathUSD, USDT0, OUSD on Tempo's stablecoin exchange (`GloamVaultSwapTempo`) | Not yet | Not yet |
