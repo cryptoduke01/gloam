@@ -101,6 +101,13 @@ export type StoredNote = {
    * the same money twice.
    */
   spendId?: string;
+  /**
+   * When this note was put behind a proof of funds. The proof carries the note's
+   * nullifier, which a cash out of the whole note would show next to where the
+   * money went and how much, so a cash out moves such a note to a fresh note
+   * first (GloamAgent.cashOut), as the app does.
+   */
+  fundsProofAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -290,6 +297,20 @@ export class NoteStore {
       const next: StoredNote = { ...note, status: "pending", pending: "spend", updatedAt: new Date().toISOString() };
       d.notes[i] = next;
       return next;
+    });
+  }
+
+  /**
+   * Mark notes as behind a proof of funds, before the proof is made. Under the lock each must still be
+   * unspent: a note a spend has already taken is never put in a proof, and one taken later sees the mark.
+   */
+  markFundsProof(handles: string[], at: string) {
+    this.mutate((d) => {
+      const picked = handles.map((h) => d.notes.findIndex((n) => n.handle === h));
+      if (picked.some((i) => i < 0 || d.notes[i]!.status !== "unspent")) {
+        throw new Error("A note picked for the proof was just taken by a payment or cash out. Try again.");
+      }
+      for (const i of picked) d.notes[i] = { ...d.notes[i]!, fundsProofAt: at, updatedAt: at };
     });
   }
 
