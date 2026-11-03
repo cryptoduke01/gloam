@@ -652,9 +652,12 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
           code to that exact proof; once sent, to the transaction&apos;s hash; and
           it counts the transaction once it lands. A cash out the relay sends later
           is tied to your code when it is scheduled. A transaction the relay sent is
-          counted only from the relay&apos;s own tie, never from anything else, so
-          nobody can get in ahead of it, even by reading the transaction while it
-          is pending.
+          counted only from the relay&apos;s own ties, never from anything else, so
+          nobody can get in ahead of them, even by reading the transaction while it
+          is pending. A tie to a proof counts only if it was made before the
+          transaction&apos;s block, so posting a copy of a landed proof to the relay
+          ties nothing; on Ethereum and Base, where pending calldata is public, the
+          relay ties by the transaction&apos;s hash only.
         </li>
         <li>
           <strong>From the payer&apos;s own wallet:</strong> before the wallet is
@@ -679,9 +682,9 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
           private swap through Gloam&apos;s router for a swap link. A transaction
           counts once, for one partner, within seven days of landing. Nobody can
           tie someone else&apos;s transaction to a code once it can be seen: a
-          relay-sent one counts only from the relay&apos;s tie, made before it sends,
-          and a wallet registration counts only if it was made before anyone could
-          read the transaction.
+          relay-sent one counts only from the relay&apos;s own ties to it, and a
+          wallet registration counts only if it was made before anyone could read
+          the transaction.
         </li>
         <li>
           <strong>What is kept:</strong> the transaction&apos;s public facts only:
