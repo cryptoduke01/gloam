@@ -20,8 +20,10 @@
  * Each note is unspent, pending (being created, or the input of a spend in
  * flight), spent, or dead: the chain says its transaction can never land. A dead
  * note keeps its secret, in case that read was wrong, and a refresh brings it
- * back if it shows up. The server also keeps its receive key here, the private
- * half of the gloamr1. tag that x402 payments to this server are sealed to.
+ * back if it shows up. An unspent note whose private swap reverted is held
+ * (moveFirst): no tool spends it until it has moved to a fresh note. The server
+ * also keeps its receive key here, the private half of the gloamr1. tag that
+ * x402 payments to this server are sealed to.
  */
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -117,6 +119,13 @@ export type StoredNote = {
   swap?: SwapRecovery;
   /** A swap's new note: the handle of the refund note made with it. */
   swapPair?: string;
+  /**
+   * A note whose private swap reverted, or ran out of time, after it went out: that swap's unshield
+   * proof is public and stays valid until this note is spent. The note is held (no tool spends it)
+   * until it moves whole to a fresh note of this server's (src/swaps.ts moveHeldNote), and this stays
+   * on it until it is spent. `swap` is the swap's refund note; `tries` and `triedAt` space out the moves.
+   */
+  moveFirst?: { at: string; swap: string; tries: number; triedAt?: string };
   createdAt: string;
   updatedAt: string;
 };
@@ -366,8 +375,9 @@ export class NoteStore {
   /**
    * Take an unspent note for a spend: under the lock, check it is still unspent
    * and passes `check`, then mark it pending so a second call cannot spend it too.
+   * A held note (moveFirst) is taken only by its move.
    */
-  reserveForSpend(handle: string, check: (n: StoredNote) => string | null = () => null): StoredNote {
+  reserveForSpend(handle: string, check: (n: StoredNote) => string | null = () => null, opts: { move?: boolean } = {}): StoredNote {
     return this.mutate((d) => {
       const i = d.notes.findIndex((n) => n.handle === handle);
       const note = d.notes[i];
@@ -376,6 +386,7 @@ export class NoteStore {
         const why = { pending: "in use by a transaction that has not confirmed", spent: "already spent", dead: "dead: its transaction never landed" }[note.status];
         throw new Error(`Note ${handle} is ${why}.`);
       }
+      if (note.moveFirst && !opts.move) throw new Error(heldMessage(handle));
       const why = check(note);
       if (why) throw new Error(why);
       const next: StoredNote = { ...note, status: "pending", pending: "spend", updatedAt: stamp() };
@@ -607,6 +618,13 @@ export function openNoteStore(env: Env = process.env): NoteStore {
 
 // ------------------------------------------------------------------ what the agent may see
 
+/** An unspent note no tool spends until it has moved to a fresh note: its last swap reverted. */
+export const isHeld = (n: StoredNote) => n.status === "unspent" && Boolean(n.moveFirst);
+
+/** Why a held note isn't spent, in plain words. */
+export const heldMessage = (handle: string) =>
+  `Note ${handle} is held: its last private swap reverted, and that swap's proof stays valid until the note is spent, so it moves whole to a fresh note of this server's first. Do not use it in a new swap or payment. gloam_list_notes with refresh moves it; then use the new note.`;
+
 /** A note as the agent sees it: a handle and public facts, never the secret, commitment or nullifier. */
 export function noteView(n: StoredNote) {
   return {
@@ -616,7 +634,8 @@ export function noteView(n: StoredNote) {
     symbol: n.symbol,
     amount: formatUnits(BigInt(n.amountWei), n.decimals),
     amountWei: n.amountWei,
-    status: n.status,
+    status: isHeld(n) ? ("held" as const) : n.status,
+    ...(isHeld(n) ? { held: heldMessage(n.handle) } : {}),
     ...(n.pending ? { pending: n.pending } : {}),
     origin: n.origin,
     createdTx: n.createdTx,
@@ -626,17 +645,18 @@ export function noteView(n: StoredNote) {
   };
 }
 
-/** Private balance per network and asset: what is spendable now and what is still confirming. */
+/** Private balance per network and asset: what is spendable now, what is still confirming, and what is held until it moves. */
 export function balances(notes: StoredNote[]) {
-  const by = new Map<string, { network: string; asset: Address; symbol: string; decimals: number; unspent: bigint; pending: bigint; notes: number }>();
+  const by = new Map<string, { network: string; asset: Address; symbol: string; decimals: number; unspent: bigint; pending: bigint; held: bigint; notes: number }>();
   for (const n of notes) {
     if (n.status === "spent" || n.status === "dead" || n.origin === "payment") continue;
     if (n.status === "pending" && n.pending === "spend") continue;
     // a pending swap makes two notes and only one lands: neither counts until it does
     if (n.status === "pending" && (n.origin === "swap" || n.origin === "swap_refund")) continue;
     const k = `${n.chainId}:${n.asset.toLowerCase()}`;
-    const cur = by.get(k) ?? { network: n.network, asset: n.asset, symbol: n.symbol, decimals: n.decimals, unspent: 0n, pending: 0n, notes: 0 };
-    if (n.status === "unspent") {
+    const cur = by.get(k) ?? { network: n.network, asset: n.asset, symbol: n.symbol, decimals: n.decimals, unspent: 0n, pending: 0n, held: 0n, notes: 0 };
+    if (isHeld(n)) cur.held += BigInt(n.amountWei);
+    else if (n.status === "unspent") {
       cur.unspent += BigInt(n.amountWei);
       cur.notes += 1;
     } else cur.pending += BigInt(n.amountWei);
@@ -648,6 +668,7 @@ export function balances(notes: StoredNote[]) {
     symbol: b.symbol,
     spendable: formatUnits(b.unspent, b.decimals),
     confirming: formatUnits(b.pending, b.decimals),
+    ...(b.held ? { held: formatUnits(b.held, b.decimals) } : {}),
     notes: b.notes,
   }));
 }
