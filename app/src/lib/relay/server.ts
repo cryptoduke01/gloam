@@ -797,7 +797,24 @@ type SubmitOpts = {
   lock?: InflightLock;
   /** How the send ended, once a receipt shows it. */
   onEnd?: (status: SendEnd["status"]) => Promise<void>;
+  /**
+   * Called once, when the checks, the dry run and the holds have passed and the
+   * transaction is about to go out. Never waited on, and nothing it does or throws
+   * can stop or slow the send (a partner link's binding: lib/partnerAttribution).
+   */
+  beforeBroadcast?: () => void;
 };
+
+/** Hooks a caller may hang on a send. */
+export type SendHooks = Pick<SubmitOpts, "beforeBroadcast">;
+
+function startBeforeBroadcast(hook: (() => void) | undefined): void {
+  try {
+    hook?.();
+  } catch {
+    /* never the send's business */
+  }
+}
 
 const NO_LOCK: InflightLock = { key: "", store: "memory", release: async () => {} };
 
@@ -1013,6 +1030,7 @@ async function submit(net: GloamNetwork, call: Call, opts: SubmitOpts = {}): Pro
       }))
     );
     holds.push(await (call.kind === "memo" ? holdMemoSlot(net, call.budget) : holdNetworkSlot(net)));
+    startBeforeBroadcast(opts.beforeBroadcast);
 
     // one send at a time per relay account and chain, each with the next nonce; with
     // several accounts, the first free one sends (lib/relay/inflight)
@@ -1124,13 +1142,13 @@ function afterReply(task: () => Promise<void>): void {
 async function submitSpend(
   net: GloamNetwork,
   call: Extract<Call, { kind: "transfer" | "unshield" | "swap" | "swapV3" | "swapExit" }>,
-  opts: Pick<SubmitOpts, "afterDryRun" | "returning" | "onEnd" | "sender" | "screened" | "watchUntil"> & {
+  opts: Pick<SubmitOpts, "afterDryRun" | "returning" | "onEnd" | "sender" | "screened" | "watchUntil" | "beforeBroadcast"> & {
     precheck?: () => Promise<void>;
     /** What the lock is on, the nullifier unless said. */
     lockOn?: Hex;
   } = {}
 ): Promise<Hex> {
-  const { precheck, lockOn, afterDryRun, returning, onEnd, sender, screened, watchUntil } = opts;
+  const { precheck, lockOn, afterDryRun, returning, onEnd, sender, screened, watchUntil, beforeBroadcast } = opts;
   const isSwap = call.kind === "swap" || call.kind === "swapV3";
   const nullifier = call.kind === "swapExit" ? call.args[1].nullifier : isSwap ? call.args[0].nullifier : call.args[2];
   let lock: Awaited<ReturnType<typeof takeInflight>>;
@@ -1157,6 +1175,7 @@ async function submitSpend(
       screened,
       watchUntil,
       lock,
+      beforeBroadcast,
     });
     keep = true;
     return hash;
@@ -1169,7 +1188,7 @@ async function submitSpend(
  * `sender` is who asked (an IP, or partner:<id>, or both): the send holds against each
  * one's share of the cap.
  */
-export async function relayTransfer(net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) {
+export async function relayTransfer(net: GloamNetwork, body: Record<string, unknown>, sender?: Sender, hooks: SendHooks = {}) {
   const proof = asProof(body.proof);
   const root = asBytes32(body.root, "root");
   const nullifier = asBytes32(body.nullifier, "nullifier");
@@ -1177,7 +1196,7 @@ export async function relayTransfer(net: GloamNetwork, body: Record<string, unkn
   if (!Array.isArray(commitments) || commitments.length !== 2) throw new RelayError("Invalid commitments.");
   const c0 = asBytes32(commitments[0], "commitment");
   const c1 = asBytes32(commitments[1], "commitment");
-  return submitSpend(net, { kind: "transfer", args: [proof, root, nullifier, [c0, c1]] }, { sender: () => sender });
+  return submitSpend(net, { kind: "transfer", args: [proof, root, nullifier, [c0, c1]] }, { sender: () => sender, beforeBroadcast: hooks.beforeBroadcast });
 }
 
 type UnshieldCall = Extract<Call, { kind: "unshield" }>;
@@ -1199,8 +1218,8 @@ async function unshieldCall(net: GloamNetwork, body: Record<string, unknown>): P
 }
 
 /** As relayTransfer. The recipient is screened once, before anything else. */
-export async function relayUnshield(net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) {
-  return submitSpend(net, await unshieldCall(net, body), { sender: () => sender, screened: true });
+export async function relayUnshield(net: GloamNetwork, body: Record<string, unknown>, sender?: Sender, hooks: SendHooks = {}) {
+  return submitSpend(net, await unshieldCall(net, body), { sender: () => sender, screened: true, beforeBroadcast: hooks.beforeBroadcast });
 }
 
 /**
@@ -1306,7 +1325,7 @@ const erc20BalanceAbi = [
  * `sender` as for relayTransfer. A refund holds against no sender's share: on a chain
  * without a swap floor it holds against the sender's own budget for refunds and exits.
  */
-export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) {
+export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unknown>, sender?: Sender, hooks: SendHooks = {}) {
   if (!swapRouterFor(net.chainId)) throw new RelayError("Private swaps are not live on this network yet.", 400, "no_swap");
   const asked = body.router == null ? null : asAddress(body.router, "router");
   const config = swapRouterFor(net.chainId, asked);
@@ -1396,6 +1415,10 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
       sender: () => sender,
       afterDryRun: (gasLimit) => (refunding ? holdWaiting(net, spend.asset, refund.amount, gasLimit) : holdSwap(net, gasLimit)),
       onEnd: (status) => noteEnded(net, refunding ? `refund|${escrow}` : spend.nullifier, status),
+      // a refund is never a link's swap: no binding for it
+      beforeBroadcast: () => {
+        if (!refunding) hooks.beforeBroadcast?.();
+      },
     }
   );
 }
