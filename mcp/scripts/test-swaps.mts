@@ -11,7 +11,8 @@
  * their stops, a network with no swaps, the owner's limits ("swap" must be listed),
  * both new notes kept before the relay is called, how each outcome settles the
  * notes, a refusal that keeps the refund note, the split of a larger note, the
- * refund and the exit (its recipient under the limits), and the refresh pass.
+ * refund and the exit (its recipient under the limits), the refresh pass, and the
+ * move of a note whose swap reverted to a fresh note (held, and retried, until it lands).
  */
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
@@ -161,10 +162,22 @@ function escrowOf(call: SwapRelayCall): Address {
   });
 }
 
-type RelayMode = "swap" | "refund" | "refuse" | "unclear" | "alone";
+type RelayMode = "swap" | "refund" | "refuse" | "unclear" | "alone" | "revert";
 
-function makeDeps(chain: Chain, env: Env, opts: { mode?: RelayMode; onRelay?: (call: SwapRelayCall) => void; refuseSplit?: boolean } = {}) {
-  const state = { mode: opts.mode ?? "swap", swaps: [] as SwapRelayCall[], transfers: 0, proofs: 0, splits: [] as { exec?: { args: readonly unknown[] } }[] };
+function makeDeps(
+  chain: Chain,
+  env: Env,
+  opts: { mode?: RelayMode; onRelay?: (call: SwapRelayCall) => void; onTransfer?: () => void; refuseSplit?: boolean } = {}
+) {
+  const state = {
+    mode: opts.mode ?? "swap",
+    swaps: [] as SwapRelayCall[],
+    transfers: 0,
+    proofs: 0,
+    splits: [] as { exec?: { args: readonly unknown[] } }[],
+    /** A relay code each private send is refused with while set. */
+    transferRefusal: null as string | null,
+  };
   const prover = async () => {
     state.proofs++;
     return { proofBytes: PROOF };
@@ -180,12 +193,14 @@ function makeDeps(chain: Chain, env: Env, opts: { mode?: RelayMode; onRelay?: (c
       pathForCommitment: async (c: Hex) => (chain.index.has(lc(c)) ? chain.tree.path(chain.index.get(lc(c))!) : null),
     })) as unknown as ServerDeps["syncTree"],
     relayStatus: async () => [{ chainId: 4663, key: "robinhood-mainnet", enabled: true, relayer: null, memo: true, lowBalance: false }],
-    // the split's private send
+    // the split's private send, or a held note's move
     relay: async (intent) => {
+      opts.onTransfer?.();
       state.transfers++;
       state.splits.push(intent);
       // the relay has the split's proof in hand from here on, whatever it answers
       if (opts.refuseSplit) throw new GloamRelayError("Too many requests from this device. Wait a few minutes.", "rate_limit");
+      if (state.transferRefusal) throw new GloamRelayError("This payment is already being sent. Wait a moment and refresh.", state.transferRefusal);
       const [, , nullifier, outs] = intent.exec!.args as [Hex, Hex, Hex, Hex[]];
       chain.spent.add(lc(nullifier));
       for (const c of outs) await chain.insert(c);
@@ -216,6 +231,11 @@ function makeDeps(chain: Chain, env: Env, opts: { mode?: RelayMode; onRelay?: (c
       const h = chain.hash();
       if (state.mode === "alone") {
         chain.unshieldAlone(call, BigInt(b.spend.amount) - vaultFeeOf(BigInt(b.spend.amount), 25));
+        chain.receipts.set(h, { status: "reverted", logs: [] });
+        return h;
+      }
+      if (state.mode === "revert") {
+        // it landed and reverted: nothing spent, nothing made, and its proofs are public now
         chain.receipts.set(h, { status: "reverted", logs: [] });
         return h;
       }
@@ -429,6 +449,168 @@ test("a relay refusal keeps the refund note, and the swapped note is spendable a
   assert.equal(byOrigin(env, "swap")[0]!.status, "dead");
   assert.equal(store.get(n.handle)!.status, "unspent");
   assert.equal(store.get(n.handle)!.recheck, true);
+  // it never went out, so its proof isn't public: nothing is held or moved
+  assert.equal(store.get(n.handle)!.moveFirst, undefined);
+  assert.equal(r.move, undefined);
+});
+
+// ── a swap that reverts: its note moves to a fresh note before it is spendable again ──
+
+const usdgBalance = (list: { balances: { symbol: string; spendable: string; held?: string }[] }) => list.balances.find((b) => b.symbol === "USDG");
+
+test("a swap that reverts moves its note whole to a fresh note right away, kept before the move is sent", async () => {
+  const chain = fakeChain(4663);
+  const env = swapEnv();
+  let atMove: StoredNote[] = [];
+  const { deps, state } = makeDeps(chain, env, { mode: "revert", onTransfer: () => (atMove = openNoteStore(env).list()) });
+  const call = await connect(deps);
+  const n = await keepNote(chain, env, 100_000_000n);
+  const r = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+  assert.equal(r.status, "reverted", JSON.stringify(r));
+  assert.match(r.outcome, /held and moves whole to a fresh note/);
+  assert.equal(r.move.status, "moved", JSON.stringify(r.move));
+  assert.equal(state.transfers, 1, "one private send moved the note");
+  // the move spends the swapped note, whole, into one fresh note of this server's
+  const [, , nullifier, outs] = state.splits[0]!.exec!.args as [Hex, Hex, Hex, Hex[]];
+  assert.equal(lc(nullifier), lc(n.nullifier));
+  const store = openNoteStore(env);
+  const fresh = store.get(r.move.newNote.handle)!;
+  assert.equal(fresh.amountWei, "100000000");
+  assert.equal(lc(outs[0]!), lc(fresh.commitment));
+  assert.equal(byOrigin(env, "change").length, 1, "no change note: the whole value moved");
+  // the fresh note's secret was in the store before the move went out, and the note was taken for it
+  const then = atMove.find((x) => x.handle === fresh.handle);
+  assert.ok(then && then.status === "pending" && then.secret === fresh.secret, "the fresh note was kept before the move was sent");
+  assert.equal(atMove.find((x) => x.handle === n.handle)!.pending, "spend");
+  // the note is spent now, so the reverted swap's proof can't be used; the fresh note is spendable
+  assert.ok(chain.spent.has(lc(n.nullifier)));
+  assert.equal(store.get(n.handle)!.status, "spent");
+  assert.equal(fresh.status, "unspent");
+  const [refund] = byOrigin(env, "swap_refund");
+  assert.equal(refund!.status, "dead");
+  assert.ok(refund!.swap?.refund.secret, "the refund note is still kept");
+  assert.equal(byOrigin(env, "swap")[0]!.status, "dead");
+  const usdg = usdgBalance(await call("gloam_list_notes"));
+  assert.equal(usdg?.spendable, "100");
+  assert.equal(usdg?.held, undefined);
+});
+
+test("a failed move leaves the note held, never offered for a new swap, and a refresh tries it again", async () => {
+  const chain = fakeChain(4663);
+  const env = swapEnv();
+  const { deps, state } = makeDeps(chain, env, { mode: "revert" });
+  // the relay still holds the note for the swap that reverted
+  state.transferRefusal = "in_flight";
+  const call = await connect(deps);
+  const n = await keepNote(chain, env, 100_000_000n);
+  const r = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+  assert.equal(r.status, "reverted", JSON.stringify(r));
+  assert.equal(r.move.status, "held", JSON.stringify(r.move));
+  assert.match(r.move.message, /do not use it in a new swap/);
+  assert.match(r.move.message, /gloam_list_notes with refresh/);
+  assert.equal(state.transfers, 1);
+  let store = openNoteStore(env);
+  assert.equal(store.get(n.handle)!.status, "unspent");
+  assert.ok(store.get(n.handle)!.moveFirst, "held until it moves");
+  assert.ok(!chain.spent.has(lc(n.nullifier)));
+  // the relay has seen the move's proof: its fresh note stays kept (dead), secret and all
+  const tried = byOrigin(env, "change");
+  assert.equal(tried.length, 1);
+  assert.equal(tried[0]!.status, "dead");
+  assert.ok(tried[0]!.secret);
+
+  // the agent sees it held, outside the spendable balance
+  const list = await call("gloam_list_notes");
+  const view = list.notes.find((x: { handle: string }) => x.handle === n.handle);
+  assert.equal(view.status, "held");
+  assert.match(view.held, /moves whole to a fresh note/);
+  assert.equal(usdgBalance(list)?.spendable, "0");
+  assert.equal(usdgBalance(list)?.held, "100");
+
+  // never picked for a new swap, named or not, and nothing but its move takes it
+  state.mode = "swap";
+  const named = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+  assert.equal(named.status, "error");
+  assert.match(named.error, /is held/);
+  const picked = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", amount: 100 });
+  assert.equal(picked.status, "error");
+  assert.match(picked.error, /No single private note/);
+  assert.equal(state.swaps.length, 1, "no second swap went out");
+  assert.throws(() => openNoteStore(env).reserveForSpend(n.handle), /is held/);
+
+  // a refresh right away waits: the next try is due a minute after the last
+  state.transferRefusal = null;
+  let refreshed = await call("gloam_list_notes", { refresh: true });
+  assert.ok(refreshed.refreshed.some((s: string) => s.startsWith(n.handle) && /held until it moves/.test(s)), JSON.stringify(refreshed.refreshed));
+  assert.equal(state.transfers, 1);
+  assert.equal(openNoteStore(env).get(n.handle)!.status, "unspent");
+
+  // a minute on, the refresh moves it
+  const realNow = Date.now;
+  Date.now = () => realNow() + 61_000;
+  try {
+    refreshed = await call("gloam_list_notes", { refresh: true });
+  } finally {
+    Date.now = realNow;
+  }
+  assert.equal(state.transfers, 2);
+  assert.ok(refreshed.refreshed.some((s: string) => s.startsWith(n.handle) && /moved whole to a fresh note/.test(s)), JSON.stringify(refreshed.refreshed));
+  store = openNoteStore(env);
+  assert.equal(store.get(n.handle)!.status, "spent");
+  assert.ok(chain.spent.has(lc(n.nullifier)));
+  const moved = byOrigin(env, "change").filter((x) => x.status === "unspent");
+  assert.equal(moved.length, 1);
+  assert.equal(moved[0]!.amountWei, "100000000");
+  assert.equal(usdgBalance(refreshed)?.spendable, "100");
+  assert.equal(usdgBalance(refreshed)?.held, undefined);
+});
+
+test("a swap that lands, comes back as its refund note, or waits at its escrow moves nothing", async () => {
+  for (const [mode, status] of [
+    ["swap", "swapped"],
+    ["refund", "refunded"],
+    ["alone", "refund_ready"],
+  ] as const) {
+    const chain = fakeChain(4663);
+    const env = swapEnv();
+    const { deps, state } = makeDeps(chain, env, { mode });
+    const call = await connect(deps);
+    const n = await keepNote(chain, env, 100_000_000n);
+    const r = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+    assert.equal(r.status, status, JSON.stringify(r));
+    assert.equal(r.move, undefined, mode);
+    await call("gloam_list_notes", { refresh: true });
+    assert.equal(state.transfers, 0, `${mode}: no private send`);
+    assert.ok(!openNoteStore(env).list().some((x) => x.moveFirst), `${mode}: nothing held`);
+    assert.deepEqual(byOrigin(env, "change"), [], mode);
+    assert.equal(openNoteStore(env).get(n.handle)!.status, "spent", mode);
+  }
+});
+
+test("a swap whose send got no clear answer and that shows nothing for an hour is held and moved", async () => {
+  const chain = fakeChain(4663);
+  const env = swapEnv();
+  const { deps, state } = makeDeps(chain, env, { mode: "unclear" });
+  const call = await connect(deps);
+  const n = await keepNote(chain, env, 100_000_000n);
+  const r = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+  assert.equal(r.status, "error", JSON.stringify(r));
+  // within the hour it may still land: nothing moves
+  let list = await call("gloam_list_notes", { refresh: true });
+  assert.ok(list.refreshed.some((s: string) => /still open/.test(s)), JSON.stringify(list.refreshed));
+  assert.equal(state.transfers, 0);
+  const realNow = Date.now;
+  Date.now = () => realNow() + 61 * 60_000;
+  try {
+    list = await call("gloam_list_notes", { refresh: true });
+  } finally {
+    Date.now = realNow;
+  }
+  assert.ok(list.refreshed.some((s: string) => /showed nothing for an hour/.test(s)), JSON.stringify(list.refreshed));
+  assert.ok(list.refreshed.some((s: string) => s.startsWith(n.handle) && /moved whole to a fresh note/.test(s)), JSON.stringify(list.refreshed));
+  assert.equal(state.transfers, 1);
+  assert.equal(openNoteStore(env).get(n.handle)!.status, "spent");
+  assert.equal(byOrigin(env, "swap_refund")[0]!.status, "dead", "kept, in case the swap shows up after all");
 });
 
 test("an unclear relay answer keeps everything pending, and a refresh settles it from the chain", async () => {

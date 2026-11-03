@@ -90,7 +90,7 @@ import { getPublicClient, getSigner, signerSetup, type Signer } from "./signer.j
 import { checkAccessKey } from "./accessKey.js";
 import { packageVersion } from "./version.js";
 import { receiptArtifacts, shieldArtifacts, transferArtifacts, unshieldArtifacts } from "./artifacts.js";
-import { SWAP_PRIVACY, refreshSwapNotes, registerSwapTools } from "./swaps.js";
+import { SWAP_PRIVACY, refreshSwapNotes, registerSwapTools, type SwapToolContext } from "./swaps.js";
 import {
   allNetworks,
   defaultNetworkKey,
@@ -104,7 +104,19 @@ import {
 } from "./networks.js";
 import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
 import { assetDecimals, authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
-import { balances, deadCheckDue, noteView, openNoteStore, servedPayment, type NoteStore, type PaymentClaim, type PaymentSendState, type StoredNote } from "./noteStore.js";
+import {
+  balances,
+  deadCheckDue,
+  heldMessage,
+  isHeld,
+  noteView,
+  openNoteStore,
+  servedPayment,
+  type NoteStore,
+  type PaymentClaim,
+  type PaymentSendState,
+  type StoredNote,
+} from "./noteStore.js";
 import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
@@ -460,7 +472,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           "gloam_plan_shield: describe a shield before executing (planning)",
           "gloam_execute_shield: REAL private deposit. Mints a note, proves, and broadcasts shieldBound; returns a note handle (execution; needs a signer)",
           "gloam_execute_transfer: sign and broadcast a public transfer of test ETH on Robinhood Chain testnet, for funding (execution; needs a signer)",
-          "gloam_list_notes: this server's private notes as handles, and the private balance per asset (read)",
+          "gloam_list_notes: this server's private notes as handles, and the private balance per asset (read; with refresh it also moves a note a reverted swap left held)",
           "gloam_receive_tag: this server's receive tag, for others to pay it privately (read)",
           "gloam_payment_requirements: price an agent resource in a private payment, as x402 requirements and an MPP challenge (server side)",
           "gloam_pay_x402: plan the private payment for a 402 challenge, x402 or MPP (agent side)",
@@ -492,7 +504,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   );
 
   // Private swaps: quote, execute and finish (src/swaps.ts). They replace the retired sealed-trade tools.
-  registerSwapTools(server, {
+  const swapCtx: SwapToolContext = {
     env,
     text,
     networkArg,
@@ -507,7 +519,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     relay: (intent, opts) => deps.relay(intent, opts),
     relaySwap: (call, opts) => deps.relaySwap(call, opts),
     relayStatus: (opts) => deps.relayStatus(opts),
-  });
+  };
+  registerSwapTools(server, swapCtx);
 
   server.registerTool(
     "gloam_plan_shield",
@@ -788,11 +801,14 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Private notes and balance",
       description:
-        "This server's private notes as handles, with network, asset, amount, status (unspent, pending, spent, or dead when its transaction can never land) and the transaction that created each one, plus the spendable private balance per asset. Never shows a secret. Pass refresh to check pending notes against the chain.",
+        "This server's private notes as handles, with network, asset, amount, status (unspent, pending, spent, dead when its transaction can never land, or held when its last swap reverted and it must move to a fresh note before anything spends it) and the transaction that created each one, plus the spendable private balance per asset. Never shows a secret. Pass refresh to check pending notes against the chain.",
       inputSchema: {
         network: z.enum(NETWORK_KEYS).optional().describe("Only this network."),
         includeSpent: z.boolean().default(false).describe("Also list spent and dead notes."),
-        refresh: z.boolean().default(false).describe("Check pending notes on chain first (read-only calls)."),
+        refresh: z
+          .boolean()
+          .default(false)
+          .describe("Check pending notes on chain first (read-only calls), and move each held note to a fresh note of this server's (a private send through the relay)."),
       },
     },
     async ({ network, includeSpent, refresh }) => {
@@ -801,13 +817,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const notes = opened.store;
       const refreshed: string[] = [];
       if (refresh) {
-        // A swap's two notes settle together, from how the swap ended (src/swaps.ts).
-        refreshed.push(
-          ...(await refreshSwapNotes(
-            { client: (net) => (deps.signer(net)?.publicClient ?? deps.publicClient(net)) as unknown as PublicClient, errMsg, tryStore },
-            notes
-          ))
-        );
+        // A swap's two notes settle together, from how the swap ended, and a note a reverted swap
+        // left held moves to a fresh note (src/swaps.ts).
+        refreshed.push(...(await refreshSwapNotes(swapCtx, notes)));
         // Pending notes and notes made spendable again whose old spend may have landed since; then dead ones (in
         // case a read was wrong) when a look is due, or all of them once this pass sees a late send land.
         const swapOpen = (x: StoredNote) =>
@@ -1244,6 +1256,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         chosen = notes.get(opts.handle);
         if (!chosen) return fail({ status: "error", error: `There is no note "${opts.handle}". Call gloam_list_notes.` });
         if (chosen.status !== "unspent") return fail({ status: "error", error: `Note ${chosen.handle} is ${chosen.status}, not spendable.` });
+        if (isHeld(chosen)) return fail({ status: "error", error: heldMessage(chosen.handle) });
         const why = fits(chosen);
         if (why) return fail({ status: "error", error: why });
         if (await spentOnChain(chosen)) {
@@ -1252,7 +1265,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       } else {
         const candidates = notes
           .list()
-          .filter((n) => n.status === "unspent" && fits(n) === null)
+          .filter((n) => n.status === "unspent" && !isHeld(n) && fits(n) === null)
           .sort((a, b) => (BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1));
         for (const c of candidates) {
           if (!(await spentOnChain(c))) {
