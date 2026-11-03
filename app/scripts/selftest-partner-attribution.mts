@@ -168,6 +168,9 @@ const rhChain: Chain = new Map([[RH.chainId, new Map(Object.entries(FX.receipts)
 const after = (h: Hex, sec = 60) => fakeChain(rhChain, rcpt(h).blockTimestamp + sec);
 const before = (h: Hex, sec = 30) => (rcpt(h).blockTimestamp - sec) * 1000;
 
+/** The in-process store, for reading TTLs and clearing keys. */
+const g = () => (globalThis as { __gloamPartnersMem?: Map<string, { v: unknown; exp: number | null }> }).__gloamPartnersMem!;
+
 function unclaim(hashes: Hex[]) {
   const g = globalThis as { __gloamPartnersMem?: Map<string, unknown> };
   for (const h of hashes) {
@@ -180,6 +183,7 @@ function unregister(hashes: Hex[]) {
   for (const h of hashes) {
     g.__gloamPartnersMem?.delete(k("reg", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
     g.__gloamPartnersMem?.delete(k("relaynf", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
+    g.__gloamPartnersMem?.delete(k("relayjob", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
     g.__gloamPartnersMem?.delete(k("relaytx", RH.chainId, h.toLowerCase()));
   }
 }
@@ -472,10 +476,7 @@ await test("B2 fixed: a transaction the relay sent counts from relay bindings on
   // a count asked for before the relay's binding exists: nobody gets it, and nothing is claimed
   await throwsApi(settle(h), 404, "not_registered");
   assert.equal(await P.attributedTo(RH.chainId, h), null);
-  // a junk relay request with the same nullifier and another proof binds only that proof
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: `0x${"ee".repeat(64)}`, code: malloryCode, flow: "pay", at: before(h, 10) });
-  await throwsApi(settle(h), 404, "not_registered");
-  // the relay binds the code to the proof it was asked to send, before the send: it counts at once
+  // the relay binds the code to the spend just before the send goes out: it counts at once
   await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: offrampCode, flow: "pay", at: before(h, 3) });
   const r = await settle(h);
   assert.equal(r.record.linkCode, offrampCode);
@@ -490,8 +491,9 @@ await test("B2: a proof copied from a landed relay transaction and posted to the
   const h = FX.cashOuts[3]!;
   sentByRelay(h);
   const landed = rcpt(h).blockTimestamp * 1000;
-  // the relay sent it with no code; Mallory reads its calldata once it lands and posts the proof
-  // to the relay under her code (the relay refuses the spent note, but the tie is written as the send starts)
+  // the relay sent it with no code; Mallory reads its calldata once it lands and posts the proof to
+  // the relay under her code. The relay refuses the spent note before binding anything (selftest-relay);
+  // even a tie written after it landed (a node a block behind let the dry run pass) counts for nothing
   for (const at of [landed + 300, landed + 5_000]) {
     assert.equal(await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: malloryCode, flow: "pay", at }), true);
     await throwsApi(settle(h), 404, "not_registered");
@@ -513,6 +515,71 @@ await test("B2: a proof copied from a landed relay transaction and posted to the
   for (const chainId of [1, 11155111, 8453, 84532]) {
     assert.equal(await A.bindRelaySpend({ chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: offrampCode, flow: "pay", at: landed - 60_000 }), false);
     assert.equal(g.__gloamPartnersMem?.has(k("relaynf", chainId, linkNullifierHash(nullifierOf(h)).toLowerCase())), false);
+  }
+});
+
+await test("V1 fixed: a reverted link spend resent through the relay with another code stays with the first link, whatever proof the resend carries", async () => {
+  const h = FX.cashOuts[3]!;
+  const reverted = `0x${"e1".repeat(32)}` as Hex; // Motion's link send of this spend: the relay sent it, it reverted
+  const resend = `0x${"e2".repeat(32)}` as Hex; // the same spend, sent again by the relay for Mallory
+  rhChain.get(RH.chainId)!.set(resend, rcpt(h));
+  sentByRelay(resend);
+  const nf = nullifierOf(h);
+  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: motionCode, flow: "pay", at: before(h, 120) });
+  await A.bindRelayTx({ chainId: RH.chainId, txHash: reverted, code: motionCode, flow: "pay", at: before(h, 120) });
+  // Mallory copies the reverted call and asks the relay to send it again under her code, once with the
+  // same proof (Motion's binding of it stands) and once with another valid proof of the same spend
+  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: malloryCode, flow: "pay", at: before(h, 10) });
+  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: `0x${"ab".repeat(64)}`, code: malloryCode, flow: "pay", at: before(h, 10) });
+  // the relay's after-send step binds the resend's hash to Mallory's code and counts it
+  await A.afterRelaySend({ net: RH, hash: resend, code: malloryCode, flow: "pay", at: before(h, 10), nullifier: nf, wait: async () => {}, deps: after(h) });
+  const c = await P.countedRecord(RH.chainId, resend);
+  assert.equal(c?.partnerId, motion.id, "the earliest binding of the spend, not the resend's hash binding");
+  assert.equal(c?.record.linkCode, motionCode);
+  assert.equal(c?.record.linkBind, "relay");
+  unclaim([resend]);
+  unregister([h]);
+  // with no binding of the spend at all, the resend's hash binding counts: it went out with Mallory's code
+  await A.afterRelaySend({ net: RH, hash: resend, code: malloryCode, flow: "pay", at: before(h, 10), nullifier: nf, wait: async () => {}, deps: after(h) });
+  assert.equal((await P.countedRecord(RH.chainId, resend))?.partnerId, mallory.id);
+  unclaim([resend]);
+  unregister([h]);
+  // a binding of the spend made after the block plays no part: the hash binding counts
+  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: malloryCode, flow: "pay", at: rcpt(h).blockTimestamp * 1000 + 300 });
+  await A.afterRelaySend({ net: RH, hash: resend, code: offrampCode, flow: "pay", at: before(h, 2), nullifier: nf, wait: async () => {}, deps: after(h) });
+  assert.equal((await P.countedRecord(RH.chainId, resend))?.partnerId, offramp.id);
+  unclaim([resend]);
+  unregister([h]);
+  g().delete(k("relaytx", RH.chainId, resend));
+  g().delete(k("relaytx", RH.chainId, reverted));
+  sentByRelay(resend, false);
+  rhChain.get(RH.chainId)!.delete(resend);
+});
+
+await test("V3 fixed: a spend binding made just before a send lasts an hour, and only a send that went out keeps it a week", async () => {
+  const h = FX.cashOuts[3]!;
+  const nf = nullifierOf(h);
+  const key = k("relaynf", RH.chainId, linkNullifierHash(nf).toLowerCase());
+  const ttlSec = () => Math.round((g().get(key)!.exp! - Date.now()) / 1000);
+  assert.equal(A.RELAY_PENDING_TTL_SEC, 3600);
+  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: offrampCode, flow: "pay", at: Date.now() });
+  assert.ok(ttlSec() <= 3600 && ttlSec() > 3590, `pending: ${ttlSec()} s`);
+  // the send went out: the hash binding is written, and the spend binding is kept as long
+  await A.afterRelaySend({ net: RH, hash: h, code: offrampCode, flow: "pay", at: Date.now(), nullifier: nf, wait: async () => {
+    throw new Error("not landed yet");
+  } });
+  assert.ok(ttlSec() > 7 * 86_400 - 10, `after the send: ${ttlSec()} s`);
+  unregister([h]);
+  // a scheduled job's binding lasts as long as the job may wait, in a key of its own
+  await A.bindScheduledJob({ jobId: "job-ttl", chainId: RH.chainId, nullifier: nf, code: offrampCode, at: Date.now() });
+  const job = g().get(k("relayjob", RH.chainId, linkNullifierHash(nf).toLowerCase()))!;
+  assert.ok(job.exp! - Date.now() > 99 * 86_400_000);
+  assert.equal(g().has(key), false, "no pending spend binding for a job");
+  unregister([h]);
+  // none of it on Ethereum or Base
+  for (const chainId of [1, 8453]) {
+    await A.bindScheduledJob({ jobId: `job-${chainId}`, chainId, nullifier: nf, code: offrampCode, at: Date.now() });
+    assert.equal(g().has(k("relayjob", chainId, linkNullifierHash(nf).toLowerCase())), false);
   }
 });
 
