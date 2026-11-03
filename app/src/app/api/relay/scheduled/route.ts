@@ -186,8 +186,8 @@ export async function POST(req: Request) {
     if (saved.outcome !== "created") return answerExisting(saved.job, saved.outcome === "existing");
     if (body.partnerCode !== undefined) {
       const code = body.partnerCode;
-      // bound to the job's spend before anything is sent: the run is minutes away at least
-      after(() => bindScheduledJob({ jobId: job.id, chainId: net.chainId, nullifier, code, at: now }));
+      // kept with the job; it counts only for the transaction the run sends for this job
+      after(() => bindScheduledJob({ jobId: job.id, code, at: now }));
     }
     return NextResponse.json({ ok: true, ...owned(job) }, { headers: NO_STORE });
   } catch (e) {
