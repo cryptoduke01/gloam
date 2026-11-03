@@ -80,8 +80,13 @@ export async function getLinkCode(code: string): Promise<LinkCode | null> {
  * an expired code leaves the live set and starts its own expiry.
  */
 export async function listLinkCodes(partnerId: string, now = Date.now()): Promise<LinkCode[]> {
-  const codes = (await kv1(["SMEMBERS", k("links", partnerId)])) as string[];
-  if (!Array.isArray(codes) || codes.length === 0) return [];
+  const [all, liveSet] = await kv([
+    ["SMEMBERS", k("links", partnerId)],
+    ["SMEMBERS", k("links-live", partnerId)],
+  ]);
+  const codes = (Array.isArray(all) ? all : []) as string[];
+  if (codes.length === 0) return [];
+  const live = new Set(Array.isArray(liveSet) ? (liveSet as string[]) : []);
   const raw = await kv(codes.map((c) => ["GET", k("link", c)] as KvCommand));
   const tidy: KvCommand[] = [];
   const out: LinkCode[] = [];
@@ -91,7 +96,8 @@ export async function listLinkCodes(partnerId: string, now = Date.now()): Promis
       tidy.push(["SREM", k("links", partnerId), code], ["SREM", k("links-live", partnerId), code]);
       return;
     }
-    if (linkCodeState(c, now) === "expired") {
+    // an expired code leaves the live set once, and its record's 30 days start then, not on every read
+    if (linkCodeState(c, now) === "expired" && live.has(code)) {
       tidy.push(["SREM", k("links-live", partnerId), code], ["EXPIRE", k("link", code), REVOKED_TTL_SEC]);
     }
     out.push(c);

@@ -134,7 +134,9 @@ export function PartnerBreakdown({
             {testnet
               ? "Testnet: counted, never valued. Test tokens have no price. "
               : "Volume is the dollar value of public edges: deposits, cash outs and each swap's input. The vault fee is Gloam's own cash-out fee on those cash outs and swaps, read from each transaction or the vault's setting at the time. "}
-            Nothing is charged to partners. Private payments show only as counts: never an amount, and never one by one.
+            Nothing is charged to partners. Private payments show only as counts: never an amount, never one by one, and, in the
+            partner&apos;s own view, only for days that have ended (UTC). Fee-split grade: API key, relay-bound links and matched on
+            chain. Link counts the payer&apos;s wallet registered are attribution grade (shown in brackets).
             {notMatched ? ` ${notMatched.privatePayments} ${notMatched.swaps}` : ""}
           </>
         }
@@ -146,6 +148,9 @@ export function PartnerBreakdown({
             return [
               <span key="s" title={SOURCE_HINT[s]}>
                 {SOURCE_LABEL[s]}
+                {s === "link" && KINDS.some(([kind]) => r.walletBound[kind] > 0)
+                  ? ` (${int.format(KINDS.reduce((n, [kind]) => n + r.walletBound[kind], 0))} by wallet)`
+                  : ""}
               </span>,
               ...KINDS.map(([kind]) => int.format(r.counts[kind])),
               money(r.volumeUsd),
@@ -168,7 +173,10 @@ export function PartnerBreakdown({
         />
       </Section>
 
-      <Section title={`By day, last ${days} days (UTC)`} foot="Days with no activity are left out. API, link and chain are counts by source.">
+      <Section
+        title={`By day, last ${days} days (UTC)`}
+        foot="Days with no activity are left out. API, link and chain are counts by source. A partner's own view counts private payments only once their day has ended."
+      >
         <Table
           headers={["Day", "Payments", "Cash outs", "Deposits", "Swaps", "Volume", "Swap volume", "Vault fee", "API · link · chain"]}
           rows={active.map((d) => {

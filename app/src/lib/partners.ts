@@ -235,10 +235,13 @@ export const PARTNER_NAME_MAX = 60;
 /**
  * Why a name can't be an account's name, or null. The rules a swap link's ref
  * is held to (lib/swapLink readSwapRef): a plain name of at most 32 characters
- * and 4 words, no web address, no markup, and never "Gloam".
+ * and 4 words, no web address, no markup, and never "Gloam"; and plain ASCII
+ * only, so no look-alike letters.
  */
 export function partnerNameProblem(name: string): string | null {
   if (name.length < 2) return "Add your app's name (at least two characters).";
+  // plain ASCII only, so a look-alike letter (a Cyrillic "о" in "Glоam") can't pass
+  if (/[^\x20-\x7e]/.test(name)) return "Use plain letters and digits (A to Z, 0 to 9) and spaces.";
   const { ref, problem } = readSwapRef(name);
   if (!ref || ref !== name) {
     return problem && /Gloam/.test(problem)
@@ -463,6 +466,12 @@ export type ActivityRecord = {
   keyId: string | null;
   /** The partner's link code it came through (source "link"). */
   linkCode?: string | null;
+  /**
+   * How a link count was bound (source "link"): "relay", the relay bound the code to the
+   * transaction it sent (fee-split grade); "wallet", the payer's app registered it before
+   * its wallet sent (attribution grade). lib/partnerAttribution.
+   */
+  linkBind?: "relay" | "wallet" | null;
   /** The vault's own cash-out fee on it, smallest units of `asset`; null when not known. */
   vaultFee?: string | null;
   vaultFeeUsd?: number | null;
@@ -495,7 +504,7 @@ const toMicros = (v: number | null | undefined): bigint | null => (v == null ? n
 
 /** A stored record as shown: one from before sources existed came in with a key. */
 function normalized(r: ActivityRecord): ActivityRecord {
-  return { ...r, source: r.source ?? "api", linkCode: r.linkCode ?? null, vaultFee: r.vaultFee ?? null, vaultFeeUsd: r.vaultFeeUsd ?? null };
+  return { ...r, source: r.source ?? "api", linkCode: r.linkCode ?? null, linkBind: r.linkBind ?? null, vaultFee: r.vaultFee ?? null, vaultFeeUsd: r.vaultFeeUsd ?? null };
 }
 
 /**
@@ -506,6 +515,8 @@ function normalized(r: ActivityRecord): ActivityRecord {
 export function incrementsOf(r: ActivityRecord): [string, bigint][] {
   const base = `${r.network}|${r.source ?? "api"}|${r.kind}|`;
   const out: [string, bigint][] = [[`${base}n`, 1n]];
+  // a link count the payer's wallet registered, apart from the relay-bound ones
+  if ((r.source ?? "api") === "link" && r.linkBind === "wallet") out.push([`${base}nw`, 1n]);
   const fee = toMicros(r.feeUsd);
   if (fee != null) out.push([`${base}fee`, fee]);
   if (r.kind !== "private_payment") {
@@ -554,6 +565,8 @@ export async function recordActivity(args: {
   source?: ActivitySource;
   /** The link code it came through (source "link"). */
   linkCode?: string | null;
+  /** How that link count was bound (source "link"). */
+  linkBind?: "relay" | "wallet" | null;
   /** The vault's own fee on a public edge, smallest units of its asset; null or left out when not known. */
   vaultFee?: bigint | null;
   /** When it happened, ms (the block's time for a link or an on-chain match): it keeps its own day and never moves `last` back. */
@@ -603,6 +616,7 @@ export async function recordActivity(args: {
     source,
     keyId: source === "api" ? args.keyId : null,
     linkCode: source === "link" ? (args.linkCode ?? null) : null,
+    linkBind: source === "link" ? (args.linkBind ?? null) : null,
     vaultFee: vaultFee == null ? null : vaultFee.toString(),
     vaultFeeUsd: micros(vaultFeeUsdMicros),
     asset: kind === "private_payment" || !args.edge ? null : (getAddress(args.edge.asset) as Address),
@@ -617,9 +631,10 @@ export async function recordActivity(args: {
   const json = JSON.stringify(record);
   const lastField = `last|${tierOf(net.key)}`;
 
-  // a transaction counted at its own (earlier) time never moves "last" back
-  let setLast = true;
-  if (args.now !== undefined) {
+  // A private payment never moves "last": its time would point at it on chain.
+  // A transaction counted at its own (earlier) time never moves "last" back.
+  let setLast = kind !== "private_payment";
+  if (setLast && args.now !== undefined) {
     const prev = Number(await kv1(["HGET", k("stats2", partner.id), lastField]));
     setLast = !(Number.isFinite(prev) && prev >= now);
   }
@@ -708,6 +723,7 @@ async function migrateOne(id: string): Promise<void> {
     const last: Partial<Record<Tier, number>> = {};
     for (const r of legacy) {
       cmds.push(...counterCommands(id, r, 1n));
+      if (r.kind === "private_payment") continue; // never sets "last" (see recordActivity)
       const t = tierOf(r.network);
       last[t] = Math.max(last[t] ?? 0, r.ts);
     }
@@ -746,6 +762,8 @@ export type KindTotals = {
 /** One source's share: counts, USD volume of public edges and the vault's fee, by kind and in all. */
 export type SourceTotals = {
   counts: Record<ActivityKind, number>;
+  /** Of `counts`, the link counts the payer's wallet registered (attribution grade); the rest of a link's are relay-bound. */
+  walletBound: Record<ActivityKind, number>;
   /** USD of priced public edges (deposits, cash outs, swaps' inputs), by kind. */
   volumeUsdByKind: Record<ActivityKind, number>;
   vaultFeeUsdByKind: Record<ActivityKind, number>;
@@ -849,8 +867,8 @@ const zeroKinds = (): Record<ActivityKind, number> => ({ private_payment: 0, cas
 const isKind = (s: string): s is ActivityKind => (ACTIVITY_KINDS as string[]).includes(s);
 const isSource = (s: string): s is ActivitySource => (ACTIVITY_SOURCES as string[]).includes(s);
 
-type Cell = { n: number; usd: number; fee: number; vf: number; unp: number; vfu: number };
-const emptyCell = (): Cell => ({ n: 0, usd: 0, fee: 0, vf: 0, unp: 0, vfu: 0 });
+type Cell = { n: number; nw: number; usd: number; fee: number; vf: number; unp: number; vfu: number };
+const emptyCell = (): Cell => ({ n: 0, nw: 0, usd: 0, fee: 0, vf: 0, unp: 0, vfu: 0 });
 
 /** The tier's counter cells by network, source and kind, from one hash. */
 function cellsOf(c: Record<string, number>, tier: Tier): Map<string, { network: NetworkKey; source: ActivitySource; kind: ActivityKind; cell: Cell }> {
@@ -860,7 +878,7 @@ function cellsOf(c: Record<string, number>, tier: Tier): Map<string, { network: 
     if (parts.length !== 4) continue;
     const [network, source, kind, metric] = parts as [string, string, string, string];
     if (!isNetworkKey(network) || !isSource(source) || !isKind(kind) || tierOf(network) !== tier) continue;
-    if (!["n", "usd", "fee", "vf", "unp", "vfu"].includes(metric)) continue;
+    if (!["n", "nw", "usd", "fee", "vf", "unp", "vfu"].includes(metric)) continue;
     const key = `${network}|${source}|${kind}`;
     const row = out.get(key) ?? { network, source, kind, cell: emptyCell() };
     row.cell[metric as keyof Cell] += v;
@@ -873,16 +891,18 @@ function sourcesOf(cells: ReturnType<typeof cellsOf>): Record<ActivitySource, So
   const out = {} as Record<ActivitySource, SourceTotals>;
   for (const src of ACTIVITY_SOURCES) {
     const counts = zeroKinds();
+    const walletBound = zeroKinds();
     const volumeUsdByKind = zeroKinds();
     const vaultFeeUsdByKind = zeroKinds();
     for (const { source, kind, cell } of cells.values()) {
       if (source !== src) continue;
       counts[kind] += cell.n;
+      walletBound[kind] += cell.nw;
       volumeUsdByKind[kind] += cell.usd / 1e6;
       vaultFeeUsdByKind[kind] += cell.vf / 1e6;
     }
     const sum = (r: Record<ActivityKind, number>) => ACTIVITY_KINDS.reduce((s, kind) => s + r[kind], 0);
-    out[src] = { counts, volumeUsdByKind, vaultFeeUsdByKind, volumeUsd: sum(volumeUsdByKind), vaultFeeUsd: sum(vaultFeeUsdByKind) };
+    out[src] = { counts, walletBound, volumeUsdByKind, vaultFeeUsdByKind, volumeUsd: sum(volumeUsdByKind), vaultFeeUsd: sum(vaultFeeUsdByKind) };
   }
   return out;
 }
@@ -1010,9 +1030,11 @@ export const STATS_DAYS_MAX = 120;
 /**
  * One partner's figures for one tier: totals, the last `days` days (14 unless
  * asked), and (optionally) the most recent activity on that tier.
- * `forPartner`: what the partner itself is shown. Private payments are left out
- * of the list (they show only as counts per day), so a partner can't tie a hidden
- * payment to an invoice; cash outs and swaps, public on chain, stay listed.
+ * `forPartner`: what the partner itself is shown. Private payments are never
+ * listed one by one, and are counted only for days that have ended (UTC): today's
+ * are left out of every figure until the day closes, and none ever moves
+ * lastActivity, so no figure moves when one lands and none can be found on chain
+ * by its time. Cash outs and swaps, public on chain, stay listed.
  */
 export async function readPartnerStats(
   partnerId: string,
@@ -1028,6 +1050,17 @@ export async function readPartnerStats(
   const res = await kv(cmds);
   const stats = hashNumbers(res[0]);
   const dayRows = days.map((day, i) => ({ day, counters: hashNumbers(res[i + 1]) }));
+  if (opts.forPartner) {
+    // today's private payments wait for the day to close: out of the day and out of the totals
+    const today = dayRows.find((d) => d.day === utcDay(Date.now()));
+    if (today) {
+      for (const [f, v] of Object.entries(today.counters)) {
+        if (f.split("|")[2] !== "private_payment") continue;
+        stats[f] = (stats[f] ?? 0) - v;
+        today.counters[f] = 0;
+      }
+    }
+  }
   const recentRaw = recentN > 0 ? (res[days.length + 1] as unknown[]) : [];
   // newest first by when it happened: a past one matched on chain is pushed with today's, but keeps its own time
   const recent = (Array.isArray(recentRaw) ? recentRaw : [])
@@ -1129,7 +1162,7 @@ function units(raw: string | null | undefined, decimals: number | null | undefin
 /** One row per recorded transaction: only public facts. Newest first, as given. */
 export function activityCsv(partners: { id: string; name: string; recent: ActivityRecord[] }[]): string {
   const rows: (string | number | null)[][] = [
-    ["Time (UTC)", "Partner id", "Partner", "Source", "Network", "Chain id", "Kind", "Transaction", "Token", "Token address", "Amount", "Volume (USD)", "Vault fee", "Vault fee (USD)"],
+    ["Time (UTC)", "Partner id", "Partner", "Source", "Network", "Chain id", "Kind", "Transaction", "Token", "Token address", "Amount", "Volume (USD)", "Vault fee", "Vault fee (USD)", "Link bound by"],
   ];
   for (const p of partners) {
     for (const r of p.recent) {
@@ -1149,6 +1182,7 @@ export function activityCsv(partners: { id: string; name: string; recent: Activi
         n.volumeUsd == null ? "" : usd2(n.volumeUsd),
         units(n.vaultFee, n.decimals),
         n.vaultFeeUsd == null ? "" : usd2(n.vaultFeeUsd),
+        n.source === "link" ? (n.linkBind === "relay" ? "Relay" : n.linkBind === "wallet" ? "Payer's wallet" : "") : "",
       ]);
     }
   }

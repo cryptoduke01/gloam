@@ -229,7 +229,7 @@ export function Overview({
         <p className="text-[12.5px] text-mute">{testnet ? "Testnet figures: counted, never valued in dollars." : "Mainnet figures. Testnet is counted apart."}</p>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Private payments" value={fmtInt(t.privatePayments)} sub="amounts hidden, counted per day" />
+        <Kpi label="Private payments" value={fmtInt(t.privatePayments)} sub="days that have ended (UTC), amounts hidden" />
         <Kpi
           label="Public volume"
           value={testnet ? "Not priced" : fmtUsd(t.publicVolumeUsd)}
@@ -240,7 +240,7 @@ export function Overview({
           value={testnet ? "Not priced" : fmtUsd(t.commissionUsd)}
           sub={testnet ? "testnet, nothing charged" : mainnetLive ? "nothing charged yet" : "nothing charged"}
         />
-        <Kpi label="Active keys" value={fmtInt(activeKeys)} sub={stats.lastActivity ? `last payment ${ago(stats.lastActivity)}` : "no payments yet"} />
+        <Kpi label="Active keys" value={fmtInt(activeKeys)} sub={stats.lastActivity ? `last cash out, deposit or swap ${ago(stats.lastActivity)}` : "nothing public yet"} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
@@ -286,7 +286,7 @@ export function Overview({
         title="Recent cash outs, deposits and swaps"
         flush
         action={<span className="text-[12.5px] text-mute">{loading ? "Checking…" : "Updates every 20 seconds"}</span>}
-        foot="Cash outs, deposits and swaps are public on chain, so they are listed with their transaction. Private payments are not listed one by one, to you or anyone: they show only as counts per day, so no hidden payment can be tied to an invoice or a link. Fees on cash outs and deposits would be paid in the same token."
+        foot="Cash outs, deposits and swaps are public on chain, so they are listed with their transaction. Private payments are never listed one by one, and are counted only once their day (UTC) has ended, so no hidden payment can be tied to an invoice, a link or a moment. Fees on cash outs and deposits would be paid in the same token."
       >
         {stats.recent.length === 0 ? (
           <div className="px-5 py-12 text-center sm:px-6">
