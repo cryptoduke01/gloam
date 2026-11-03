@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
-import { afterRelaySend, bindRelaySpend, relayFlowOf, relaySpendOf } from "@/lib/partnerAttribution";
+import { afterRelaySend, bindRelaySpend, relayFlowOf, unbindRelaySpend, type BoundSpend } from "@/lib/partnerAttribution";
 import {
   RelayError,
   checkChainRateLimit,
@@ -15,6 +15,7 @@ import {
   relayUnshield,
   relayVaultSwap,
   relayVaultSwapExit,
+  type SendHooks,
 } from "@/lib/relay/server";
 
 export const runtime = "nodejs";
@@ -40,17 +41,19 @@ export async function GET() {
  * (lib/relay/gasStation), off unless switched on.
  *
  * A send opened from a partner's link may carry { partnerCode }. Nothing about
- * the send changes. As the send starts, the relay binds the code to the proof it
- * was asked to send (one store write, started alongside the send and never
- * waited on before it); once the send is out, to the transaction's hash; then it
- * counts the transaction when it lands, after the response (lib/partnerAttribution).
- * None of this ever fails or delays a send.
+ * the send changes. Once the relay's checks, dry run and holds have passed, just
+ * before the transaction goes out, the code is bound to that exact payment (one
+ * store write, started then and never waited on); a request the relay refuses
+ * binds nothing, and one that then surely didn't go out is taken back. Once the
+ * send is out, the code is bound to the transaction's hash, and the transaction is
+ * counted when it lands, after the response (lib/partnerAttribution). None of
+ * this ever fails or delays a send.
  */
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
-    // a link's code is read now, bound as the send starts, counted after it (lib/partnerAttribution)
+    // a link's code is read now, bound just before the send goes out, counted after it (lib/partnerAttribution)
     const takenAt = Date.now();
     const partnerCode = body.partnerCode;
     const net = networkForChain(body.chainId);
@@ -58,16 +61,24 @@ export async function POST(req: Request) {
     await checkRateLimit(requester);
     // payment messages have budgets of their own (lib/relay/server holdMemoSlot)
     if (body.action !== "memo") await checkChainRateLimit(net, requester);
-    // within the limits only; started alongside the send, never waited on before it
-    const spend = partnerCode !== undefined ? relaySpendOf(body) : null;
-    const bound = spend
-      ? bindRelaySpend({ chainId: net.chainId, nullifier: spend.nullifier, proof: spend.proof, code: partnerCode, flow: spend.flow, at: takenAt }).catch(() => false)
-      : undefined;
+    // bound only once the relay's checks, dry run and holds passed (beforeBroadcast), never waited on
+    const flow = partnerCode !== undefined ? relayFlowOf(body) : null;
+    let bound: Promise<BoundSpend | null> | undefined;
+    const hooks: SendHooks = flow
+      ? {
+          beforeBroadcast: (tx) => {
+            const b = bindRelaySpend({ net, tx, code: partnerCode, flow, at: Date.now() }).catch(() => null);
+            bound = b;
+            // the send surely didn't go out: take the binding back
+            return () => void b.then(unbindRelaySpend);
+          },
+        }
+      : {};
 
     let hash: `0x${string}`;
     switch (body.action) {
       case "transfer": {
-        hash = await relayTransfer(net, body, requester);
+        hash = await relayTransfer(net, body, requester, hooks);
         if (partnerCode !== undefined) {
           const sent = hash;
           after(() => afterRelaySend({ net, hash: sent, code: partnerCode, flow: relayFlowOf(body), at: takenAt, bound }));
@@ -77,7 +88,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, hash, memoTicket: memoTicket(net.chainId, payment) });
       }
       case "unshield":
-        hash = await relayUnshield(net, body, requester);
+        hash = await relayUnshield(net, body, requester, hooks);
         break;
       case "gas-station":
         hash = await relayGasStation(net, body, requester);
@@ -86,7 +97,7 @@ export async function POST(req: Request) {
         hash = await relayMemo(net, body);
         break;
       case "swap":
-        hash = await relayVaultSwap(net, body, requester);
+        hash = await relayVaultSwap(net, body, requester, hooks);
         break;
       case "swapExit":
         hash = await relayVaultSwapExit(net, body, requester);

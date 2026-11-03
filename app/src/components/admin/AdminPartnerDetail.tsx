@@ -450,7 +450,9 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
       <p className="text-[13px] leading-relaxed text-mute">
         Reads every mainnet vault&apos;s cash outs (Unshielded) and counts the ones that paid a partner&apos;s proven receiving
         address, as &quot;matched on chain&quot;; one a link counted to someone else moves to the address&apos;s partner. It also counts
-        cash outs registered from a partner&apos;s link that nobody counted yet. Read-only on chain. A transaction is never counted
+        link cash outs nobody counted yet whose tie is still kept (a wallet registration for an hour, the relay&apos;s tie to the
+        transaction for a week, its tie to that exact payment for an hour if the relay stopped before tying the transaction;
+        that last one only on Robinhood Chain and Tempo). Read-only on chain. A transaction is never counted
         twice. Past private payments can&apos;t be matched: inside the vault the payee and the amount are hidden. Swaps can&apos;t either:
         a swap&apos;s output goes back into the vault, not to an address. A dry run counts nothing and shows what it found per
         address; counting needs a dry run of the same addresses first.

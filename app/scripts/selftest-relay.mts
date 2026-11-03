@@ -48,7 +48,7 @@
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-relay.mts
  */
 import assert from "node:assert/strict";
-import { getAddress, toFunctionSelector, toHex, type Address, type Hex } from "viem";
+import { encodeFunctionData, getAddress, toFunctionSelector, toHex, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
 
 delete process.env.UPSTASH_REDIS_REST_URL;
@@ -64,6 +64,7 @@ const {
   asMemo,
   memoTicket,
   relayMemo,
+  relayPoolAbi,
   relayTransfer,
   relayUnshield,
   sendFailure,
@@ -82,6 +83,11 @@ const { swapRoutersOn } = await import("../src/lib/vaultSwap");
 const { cashOutTargetProblem: sdkCashOutTargetProblem } = await import("@gloamtrade/sdk");
 const { RH_MAINNET_SWAP_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS, shieldTokensFor } = await import("../src/lib/tokens");
 const { POST: relayPost } = await import("../src/app/api/relay/route");
+const partners = await import("../src/lib/partners");
+const partnerLinks = await import("../src/lib/partnerLinks");
+const { k: partnersKey } = await import("../src/lib/partnersKv");
+const { linkNullifierHash } = await import("../src/lib/partnerCode");
+const { spendIdOf } = await import("../src/lib/partnerAttribution");
 const { resetRpcChecks, serverTransport } = await import("../src/lib/serverRpc");
 const { getNetwork } = await import("../src/lib/networks");
 const { buildNotePackage, encodeNotePackage } = await import("../src/lib/notePackage");
@@ -133,7 +139,9 @@ function nullifier(): Hex {
 type SendMode = "ok" | "reject" | "drop" | "http502" | "known" | "nonce_once" | "private_took";
 /** What the node says about the send's receipt: how it ended, "none" yet, or a failed read. */
 type ReceiptMode = "success" | "reverted" | "none" | "error";
-const chain = { spent: false, known: true, seen: true, send: "ok" as SendMode, receipt: "success" as ReceiptMode };
+/** How the dry run (eth_estimateGas) answers: "ok", or "revert" (a bad proof). */
+type EstimateMode = "ok" | "revert";
+const chain = { spent: false, known: true, seen: true, send: "ok" as SendMode, receipt: "success" as ReceiptMode, estimate: "ok" as EstimateMode };
 const calls: string[] = [];
 /** Which RPC got each raw send. */
 const sends: ("public" | "private" | "wrong")[] = [];
@@ -262,6 +270,7 @@ function answer(r: RpcReq): { result?: unknown; error?: { code: number; message:
     case "eth_gasPrice":
       return { result: "0x1" };
     case "eth_estimateGas":
+      if (chain.estimate === "revert") return { error: { code: 3, message: "execution reverted: InvalidProof" } };
       return { result: "0x1b7740" };
     case "eth_call": {
       const data = String((r.params?.[0] as { data?: string; input?: string })?.data ?? (r.params?.[0] as { input?: string })?.input);
@@ -376,7 +385,7 @@ function callName(r: RpcReq): string {
 }
 
 function reset(state: Partial<typeof chain> = {}) {
-  Object.assign(chain, { spent: false, known: true, seen: true, send: "ok", receipt: "success" }, state);
+  Object.assign(chain, { spent: false, known: true, seen: true, send: "ok", receipt: "success", estimate: "ok" }, state);
   calls.length = 0;
   sends.length = 0;
   receiptReads.length = 0;
@@ -632,6 +641,99 @@ await test("send: once sent, the lock holds and a duplicate is refused without a
   await assert.rejects(relayTransfer(net, transferBody(nul)), isRelayError("in_flight", 409));
   assert.deepEqual(calls, []);
   assert.equal(await lockFree(nul), false);
+});
+
+// ---------------------------------------------------------------- a partner link's binding (V2, V3)
+
+await test("V2: the before-broadcast hook runs once the checks, dry run and holds pass, just before the raw send; never for a refused request", async () => {
+  // a send that goes out: called once, after the dry run, before the raw send
+  reset();
+  const seen: string[][] = [];
+  assert.equal(await relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: () => void seen.push([...calls]) }), TX_HASH);
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0]!.includes("eth_estimateGas") && !seen[0]!.includes("eth_sendRawTransaction"));
+  assert.ok(calls.includes("eth_sendRawTransaction"));
+  // it is handed the call that goes out, so a binding names that exact payment (lib/partnerAttribution spendIdOf)
+  reset();
+  const handed: { to: string; data: Hex }[] = [];
+  const nulA = nullifier();
+  assert.equal(await relayUnshield(net, unshieldBody(nulA, CLEAN), undefined, { beforeBroadcast: (tx) => void handed.push(tx) }), TX_HASH);
+  assert.equal(handed.length, 1);
+  assert.equal(handed[0]!.to.toLowerCase(), POOL.toLowerCase());
+  const id = spendIdOf(net, { to: handed[0]!.to, input: handed[0]!.data });
+  assert.ok(id && id.nullifier.toLowerCase() === nulA.toLowerCase());
+  // the same payment with another proof is the same payment; another recipient is not
+  const call = (proof: Hex, to: Address) =>
+    encodeFunctionData({ abi: relayPoolAbi, functionName: "unshield", args: [proof, H32, nulA, "0x0000000000000000000000000000000000000000", to, 1n] });
+  assert.equal(spendIdOf(net, { to: POOL, input: call(("0x" + "33".repeat(256)) as Hex, CLEAN) })?.id, id.id);
+  assert.notEqual(spendIdOf(net, { to: POOL, input: call(PROOF, "0x2222222222222222222222222222222222222222") })?.id, id.id);
+  // what the hook returns is called when the send surely didn't go out (the node refused it), not when it went out
+  let undone = 0;
+  reset({ send: "reject" });
+  await assert.rejects(relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: () => () => void undone++ }), isRelayError("relay_empty", 503));
+  assert.equal(undone, 1);
+  reset();
+  assert.equal(await relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: () => () => void undone++ }), TX_HASH);
+  assert.equal(undone, 1);
+  // a send the node may have taken keeps it
+  reset({ send: "drop" });
+  await assert.rejects(relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: () => () => void undone++ }), isRelayError("maybe_sent", 502, MAYBE_SENT_MESSAGE));
+  assert.equal(undone, 1);
+  // a hook that throws changes nothing about the send
+  reset();
+  assert.equal(await relayUnshield(net, unshieldBody(nullifier(), CLEAN), undefined, { beforeBroadcast: () => {
+    throw new Error("store down");
+  } }), TX_HASH);
+  // refused before anything goes out: a spent note, an unknown root, a dry run that reverts, a spend in flight
+  const never = () => assert.fail("the hook ran for a refused request");
+  reset({ spent: true });
+  await assert.rejects(relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: never }), isRelayError("AlreadySpent", 409));
+  reset({ known: false });
+  await assert.rejects(relayUnshield(net, unshieldBody(nullifier(), CLEAN), undefined, { beforeBroadcast: never }), isRelayError("UnknownRoot", 409));
+  reset({ estimate: "revert" });
+  await assert.rejects(relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: never }));
+  assert.ok(!calls.includes("eth_sendRawTransaction"));
+  reset();
+  const nul = nullifier();
+  const held = await takeInflight(inflightKey(net.chainId, nul));
+  assert.ok(held);
+  await assert.rejects(relayTransfer(net, transferBody(nul), undefined, { beforeBroadcast: never }), isRelayError("in_flight", 409));
+  await held.release();
+});
+
+await test("V2, V3: a relay request with a partner's code that the relay refuses leaves nothing in the partner store", async () => {
+  const p = await partners.upsertPartner("0x000000000000000000000000000000000000dEaD", { name: "Mallory" });
+  const code = (await partnerLinks.issueLinkCode({ partnerId: p.id, by: "partner" })).code;
+  const mem = (globalThis as { __gloamPartnersMem?: Map<string, unknown> }).__gloamPartnersMem;
+  const bound = (nul: Hex) =>
+    mem?.has(partnersKey("relayspendnf", net.chainId, linkNullifierHash(nul).toLowerCase())) ||
+    [...(mem?.keys() ?? [])].some((key) => key.startsWith(partnersKey("relayspend", net.chainId) + ":"));
+  const cases: [Partial<typeof chain>, string][] = [
+    [{ spent: true }, "transfer"],
+    [{ known: false }, "transfer"],
+    [{ estimate: "revert" }, "transfer"],
+    [{ spent: true }, "unshield"],
+  ];
+  for (const [state, action] of cases) {
+    reset(state);
+    const nul = nullifier();
+    const body = action === "transfer" ? transferBody(nul) : unshieldBody(nul, CLEAN);
+    const res = await relayPost(req("http://localhost/api/relay", { chainId: net.chainId, action, ...body, partnerCode: code }, `198.51.100.${n % 250}`));
+    const out = (await res.json()) as { code?: string };
+    console.log(`    ${action} ${JSON.stringify(state)}: ${res.status} ${out.code}`);
+    assert.ok(calls.includes("eth_call:spent"), "the request reached the relay's checks");
+    assert.ok(!calls.includes("eth_sendRawTransaction"));
+    assert.equal(bound(nul), false, `${action} ${JSON.stringify(state)} bound a spend`);
+  }
+  // nor a request for a spend already in flight (a copy of a proof being sent)
+  reset();
+  const nul = nullifier();
+  const held = await takeInflight(inflightKey(net.chainId, nul));
+  assert.ok(held);
+  const res = await relayPost(req("http://localhost/api/relay", { chainId: net.chainId, action: "transfer", ...transferBody(nul), partnerCode: code }));
+  assert.equal(res.status, 409);
+  assert.equal(bound(nul), false);
+  await held.release();
 });
 
 await test("cash out: once sent, the lock holds; spent check came before the dry run", async () => {

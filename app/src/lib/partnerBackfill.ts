@@ -118,8 +118,8 @@ export const backfillDeps: BackfillDeps = {
       logs.flatMap((l) => [
         ["EXISTS", k("relaytx", chainId, l.txHash.toLowerCase())],
         ["EXISTS", k("reg", chainId, linkNullifierHash(l.nullifier).toLowerCase())],
-        // bound by the relay before it sent, when its after-send step never ran
-        ["EXISTS", k("relaynf", chainId, linkNullifierHash(l.nullifier).toLowerCase())],
+        // a payment of this note the relay bound just before sending (kept an hour if its after-send step never ran)
+        ["EXISTS", k("relayspendnf", chainId, linkNullifierHash(l.nullifier).toLowerCase())],
       ] as KvCommand[])
     );
     return logs.map((_, i) => [0, 1, 2].some((j) => Number(res[3 * i + j]) > 0));

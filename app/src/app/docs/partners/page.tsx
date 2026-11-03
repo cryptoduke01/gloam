@@ -648,16 +648,25 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
         <li>
           <strong>Through the Gloam relay</strong> (the default for payments and
           cash outs, and the only way for swaps): the payer&apos;s app hands your
-          code to the relay with the proof. Before it sends, the relay ties your
-          code to that exact proof; once sent, to the transaction&apos;s hash; and
-          it counts the transaction once it lands. A cash out the relay sends later
-          is tied to your code when it is scheduled. A transaction the relay sent is
-          counted only from the relay&apos;s own ties, never from anything else, so
-          nobody can get in ahead of them, even by reading the transaction while it
-          is pending. A tie to a proof counts only if it was made before the
-          transaction&apos;s block, so posting a copy of a landed proof to the relay
-          ties nothing; on Ethereum and Base, where pending calldata is public, the
-          relay ties by the transaction&apos;s hash only.
+          code to the relay with the proof. Once the relay has checked the payment
+          and dry-run it, just before it goes out, the relay ties your code to that
+          exact payment: the note it spends, the root and what it pays out, whatever
+          proof carries them. Once sent, it ties your code to the transaction&apos;s
+          hash, and counts the transaction once it lands. A request the relay turns
+          down ties nothing, and one that then surely didn&apos;t go out is untied.
+          A cash out the relay sends later keeps your code with its job, and counts
+          only for the transaction the relay sends for that job.
+          <br />
+          The rule for a transaction the relay sent: it counts to the first code
+          tied to that exact payment before its block, otherwise to the code the
+          relay sent it with, otherwise to nobody. A wallet registration never
+          counts for it. So a code goes with a payment only if the relay was asked
+          to send that very payment with it, before it landed: a copy of a landed
+          proof ties nothing, another spend of the same note (other outputs, other
+          root) never inherits a code, and a payment from your link that failed on
+          chain and was sent again with another code stays yours. On Ethereum and
+          Base, where pending calldata is public, the relay ties by the
+          transaction&apos;s hash only.
         </li>
         <li>
           <strong>From the payer&apos;s own wallet:</strong> before the wallet is
@@ -680,11 +689,15 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
           and counts it only if it is a real action in Gloam&apos;s vault that fits
           the link: a private payment or a cash out to a wallet for a pay link, a
           private swap through Gloam&apos;s router for a swap link. A transaction
-          counts once, for one partner, within seven days of landing. Nobody can
-          tie someone else&apos;s transaction to a code once it can be seen: a
-          relay-sent one counts only from the relay&apos;s own ties to it, and a
+          counts once, for one partner, within seven days of landing. A transaction
+          that landed can&apos;t be tied to a code afterwards: a relay-sent one
+          counts only from the ties the relay made when it sent it, and a
           wallet registration counts only if it was made before anyone could read
-          the transaction.
+          the transaction. One exception: a payment whose transaction failed on
+          chain can be sent again by anyone holding its proof. Sent again through
+          the relay, it counts to the first code tied to that payment, which is the
+          resender&apos;s if the failed send had none (on Ethereum and Base, always
+          the resender&apos;s).
         </li>
         <li>
           <strong>What is kept:</strong> the transaction&apos;s public facts only:
@@ -712,7 +725,8 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
       <p>
         Fee-split grade, because the partner&apos;s side is proven: API-key counts
         (your key sent or reported the transaction), relay-bound link counts (the
-        relay sent that very transaction with your code), and matched-on-chain
+        relay sent that very transaction, and yours was the first code tied to its
+        payment), and matched-on-chain
         counts (the cash out paid an address that signed for you). Attribution
         grade: link counts the payer&apos;s own wallet registered. They are bound to
         the payment before it is sent, so nobody else can claim them, but the
@@ -723,9 +737,22 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
         The limits, plainly. A code is not a secret: it is in every link you
         share, so anyone can pay through it, you included, and a payer can choose
         a code for their own payment. Gloam can&apos;t see which link a person
-        opened, only that the payment was tied to a code before it was sent.
+        opened, only that the payment was tied to a code before it was sent. A
+        payment that failed on chain and was sent again counts as described above.
         Mainnet and testnet are counted apart, and testnet is never valued in
         dollars.
+      </p>
+      <p>
+        A count that was missed when the transaction landed (the app was closed,
+        the relay&apos;s own step ran out of time) is made later by the
+        app&apos;s count call, which finds the same ties, or for a cash out by
+        the on-chain match below. If the relay stopped right after sending, before
+        tying the transaction&apos;s hash: on Robinhood Chain and Tempo the tie to
+        the payment, kept an hour, still lets the app&apos;s count call, or for a
+        cash out the on-chain match, count it within that hour; a payment or a
+        swap comes back only through the app&apos;s count call; on Ethereum and
+        Base that link count is lost, and so is a scheduled cash out&apos;s on any
+        chain.
       </p>
       <p>
         Counting is the Gloam app&apos;s and the relay&apos;s job, not yours. The
