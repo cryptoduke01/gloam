@@ -20,7 +20,9 @@
  *             (a sweep) before it counts, since the payer knew the old one.
  *   cash out  the public exit: the asset, the amount and the recipient show,
  *             not which private payment funded it. The pool keeps 0.5% on
- *             mainnet and 0.25% on Base Sepolia.
+ *             mainnet and 0.25% on Base Sepolia. A note behind a proof of
+ *             funds is moved to a fresh note first, so the proof does not
+ *             lead to it.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -1506,7 +1508,12 @@ export class GloamAgent {
 
   /**
    * Cash out to a public address. A cash out spends a whole note, so for a
-   * smaller amount the note is first split privately (a send to itself).
+   * smaller amount the note is first split privately (a send to itself). A
+   * whole note behind a proof of funds is first moved the same way to a fresh
+   * note, as the app does: the proof carries its nullifier, and a cash out of
+   * it would show next to that nullifier where the money went and how much.
+   * The fresh note's nullifier is in no proof. The move and the cash out still
+   * land close together, so their timing can hint at a link.
    */
   async cashOut(args: { amount: string; asset?: string; to: string; label?: string }): Promise<Outcome> {
     const asset = this.asset(args.asset);
@@ -1567,7 +1574,10 @@ export class GloamAgent {
         }
       } else if (ready) {
         try {
-          exact = this.store.reserveForSpend(ready.handle);
+          const kept = this.store.reserveForSpend(ready.handle);
+          // put behind a proof of funds since it was kept: moved to a fresh note first, as below
+          if (kept.fundsProofAt) input = kept;
+          else exact = kept;
           retryOf = ready;
           // kept for this cash out: back to waiting for it, its tag kept
           undoReserve = () => this.store.update(ready.handle, { status: "unspent" });
@@ -1591,6 +1601,8 @@ export class GloamAgent {
       this.settle(gate.id, status, extra);
     };
     let splitHash: Hex | null = null;
+    // The whole note went to a fresh note first because it is behind a proof of funds (not a split).
+    let moved = false;
     if (!exact) {
       if (!input) {
         try {
@@ -1600,13 +1612,23 @@ export class GloamAgent {
           return { status: "error", message: errMsg(e) };
         }
       }
-      if (BigInt(input.amountWei) > amountWei) {
-        const split = await this.privateSend({ input, asset, amountPay: amountWei, payOrigin: "change", label: `split for a cash out to ${to}`, requestKey, spendId: gate.id });
+      // A split already spends a proven note through a private send; a whole one is moved the same way.
+      moved = BigInt(input.amountWei) === amountWei && Boolean(input.fundsProofAt);
+      if (BigInt(input.amountWei) > amountWei || moved) {
+        const split = await this.privateSend({ input, asset, amountPay: amountWei, payOrigin: "change", label: `${moved ? "move" : "split"} for a cash out to ${to}`, requestKey, spendId: gate.id });
         if (!split.ok) {
           settle(split.maybeSent ? "unconfirmed" : "failed", { hash: split.hash ?? undefined, reason: split.error });
           // Both halves of the split are kept: refresh() makes them spendable once the split is on chain. Nothing was cashed out.
-          if (split.maybeSent) return this.unconfirmed("The private split before the cash out", split, { cashedOut: "nothing yet" });
-          return { status: "error", message: split.error };
+          // A failed move is never followed by a cash out of the proven note itself.
+          if (split.maybeSent) {
+            return this.unconfirmed(moved ? "The private move to a fresh note before the cash out" : "The private split before the cash out", split, { cashedOut: "nothing yet" });
+          }
+          return {
+            status: "error",
+            message: moved
+              ? `This note is behind a proof of funds, so it moves to a fresh note before a cash out, and that move failed (${split.error}). Nothing was cashed out.`
+              : split.error,
+          };
         }
         splitHash = split.hash;
         exact = this.store.reserveForSpend(split.payment.handle);
@@ -1615,9 +1637,14 @@ export class GloamAgent {
       }
     }
     exact = this.store.update(exact.handle, { requestKey, spendId: gate.id }) ?? exact;
+    const firstStep = (): Record<string, unknown> => (!splitHash ? {} : moved ? { moveHash: splitHash } : { splitHash });
     let hash: Hex | null = null;
     let sending = false;
     try {
+      // Read under the lock just above, and a held note can't be marked after: a proven note is never cashed out directly.
+      if (exact.fundsProofAt) {
+        throw new Error("This note is behind a proof of funds and was not moved to a fresh note first, so it was not cashed out. Ask again: the cash out moves it first.");
+      }
       const vault = await this.tree.sync();
       const path = await vault.pathForCommitment(exact.commitment);
       if (!path) throw new Error("That note is not in the vault yet. Wait for it to confirm.");
@@ -1653,7 +1680,10 @@ export class GloamAgent {
         to,
         hash,
         explorer: this.explorer(hash),
-        ...(splitHash ? { splitHash } : {}),
+        ...firstStep(),
+        ...(moved
+          ? { moved: "This note was behind a proof of funds, so it was moved to a fresh note first. The proof does not lead to this cash out, though the two landing close together can hint at a link." }
+          : {}),
         public: "A cash out is the public exit: the asset, the amount and the recipient show. Which private payment funded it does not.",
       };
     } catch (e) {
@@ -1661,7 +1691,7 @@ export class GloamAgent {
       const maybe = !reverted && (Boolean(hash) || (sending && this.mayHaveSent(e)));
       if (!maybe) this.release(exact!.handle);
       settle(maybe ? "unconfirmed" : reverted ? "reverted" : "failed", { hash: hash ?? undefined, reason: errMsg(e) });
-      if (maybe) return this.unconfirmed("The cash out", { hash, error: errMsg(e) }, splitHash ? { splitHash } : {});
+      if (maybe) return this.unconfirmed("The cash out", { hash, error: errMsg(e) }, firstStep());
       return { status: "error", message: errMsg(e) };
     }
   }
@@ -1686,6 +1716,9 @@ export class GloamAgent {
       use.push(n);
       sum += BigInt(n.amountWei);
     }
+    // Marked before the proof is made, so a cash out that takes one of these notes meanwhile moves it to a
+    // fresh note first. Kept if proving fails: that costs one private move at most.
+    this.store.markFundsProof(use.map((n) => n.handle), new Date().toISOString());
     const vault = await this.tree.sync();
     const withPaths = await Promise.all(
       use.map(async (n) => {
@@ -1714,7 +1747,7 @@ export class GloamAgent {
       for: proof.verifier,
       expiresAt: new Date(proof.expiresAt * 1000).toISOString(),
       proof: text,
-      check: "Anyone can check it at gloam.trade/verify, or with gloam_verify_proof. It does not show the balance. It does carry the nullifiers of the notes behind it (so the reader can check they are unspent), and a reader who keeps them can tell when those notes are spent later.",
+      check: "Anyone can check it at gloam.trade/verify, or with gloam_verify_proof. It does not show the balance. It does carry the nullifiers of the notes behind it (so the reader can check they are unspent), and a reader who keeps them can tell when those notes are spent later. A cash out moves those notes to a fresh note first, so the proof does not lead to where the money went.",
     };
   }
 
