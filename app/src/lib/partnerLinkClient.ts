@@ -7,9 +7,10 @@
  *    approved it ("From Motion"); a name typed into a link is never shown as a
  *    partner (usePartnerName);
  *  - before a wallet sends a payment or cash out from such a link, registers the
- *    spend under the code (registerLinkSpend), so it can only ever count for that
- *    link; a send through the relay carries the code to the relay instead, which
- *    registers it there;
+ *    spend under the code with a value only this send has (its new note
+ *    commitment, or its proof), so it can only ever count for that link
+ *    (registerLinkSpend); a send through the relay carries the code to the relay
+ *    instead, which ties it to the transaction it sends;
  *  - once the payment, cash out or swap lands, asks the server to count it
  *    (settlePartnerTx). The server reads the chain; the partner comes from the
  *    registration, not from this call;
@@ -25,7 +26,7 @@
  */
 import type { Hex } from "viem";
 import { useEffect, useState } from "react";
-import { isLinkCodeShape, linkNullifierHash } from "./partnerCode";
+import { isLinkCodeShape, linkBindHash, linkNullifierHash, proofBindValue, PUBLIC_MEMPOOL_CHAINS } from "./partnerCode";
 import { readDemo } from "./demoFlag";
 
 export type LinkFlow = "pay" | "swap";
@@ -87,12 +88,24 @@ function postQuietly(path: string, body: unknown): Promise<Response | null> {
 }
 
 /**
- * Registers a wallet-sent spend under a partner's code, before the wallet is
- * asked. Fire and forget: the proof and the wallet's prompt take longer than this.
+ * Registers a wallet-sent payment or cash out under a partner's code, before the
+ * wallet is asked, bound to a value only this send has: `bind` is a private
+ * payment's new note commitment, or `proof` a cash out's proof. Fire and forget.
+ * Not on chains with a public mempool (Ethereum): there only relay-sent link
+ * payments count.
  */
-export function registerLinkSpend(r: { code: string | null | undefined; chainId: number; nullifier: Hex; flow: LinkFlow }): void {
+export function registerLinkSpend(r: { code: string | null | undefined; chainId: number; nullifier: Hex } & ({ bind: Hex } | { proof: Hex })): void {
   if (typeof window === "undefined" || readDemo() || !isLinkCodeShape(r.code) || !/^0x[0-9a-fA-F]{64}$/.test(r.nullifier)) return;
-  void postQuietly("/api/partners/register", { chainId: r.chainId, nullifierHash: linkNullifierHash(r.nullifier), code: r.code, flow: r.flow });
+  if (PUBLIC_MEMPOOL_CHAINS.includes(r.chainId)) return;
+  const value = "bind" in r ? r.bind : proofBindValue(r.proof);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) return;
+  void postQuietly("/api/partners/register", {
+    chainId: r.chainId,
+    nullifierHash: linkNullifierHash(r.nullifier),
+    bindHash: linkBindHash(value),
+    code: r.code,
+    flow: "pay",
+  });
 }
 
 /** Waits before each try: the chain's node may be a block or two behind the app. */

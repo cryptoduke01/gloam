@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
-import { afterRelaySend, relaySpendOf } from "@/lib/partnerAttribution";
+import { afterRelaySend, relayFlowOf } from "@/lib/partnerAttribution";
 import {
   RelayError,
   checkChainRateLimit,
@@ -40,9 +40,9 @@ export async function GET() {
  * (lib/relay/gasStation), off unless switched on.
  *
  * A send opened from a partner's link may carry { partnerCode }. Nothing about
- * the send changes: once it is out, the relay registers its spend under the code
- * as of when it took this request and counts it when it lands, after the response
- * (lib/partnerAttribution afterRelaySend). That step never fails or delays a send.
+ * the send changes: once it is out, the relay binds the code to the transaction
+ * it sent and counts it when it lands, after the response (lib/partnerAttribution
+ * afterRelaySend). That step never fails or delays a send.
  */
 export async function POST(req: Request) {
   try {
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
         hash = await relayTransfer(net, body, requester);
         if (partnerCode !== undefined) {
           const sent = hash;
-          after(() => afterRelaySend({ net, hash: sent, code: partnerCode, spend: relaySpendOf(body), at: takenAt }));
+          after(() => afterRelaySend({ net, hash: sent, code: partnerCode, flow: relayFlowOf(body), at: takenAt }));
         }
         // relayTransfer checked commitments[0] is a bytes32
         const payment = (body.commitments as string[])[0]!;
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
     }
     if (partnerCode !== undefined && (body.action === "unshield" || body.action === "swap")) {
       const sent = hash;
-      after(() => afterRelaySend({ net, hash: sent, code: partnerCode, spend: relaySpendOf(body), at: takenAt }));
+      after(() => afterRelaySend({ net, hash: sent, code: partnerCode, flow: relayFlowOf(body), at: takenAt }));
     }
     return NextResponse.json({ ok: true, hash });
   } catch (e) {

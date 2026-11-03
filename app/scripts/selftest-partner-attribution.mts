@@ -38,7 +38,7 @@ import { readFileSync } from "node:fs";
 import Module from "node:module";
 import { fileURLToPath } from "node:url";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { verifyMessage, type Address, type Hex } from "viem";
+import { encodeFunctionData, verifyMessage, type Address, type Hex } from "viem";
 
 const stubs: Record<string, string> = {
   "server-only": fileURLToPath(new URL("./server-only-stub.cjs", import.meta.url)),
@@ -65,7 +65,8 @@ const { classifyVaultTx, kindFitsFlow } = await import("../src/lib/partnerVerify
 const A = await import("../src/lib/partnerAttribution");
 const B = await import("../src/lib/partnerBackfill");
 const AD = await import("../src/lib/partnerAddresses");
-const { linkNullifierHash } = await import("../src/lib/partnerCode");
+const { linkNullifierHash, linkBindHash, proofBindValue } = await import("../src/lib/partnerCode");
+const { relayPoolAbi } = await import("../src/lib/relay/server");
 const { getNetwork } = await import("../src/lib/networks");
 const { swapRoutersOn, EVERY_SWAP_ROUTER } = await import("../src/lib/vaultSwap");
 const { buildPaymentRequestLink, readPaymentRequest, requestParamsFrom, requestAssetsFor } = await import("../src/lib/paymentRequest");
@@ -124,9 +125,23 @@ const nullifierOf = (h: Hex): Hex => {
 };
 const wallet = () => privateKeyToAccount(generatePrivateKey()).address;
 
+/** 64 bytes standing in for a cash out's proof (the fixture keeps receipts, not calldata). */
+const proofFor = (h: Hex) => `0x${h.slice(2)}${h.slice(2)}` as Hex;
+const cashOutSet = new Set(FX.cashOuts.map((h) => h.toLowerCase()));
+/** Each fixture cash out's call to the vault, as its wallet would have sent it. */
+const inputs = new Map<string, Hex>(
+  FX.unshieldLogs
+    .filter((l) => cashOutSet.has(l.txHash.toLowerCase()))
+    .map((l) => [
+      l.txHash.toLowerCase(),
+      encodeFunctionData({ abi: relayPoolAbi, functionName: "unshield", args: [proofFor(l.txHash), `0x${"00".repeat(32)}`, l.nullifier, l.asset, l.to, BigInt(l.amount)] }),
+    ])
+);
+
 type Chain = Map<number, Map<string, Rcpt>>;
 function fakeChain(chain: Chain, nowSec: number): import("../src/lib/partnerAttribution").AttributionDeps {
   return {
+    tx: async (net, hash) => (net.chainId === RH.chainId && inputs.has(hash.toLowerCase()) ? { to: RH.pool!, input: inputs.get(hash.toLowerCase())! } : null),
     receipt: async (net, hash) => {
       const r = chain.get(net.chainId)?.get(hash.toLowerCase());
       return r ? { status: r.status, blockNumber: BigInt(r.blockNumber), logs: r.logs } : null;
@@ -152,10 +167,21 @@ function unclaim(hashes: Hex[]) {
 }
 function unregister(hashes: Hex[]) {
   const g = globalThis as { __gloamPartnersMem?: Map<string, unknown> };
-  for (const h of hashes) g.__gloamPartnersMem?.delete(k("reg", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
+  for (const h of hashes) {
+    g.__gloamPartnersMem?.delete(k("reg", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
+    g.__gloamPartnersMem?.delete(k("relaytx", RH.chainId, h.toLowerCase()));
+  }
 }
-const regApp = (code: string, h: Hex, flow: "pay" | "swap", at: number) =>
-  A.registerLink({ chainId: RH.chainId, nullifierHash: linkNullifierHash(nullifierOf(h)), code, flow, via: "app", at });
+/** The value only the spender had when it sent: a payment's new note commitment, a cash out's proof. */
+const bindFor = (h: Hex): Hex => {
+  const f = classifyVaultTx(rcpt(h).logs, ctxRH);
+  assert.ok(f.ok);
+  return f.kind === "private_payment" ? linkBindHash(f.paymentCommitment) : linkBindHash(proofBindValue(proofFor(h)));
+};
+/** A wallet registration of a fixture spend, bound to `bind` (the right value unless given). */
+const regApp = (code: string, h: Hex, at: number, bind: Hex = bindFor(h)) =>
+  A.registerLink({ chainId: RH.chainId, nullifierHash: linkNullifierHash(nullifierOf(h)), bindHash: bind, code, flow: "pay", at });
+const settle = (h: Hex, deps = after(h)) => A.settleLinkTx({ chainId: RH.chainId, txHash: h }, deps);
 
 const motionOwner = wallet();
 const motion = await P.upsertPartner(motionOwner, { name: "Motion" });
@@ -184,6 +210,13 @@ await test("codes: revoke only by the owner (or an admin); revoking twice keeps 
   const exp = g.__gloamPartnersMem!.get(k("link", c.code))!.exp!;
   assert.ok(exp - Date.now() <= L.REVOKED_TTL_SEC * 1000 && exp - Date.now() > (L.REVOKED_TTL_SEC - 60) * 1000, "kept 30 days, then gone");
   assert.equal(await kv1(["SISMEMBER", k("links-live", motion.id), c.code]), 0, "out of the live set");
+  // an expired code leaves the live set once; reading the list again doesn't push its expiry back
+  const old = await L.issueLinkCode({ partnerId: motion.id, expiresInDays: 1, by: "partner", now: Date.now() - 3 * 86_400_000 });
+  await L.listLinkCodes(motion.id);
+  const first = g.__gloamPartnersMem!.get(k("link", old.code))!.exp!;
+  await new Promise((r) => setTimeout(r, 20));
+  await L.listLinkCodes(motion.id);
+  assert.equal(g.__gloamPartnersMem!.get(k("link", old.code))!.exp, first, "the 30 days start once");
 });
 
 await test("codes: forged, malformed, expired and orphaned codes resolve to nobody", async () => {
@@ -226,6 +259,8 @@ await test("names (F2): plain names only: no Gloam, no web address, 32 character
     await assert.rejects(P.upsertPartner(wallet(), { name: bad }), /bad_name|Gloam|plain name|characters/, bad);
   }
   for (const ok of ["Motion", "Acme Pay", "Raeto", "Swap Desk 2"]) assert.equal(P.partnerNameProblem(ok), null, ok);
+  // look-alike letters: a Cyrillic "о" in "Glоam", accented letters: plain ASCII only
+  for (const bad of ["Gl\u043eam Support", "Caf\u00e9", "\u041c\u043e\u0442\u0438\u043e\u043d"]) assert.match(P.partnerNameProblem(bad) ?? "", /plain letters/, bad);
   // an account can't rename itself to Gloam either
   const owner = wallet();
   await P.upsertPartner(owner, { name: "Renamer" });
@@ -316,88 +351,134 @@ await test("classifier: a random transaction, a refund, a stranger's VaultSwap e
   assert.deepEqual(classifyVaultTx([...rcpt(FX.cashOuts[0]!).logs, ...rcpt(FX.privatePayment).logs], ctxRH), { ok: false, reason: "mixed" });
 });
 
-// ---------------------------------------------------------------- binding (F1)
+// ---------------------------------------------------------------- binding (F1, N1, N2, N5)
 
 const motionCode = (await L.issueLinkCode({ partnerId: motion.id, label: "Fund", by: "partner" })).code;
 const malloryCode = (await L.issueLinkCode({ partnerId: mallory.id, by: "partner" })).code;
+const offramp = await P.upsertPartner(wallet(), { name: "Offramp" });
+const offrampCode = (await L.issueLinkCode({ partnerId: offramp.id, by: "admin" })).code;
 
-await test("F1 fixed: nobody can claim a transaction that wasn't registered from their link, whoever asks first", async () => {
-  // the review's steal: Mallory's watcher sees a vault log and asks for it to be counted
+await test("F1: nobody can claim a transaction that wasn't bound to their link, before or after it lands", async () => {
   const h = FX.cashOuts[0]!;
-  await throwsApi(A.settleLinkTx({ chainId: RH.chainId, txHash: h }, after(h, 1)), 404, "not_registered");
-  // registering it after it landed counts for nothing
-  await regApp(malloryCode, h, "pay", (rcpt(h).blockTimestamp + 1) * 1000);
-  await throwsApi(A.settleLinkTx({ chainId: RH.chainId, txHash: h }, after(h, 5)), 422, "registered_late");
+  await throwsApi(settle(h, after(h, 1)), 404, "not_registered");
+  // registering it after it landed, even with the right value, counts for nothing
+  await regApp(malloryCode, h, (rcpt(h).blockTimestamp + 1) * 1000);
+  await throwsApi(settle(h, after(h, 5)), 404, "not_registered");
   assert.equal(await P.attributedTo(RH.chainId, h), null);
   assert.equal((await P.readPartnerStats(mallory.id)).totals.cashOuts, 0);
-});
-
-await test("F1 fixed: a wallet send registered before its block counts to that link, whoever asks for the count", async () => {
-  const h = FX.cashOuts[1]!;
-  assert.deepEqual(await regApp(motionCode, h, "pay", before(h)), { registered: true });
-  // Mallory registering the same spend later changes nothing: the earliest stands
-  assert.equal((await regApp(malloryCode, h, "pay", before(h, 5))).registered, false);
-  // anyone may ask for the count; the partner comes from the registration
-  const r = await A.settleLinkTx({ chainId: RH.chainId, txHash: h }, after(h));
-  assert.equal(r.kind, "cash_out");
-  assert.equal(r.record.source, "link");
-  assert.equal(r.record.linkCode, motionCode);
-  assert.equal(r.record.vaultFee, "75000");
-  assert.equal(await P.attributedTo(RH.chainId, h), motion.id);
-  await throwsApi(A.settleLinkTx({ chainId: RH.chainId, txHash: h }, after(h)), 409, "already_attributed");
-});
-
-await test("F1 fixed: a relay send is registered by the relay as of the request and counted when it lands", async () => {
-  const h = FX.privatePayment;
-  const tookAt = before(h, 3);
-  // a racing registration made after the relay took the request (Mallory saw the transaction go by)
-  await regApp(malloryCode, h, "pay", before(h, 1));
-  const spend = A.relaySpendOf({ action: "transfer", nullifier: nullifierOf(h) });
-  assert.deepEqual(spend, { flow: "pay", nullifier: nullifierOf(h) });
-  let waited = 0;
-  await A.afterRelaySend({ net: RH, hash: h, code: motionCode, spend, at: tookAt, wait: async () => void waited++, deps: after(h) });
-  assert.equal(waited, 1);
-  assert.equal(await P.attributedTo(RH.chainId, h), motion.id, "the relay's earlier registration wins");
-  // what afterRelaySend reads, for each relay action
-  assert.equal(A.relaySpendOf({ action: "memo" }), null);
-  assert.equal(A.relaySpendOf({ action: "swap", spend: { nullifier: nullifierOf(FX.swap) }, unshieldTx: h }), null, "a refund is not a swap");
-  assert.deepEqual(A.relaySpendOf({ action: "swap", spend: { nullifier: nullifierOf(FX.swap) } }), { flow: "swap", nullifier: nullifierOf(FX.swap) });
-  // the swap, through the relay
-  await A.afterRelaySend({ net: RH, hash: FX.swap, code: motionCode, spend: { flow: "swap", nullifier: nullifierOf(FX.swap) }, at: before(FX.swap), wait: async () => {}, deps: after(FX.swap) });
-  assert.equal(await P.attributedTo(RH.chainId, FX.swap), motion.id);
-  // a junk code or no spend: nothing happens, nothing throws
-  await A.afterRelaySend({ net: RH, hash: FX.cashOuts[2]!, code: "nope", spend, at: Date.now(), wait: async () => assert.fail("not waited") });
-});
-
-await test("F1 fixed: a cash out scheduled for later is registered when scheduled and counted once sent", async () => {
-  const h = FX.cashOuts[2]!;
-  await A.registerScheduled({ chainId: RH.chainId, nullifier: nullifierOf(h), code: motionCode, at: before(h, 6 * 3600) });
-  // reported the next day, inside the window
-  const r = await A.settleLinkTx({ chainId: RH.chainId, txHash: h }, after(h, 26 * 3600));
-  assert.equal(r.record.source, "link");
-  assert.equal(r.record.ts, rcpt(h).blockTimestamp * 1000, "counted on the day it landed");
-});
-
-await test("binding: flows must fit; other chains, random, failed and too-old transactions count for nothing", async () => {
-  const h = FX.cashOuts[3]!;
-  await regApp(motionCode, h, "swap", before(h));
-  await throwsApi(A.settleLinkTx({ chainId: RH.chainId, txHash: h }, after(h)), 422, "wrong_flow");
   unregister([h]);
-  await regApp(motionCode, h, "pay", before(h));
-  const tempoChain = fakeChain(new Map([[TEMPO.chainId, new Map()]]), rcpt(h).blockTimestamp + 60);
-  await throwsApi(A.settleLinkTx({ chainId: TEMPO.chainId, txHash: h }, tempoChain), 404, "tx_not_found");
+});
+
+await test("N1 fixed: a wallet send counts only with the value only it had; knowing its nullifier ahead is not enough", async () => {
+  const h = FX.cashOuts[1]!;
+  // Mallory paid out the note and so knew its nullifier; she registered long before, but can't know this cash out's proof
+  await regApp(malloryCode, h, before(h, 3600), linkBindHash(`0x${"99".repeat(32)}`));
+  await regApp(motionCode, h, before(h));
+  const r = await settle(h);
+  assert.equal(r.kind, "cash_out");
+  assert.equal(r.record.linkCode, motionCode);
+  assert.equal(r.record.linkBind, "wallet");
+  assert.equal(r.record.vaultFee, "75000");
+  await throwsApi(settle(h), 409, "already_attributed");
+  // the payee's own private payment (a sweep with no link): Mallory's guess of its new note can't match
+  const pp = FX.privatePayment;
+  await regApp(malloryCode, pp, before(pp, 3600), linkBindHash(`0x${"98".repeat(32)}`));
+  await throwsApi(settle(pp), 404, "not_registered");
+  unregister([pp]);
+});
+
+await test("N1 fixed: two codes registering the same spend with its value count for nobody, now or later", async () => {
+  const h = FX.cashOuts[2]!;
+  await regApp(motionCode, h, before(h));
+  await regApp(malloryCode, h, before(h, 10));
+  await throwsApi(settle(h), 409, "conflicting_codes");
+  assert.equal(await P.attributedTo(RH.chainId, h), "conflict");
+  await throwsApi(settle(h), 409, "already_attributed");
+  unclaim([h]);
+  unregister([h]);
+});
+
+await test("N5 fixed: an honest registration in the same second as its block counts; one a second later doesn't", async () => {
+  const pp = FX.privatePayment;
+  await regApp(motionCode, pp, rcpt(pp).blockTimestamp * 1000 + 400);
+  const r = await settle(pp, after(pp, 20));
+  assert.equal(r.kind, "private_payment");
+  assert.equal(r.record.linkBind, "wallet");
+  const h = FX.cashOuts[3]!;
+  await regApp(motionCode, h, (rcpt(h).blockTimestamp + 1) * 1000);
+  await throwsApi(settle(h, after(h, 20)), 404, "not_registered");
+  unregister([h]);
+});
+
+await test("N1, N2b fixed: the relay binds the code to the transaction it sent itself; wallet registrations don't touch it", async () => {
+  // a swap, through the relay (the only way a swap goes)
+  let waited = 0;
+  await A.afterRelaySend({ net: RH, hash: FX.swap, code: motionCode, flow: "swap", at: before(FX.swap, 3), wait: async () => void waited++, deps: after(FX.swap) });
+  assert.equal(waited, 1);
+  assert.equal(await P.attributedTo(RH.chainId, FX.swap), motion.id);
+  assert.equal((await P.countedRecord(RH.chainId, FX.swap))?.record.linkBind, "relay");
+  // the payer of a note pre-registered its payee's spend, even with the right value; the payee
+  // cashes out through Offramp's link via the relay: the relay's own binding decides
+  const h = FX.cashOuts[3]!;
+  await regApp(malloryCode, h, before(h, 3600));
+  await A.afterRelaySend({ net: RH, hash: h, code: offrampCode, flow: "pay", at: before(h, 2), wait: async () => {}, deps: after(h) });
+  assert.equal(await P.attributedTo(RH.chainId, h), offramp.id);
+  unclaim([h]);
+  unregister([h]);
+  // a copy of a pending proof sent to the relay: the relay's binding is on its own transaction, which reverted
+  const dup = `0x${"dd".repeat(32)}` as Hex;
+  const orig = FX.cashOuts[0]!;
+  await A.afterRelaySend({ net: RH, hash: dup, code: malloryCode, flow: "pay", at: before(orig, 3), wait: async () => {
+    throw new Error("the relay's copy reverted");
+  }, deps: after(orig) });
+  assert.equal((await A.relayBindingOf(RH.chainId, dup))?.partnerId, mallory.id, "bound to the relay's own hash only");
+  await throwsApi(settle(orig), 404, "not_registered");
+  // what the relay route reads, for each action
+  assert.equal(A.relayFlowOf({ action: "transfer" }), "pay");
+  assert.equal(A.relayFlowOf({ action: "unshield" }), "pay");
+  assert.equal(A.relayFlowOf({ action: "swap" }), "swap");
+  assert.equal(A.relayFlowOf({ action: "swap", unshieldTx: orig }), null, "a refund is not a swap");
+  assert.equal(A.relayFlowOf({ action: "memo" }), null);
+  // a junk code: nothing happens, nothing throws
+  await A.afterRelaySend({ net: RH, hash: FX.cashOuts[2]!, code: "nope", flow: "pay", at: Date.now(), wait: async () => assert.fail("not waited") });
+});
+
+await test("F1 fixed: a cash out scheduled for later keeps its code with the job, bound to the transaction the run sends", async () => {
+  const h = FX.cashOuts[2]!;
+  await A.bindScheduledJob({ jobId: "job-1", code: motionCode, at: before(h, 6 * 3600) });
+  await A.afterScheduledSend({ net: RH, jobId: "job-1", hash: h, deps: after(h, 26 * 3600) });
+  const c = await P.countedRecord(RH.chainId, h);
+  assert.equal(c?.partnerId, motion.id);
+  assert.equal(c?.record.linkBind, "relay");
+  assert.equal(c?.record.ts, rcpt(h).blockTimestamp * 1000, "counted on the day it landed");
+  await A.afterScheduledSend({ net: RH, jobId: "job-none", hash: FX.cashOuts[0]!, deps: after(FX.cashOuts[0]!) });
+  assert.equal(await P.attributedTo(RH.chainId, FX.cashOuts[0]!), null, "a job with no code binds nothing");
+});
+
+await test("binding: flows fit; other chains, random, failed and too-old transactions count for nothing; Ethereum and swaps take no wallet registration", async () => {
+  const h = FX.cashOuts[3]!;
+  await A.bindRelayTx({ chainId: RH.chainId, txHash: h, code: motionCode, flow: "swap", at: before(h) });
+  await throwsApi(settle(h), 422, "wrong_flow");
+  unregister([h]);
+  await regApp(motionCode, h, before(h));
+  await throwsApi(A.settleLinkTx({ chainId: TEMPO.chainId, txHash: h }, fakeChain(new Map([[TEMPO.chainId, new Map()]]), rcpt(h).blockTimestamp + 60)), 404, "tx_not_found");
   await throwsApi(A.settleLinkTx({ chainId: 999_999, txHash: h }, after(h)), 400, "bad_chain");
   const random = `0x${"ab".repeat(32)}` as Hex;
   const withRandom: Chain = new Map([[RH.chainId, new Map([...rhChain.get(RH.chainId)!, [random, { ...rcpt(h), logs: rcpt(h).logs.slice(0, 1) }]])]]);
-  await throwsApi(A.settleLinkTx({ chainId: RH.chainId, txHash: random }, fakeChain(withRandom, rcpt(h).blockTimestamp + 60)), 422, "not_vault_action");
+  await throwsApi(settle(random, fakeChain(withRandom, rcpt(h).blockTimestamp + 60)), 422, "not_vault_action");
   const failed: Chain = new Map([[RH.chainId, new Map([[h.toLowerCase(), { ...rcpt(h), status: "reverted" as never }]])]]);
-  await throwsApi(A.settleLinkTx({ chainId: RH.chainId, txHash: h }, fakeChain(failed, rcpt(h).blockTimestamp + 60)), 422, "tx_failed");
-  await throwsApi(A.settleLinkTx({ chainId: RH.chainId, txHash: h }, after(h, A.ATTRIBUTION_WINDOW_SEC + 1)), 422, "too_old");
-  // a revoked or expired code can't register
+  await throwsApi(settle(h, fakeChain(failed, rcpt(h).blockTimestamp + 60)), 422, "tx_failed");
+  await throwsApi(settle(h, after(h, A.ATTRIBUTION_WINDOW_SEC + 1)), 422, "too_old");
+  // a cash out sent through some other contract (not straight to the vault): its proof can't be read, so no wallet registration matches
+  const wrapped: import("../src/lib/partnerAttribution").AttributionDeps = { ...after(h), tx: async () => ({ to: "0x00000000000000000000000000000000000000cc", input: inputs.get(h.toLowerCase())! }) };
+  await throwsApi(settle(h, wrapped), 404, "not_registered");
+  unregister([h]);
+  const nh = `0x${"11".repeat(32)}` as Hex;
+  assert.deepEqual(await A.registerLink({ chainId: 1, nullifierHash: nh, bindHash: nh, code: motionCode, flow: "pay" }), { registered: false, reason: "public_mempool" });
+  assert.deepEqual(await A.registerLink({ chainId: RH.chainId, nullifierHash: nh, bindHash: nh, code: motionCode, flow: "swap" }), { registered: false, reason: "relay_only" });
   const gone = await L.issueLinkCode({ partnerId: motion.id, by: "partner" });
   await L.revokeLinkCode({ code: gone.code, partnerId: motion.id });
-  assert.deepEqual(await A.registerLink({ chainId: RH.chainId, nullifierHash: `0x${"11".repeat(32)}`, code: gone.code, flow: "pay", via: "app" }), { registered: false, reason: "code_not_live" });
-  unregister([h]);
+  assert.deepEqual(await A.registerLink({ chainId: RH.chainId, nullifierHash: nh, bindHash: nh, code: gone.code, flow: "pay" }), { registered: false, reason: "code_not_live" });
 });
 
 // ---------------------------------------------------------------- routes (F1, F5)
@@ -410,13 +491,16 @@ const routeReq = (path: string, body: unknown, headers: Record<string, string> =
   });
 
 await test("routes: register and attribute need the gloam.trade Origin; a missing one is refused", async () => {
-  const reg = { chainId: RH.chainId, nullifierHash: `0x${"22".repeat(32)}`, code: motionCode, flow: "pay" };
+  const reg = { chainId: RH.chainId, nullifierHash: `0x${"22".repeat(32)}`, bindHash: `0x${"23".repeat(32)}`, code: motionCode, flow: "pay" };
   const noOrigin = new Request(`https://${HOST}/api/partners/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reg) });
   assert.equal((await registerPost(noOrigin as never)).status, 403);
   assert.equal((await registerPost(routeReq("/api/partners/register", reg, { origin: "https://evil.example" }) as never)).status, 403);
   assert.equal((await registerPost(routeReq("/api/partners/register", reg) as never)).status, 201);
   assert.equal((await registerPost(routeReq("/api/partners/register", { ...reg, wallet: "0x1" }) as never)).status, 400, "extra fields refused");
   assert.equal((await registerPost(routeReq("/api/partners/register", { ...reg, code: L.generateLinkCode() }) as never)).status, 404);
+  assert.equal((await registerPost(routeReq("/api/partners/register", { ...reg, chainId: 1 }) as never)).status, 422, "Ethereum: relay only");
+  const { bindHash: _b, ...noBind } = reg;
+  assert.equal((await registerPost(routeReq("/api/partners/register", noBind) as never)).status, 400, "a registration must bind to a value");
   const settleNoOrigin = new Request(`https://${HOST}/api/partners/attribute`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chainId: 4663, txHash: FX.cashOuts[0] }) });
   assert.equal((await attributePost(settleNoOrigin as never)).status, 403);
   assert.equal((await attributePost(routeReq("/api/partners/attribute", { chainId: 4663, txHash: FX.cashOuts[0], code: motionCode }) as never)).status, 400, "the partner never comes from the request");
@@ -428,11 +512,33 @@ await test("routes: register and attribute need the gloam.trade Origin; a missin
 await test("routes (F5): one IP spending a code's registrations doesn't block that code for anyone else", async () => {
   const c = (await L.issueLinkCode({ partnerId: motion.id, by: "partner" })).code;
   const send = (ip: string, n: number) =>
-    registerPost(routeReq("/api/partners/register", { chainId: RH.chainId, nullifierHash: `0x${n.toString(16).padStart(64, "0")}`, code: c, flow: "pay" }, { "x-forwarded-for": ip }) as never);
+    registerPost(
+      routeReq("/api/partners/register", { chainId: RH.chainId, nullifierHash: `0x${n.toString(16).padStart(64, "0")}`, bindHash: `0x${"24".repeat(32)}`, code: c, flow: "pay" }, { "x-forwarded-for": ip }) as never
+    );
   let limited = 0;
   for (let i = 0; i < 25; i++) if ((await send("198.51.100.1", 1000 + i)).status === 429) limited++;
   assert.ok(limited > 0, "one IP is held to its share");
   assert.equal((await send("198.51.100.2", 5000)).status, 201, "another IP still registers for the same code");
+});
+
+await test("N4 fixed: a registration lasts an hour, and one IP (or /64) gets a small allowance", async () => {
+  const nh = `0x${"31".repeat(32)}` as Hex;
+  await A.registerLink({ chainId: RH.chainId, nullifierHash: nh, bindHash: nh, code: motionCode, flow: "pay" });
+  const g = globalThis as { __gloamPartnersMem?: Map<string, { exp: number | null }> };
+  const ttl = (g.__gloamPartnersMem!.get(k("reg", RH.chainId, nh))!.exp! - Date.now()) / 1000;
+  assert.ok(ttl <= 3600 && ttl > 3500, `kept about an hour (${ttl.toFixed(0)} s)`);
+  let ok = 0;
+  for (let i = 0; i < 30; i++) {
+    const res = await registerPost(
+      routeReq("/api/partners/register", { chainId: RH.chainId, nullifierHash: `0x${(7000 + i).toString(16).padStart(64, "0")}`, bindHash: nh, code: [motionCode, malloryCode, offrampCode][i % 3], flow: "pay" }, { "x-forwarded-for": "2001:db8:1:2:aaaa::1" }) as never
+    );
+    if (res.status === 201) ok++;
+  }
+  assert.equal(ok, 10, "10 a minute per IP, whatever the code");
+  const sameNet = await registerPost(
+    routeReq("/api/partners/register", { chainId: RH.chainId, nullifierHash: `0x${"32".repeat(32)}`, bindHash: nh, code: motionCode, flow: "pay" }, { "x-forwarded-for": "2001:db8:1:2:bbbb::9" }) as never
+  );
+  assert.equal(sameNet.status, 429, "another address in the same /64 shares it");
 });
 
 // ---------------------------------------------------------------- privacy (F3)
@@ -477,6 +583,37 @@ await test("privacy (F3): a partner never sees a private payment's hash or code;
   assert.ok(/Private payment,1,Hidden/.test(daily), "a daily count only");
 });
 
+await test("N3 fixed: a private payment never moves lastActivity, and a partner sees today's only once the day has ended", async () => {
+  const owner = wallet();
+  const p = await P.upsertPartner(owner, { name: "Invoicer" });
+  const T = (n: number) => `0x${(n + 4400).toString(16).padStart(64, "0")}` as Hex;
+  const landed = Date.now() - 5_000;
+  await P.recordActivity({ partner: p, keyId: null, source: "link", linkBind: "wallet", network: RH, kind: "private_payment", txHash: T(1), now: landed });
+  const view = async () => {
+    const res = await statsGet(new Request(`https://${HOST}/api/partners/stats`, { headers: { ...HOSTH, cookie: sessionCookie(owner) } }) as never);
+    const text = await res.text();
+    return { text, d: (JSON.parse(text) as { data: { lastActivity: number | null; totals: { privatePayments: number; commissionUsd: number }; daily: { day: string; privatePayments: number }[] } }).data };
+  };
+  const first = await view();
+  const text = first.text;
+  let d = first.d;
+  assert.equal(d.lastActivity, null, "no time to look for on chain");
+  assert.equal(d.totals.privatePayments, 0, "today's is not counted yet");
+  assert.equal(d.daily.at(-1)!.privatePayments, 0);
+  assert.ok(!text.includes(String(landed)) && !text.includes(String(Math.floor(landed / 1000))));
+  // Gloam's own view counts it at once
+  assert.equal((await P.readPartnerStats(p.id)).totals.privatePayments, 1);
+  // one on a day that has ended counts for the partner too
+  await P.recordActivity({ partner: p, keyId: null, source: "link", linkBind: "wallet", network: RH, kind: "private_payment", txHash: T(2), now: Date.now() - 2 * 86_400_000 });
+  ({ d } = await view());
+  assert.equal(d.totals.privatePayments, 1);
+  assert.equal(d.lastActivity, null);
+  // a cash out, public on chain, does move it
+  await P.recordActivity({ partner: p, keyId: null, source: "link", linkBind: "relay", network: RH, kind: "cash_out", txHash: T(3), edge: { asset: USDG, amount: 1_000_000n }, vaultFee: 2_500n });
+  ({ d } = await view());
+  assert.ok(d.lastActivity && d.lastActivity > landed - 60_000);
+});
+
 await test("privacy: a cash out to a partner's proven address goes to that partner, whichever link it came from", async () => {
   const owner = privateKeyToAccount(generatePrivateKey());
   const shop = await P.upsertPartner(owner.address, { name: "Shop" });
@@ -491,7 +628,7 @@ await test("privacy: a cash out to a partner's proven address goes to that partn
   const word = (a: string) => `0x${a.toLowerCase().slice(2).padStart(64, "0")}`;
   const paysShop: Rcpt = { ...rcpt(h), logs: rcpt(h).logs.map((l) => ({ ...l, topics: l.topics.map((t) => (t === word("0x00000000000000000000000000000000000a11c2") ? word(recv.address) : t)) })) };
   const chain: Chain = new Map([[RH.chainId, new Map([[h.toLowerCase(), paysShop]])]]);
-  await regApp(malloryCode, h, "pay", before(h));
+  await regApp(malloryCode, h, before(h));
   const r = await A.settleLinkTx({ chainId: RH.chainId, txHash: h }, fakeChain(chain, rcpt(h).blockTimestamp + 60));
   assert.equal(r.record.source, "chain");
   assert.equal(await P.attributedTo(RH.chainId, h), shop.id);
@@ -590,7 +727,7 @@ await test("CSV: one row per transaction, formula cells defused", async () => {
   await P.recordActivity({ partner: p, keyId: null, source: "link", network: RH, kind: "cash_out", txHash: `0x${"a1".repeat(32)}`, edge: { asset: USDG, amount: 12_500_000n }, vaultFee: 31_250n });
   const s = await P.readPartnerStats(p.id, { recent: 10, days: 1 });
   const tx = P.activityCsv([{ id: p.id, name: "=HYPERLINK(1)", recent: s.recent }]).trim().split("\r\n");
-  assert.equal(tx[0], "Time (UTC),Partner id,Partner,Source,Network,Chain id,Kind,Transaction,Token,Token address,Amount,Volume (USD),Vault fee,Vault fee (USD)");
+  assert.equal(tx[0], "Time (UTC),Partner id,Partner,Source,Network,Chain id,Kind,Transaction,Token,Token address,Amount,Volume (USD),Vault fee,Vault fee (USD),Link bound by");
   const out = tx[1]!.split(",");
   assert.equal(out[2], "'=HYPERLINK(1)");
   assert.deepEqual([out[3], out[4], out[8], out[10], out[12]], ["Via link", "Robinhood Chain", "USDG", "12.5", "0.03125"]);
@@ -753,11 +890,11 @@ await test("match: a real pass counts each matched cash out once, moves a link's
   assert.ok(again.matches.every((m) => m.result === "already_counted" || m.via === "link"));
 });
 
-await test("match: a cash out registered from a link that nobody counted is settled to its link", async () => {
-  // [0] paid a11c1, no partner's address; registered from Motion's link when it was scheduled
+await test("match: a cash out bound to a link that nobody counted yet is settled to its link", async () => {
+  // [0] paid a11c1, no partner's address; the relay bound it to Motion's link when it sent it
   unclaim([FX.cashOuts[0]!]);
   unregister([FX.cashOuts[0]!]);
-  await A.registerScheduled({ chainId: RH.chainId, nullifier: nullifierOf(FX.cashOuts[0]!), code: motionCode, at: before(FX.cashOuts[0]!) });
+  await A.bindRelayTx({ chainId: RH.chainId, txHash: FX.cashOuts[0]!, code: motionCode, flow: "pay", at: before(FX.cashOuts[0]!) });
   const r = await B.runBackfill({ dryRun: false, from: "deploy", book: await AD.addressBook(), budgetMs: 60_000, chains: [RH.chainId] }, fakeBackfill().deps);
   const m = r.matches.find((x) => x.txHash === FX.cashOuts[0]!.toLowerCase())!;
   assert.equal(m.via, "link");

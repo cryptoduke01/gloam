@@ -1147,8 +1147,8 @@ export function MoveView() {
         setCashOutInput("");
         return;
       }
-      // from the wallet: registered under the code now, before the wallet is asked
-      if (fromLink) registerLinkSpend({ code: fromLink.code, chainId: network.chainId, nullifier: call.nullifier, flow: "pay" });
+      // from the wallet: registered under the code now, before the wallet is asked, bound to this cash out's proof
+      if (fromLink) registerLinkSpend({ code: fromLink.code, chainId: network.chainId, nullifier: call.nullifier, proof: call.proof });
       setStatus("Confirm the cash out in your wallet…");
       writeContract({
         address: network.pool,
@@ -1466,11 +1466,20 @@ export function MoveView() {
       if (w.blocker) throw new Error(w.blocker);
 
       // From a partner's link, to the request's own Gloam address: bound to the link's code before
-      // anything is sent. Registered now, before proving; a relayed send also hands the code to the relay.
+      // anything is sent. Through the relay, the code goes with the send. From the wallet, it is
+      // registered now, before proving, bound to this payment's new note commitment, which only
+      // this send has.
       const linkCode =
         request?.partnerCode && request.toKind === "gloam" && payStyle === "direct" && recipientTag.trim() === request.to ? request.partnerCode : null;
       partnerSend.current = linkCode ? { chainId: network.chainId } : null;
-      if (linkCode) registerLinkSpend({ code: linkCode, chainId: network.chainId, nullifier: fieldToBytes32(w.publicInputs.nullifier), flow: "pay" });
+      if (linkCode && !relayOn) {
+        registerLinkSpend({
+          code: linkCode,
+          chainId: network.chainId,
+          nullifier: fieldToBytes32(w.publicInputs.nullifier),
+          bind: fieldToBytes32(w.publicInputs.newCommitment0),
+        });
+      }
 
       const { proofBytes } = await proveTransferInBrowser(w.circomInput);
 

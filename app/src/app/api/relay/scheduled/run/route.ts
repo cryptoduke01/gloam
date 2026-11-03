@@ -1,6 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { logSafe } from "@/lib/logSafe";
-import { settleLinkTx } from "@/lib/partnerAttribution";
+import { afterScheduledSend } from "@/lib/partnerAttribution";
 import { webhookSecretOk } from "@/lib/telegramBot/rules";
 import { runDueJobs, takeNotices } from "@/lib/relay/scheduled";
 import { deliverNotices } from "@/lib/relay/webhook";
@@ -44,17 +43,14 @@ export async function GET(req: Request) {
         amount: job.amount,
       }, { watchUntil }),
   });
-  // A cash out sent from a partner's link was registered when it was scheduled: count it once it lands.
+  // A cash out scheduled from a partner's link kept its code with the job: bind it to the
+  // transaction just sent, and count it (the run already watched each receipt). Never fails the run.
   const sent = results.filter((r) => r.status === "sent").map((r) => r.id);
   if (sent.length) {
     after(async () => {
       for (const id of sent) {
         const job = await store.get(id).catch(() => null);
-        if (!job?.hash) continue;
-        await settleLinkTx({ chainId: job.chainId, txHash: job.hash.toLowerCase() as `0x${string}` }).catch((e: unknown) => {
-          const code = (e as { code?: string }).code;
-          if (code !== "not_registered" && code !== "already_attributed") console.error("gloam_partner_settle_scheduled", logSafe(e));
-        });
+        if (job?.hash) await afterScheduledSend({ net: networkForChain(job.chainId), jobId: id, hash: job.hash });
       }
     });
   }

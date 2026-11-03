@@ -87,7 +87,13 @@ const VAULT_TOPICS = new Set<string>(VAULT_EVENTS.map((e) => toEventSelector(e))
 export type VaultTxKind = "private_payment" | "cash_out" | "private_swap";
 
 export type VaultTxFacts =
-  | { ok: true; kind: "private_payment"; nullifier: Hex }
+  | {
+      ok: true;
+      kind: "private_payment";
+      nullifier: Hex;
+      /** The payment's new note commitment (newCommitments[0]): chosen by the payer when it sends. */
+      paymentCommitment: Hex;
+    }
   | {
       ok: true;
       kind: "cash_out" | "private_swap";
@@ -107,7 +113,7 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 type Decoded =
   | { name: "Shielded"; commitment: Hex; asset: Address; amount: bigint; from: Address }
-  | { name: "Transferred"; nullifier: Hex }
+  | { name: "Transferred"; nullifier: Hex; newCommitments: readonly [Hex, Hex] }
   | { name: "Unshielded"; nullifier: Hex; asset: Address; to: Address; amount: bigint }
   | { name: "WithdrawFee"; nullifier: Hex; asset: Address; fee: bigint };
 
@@ -179,7 +185,10 @@ export function classifyVaultTx(
     if (anyRouter.has(out.to.toLowerCase())) return { ok: false, reason: "mixed" };
     return { ok: true, kind: "cash_out", nullifier: out.nullifier, asset: out.asset, amount: out.amount, vaultFee: feeFor(out.nullifier, out.asset), to: out.to };
   }
-  if (transferred.length === 1 && unshielded.length === 0) return { ok: true, kind: "private_payment", nullifier: transferred[0]!.nullifier };
+  if (transferred.length === 1 && unshielded.length === 0) {
+    const t = transferred[0]!;
+    return { ok: true, kind: "private_payment", nullifier: t.nullifier, paymentCommitment: t.newCommitments[0] };
+  }
   return { ok: false, reason: unshielded.length || transferred.length ? "mixed" : "not_vault" };
 }
 

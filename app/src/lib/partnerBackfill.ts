@@ -13,9 +13,9 @@
  *    that partner with the vault fee from its WithdrawFee log and the block's time.
  *    One a link counted to another partner is moved to the address's partner: an
  *    address match overrides a link. One counted with an API key stays.
- *  - it was registered from a partner's link (a cash out sent later, say) and
- *    nobody counted it yet: it is counted to that link's partner
- *    (lib/partnerAttribution settleLinkTx).
+ *  - it was bound to a partner's link (by the relay that sent it, or by the
+ *    payer's wallet registration) and nobody counted it yet: it is counted to that
+ *    link's partner (lib/partnerAttribution settleLinkTx).
  * A transaction counts once (the claim in lib/partners).
  *
  * What it can't find, said plainly in the dashboards:
@@ -66,8 +66,8 @@ export type BackfillDeps = {
   attributed: typeof attributedTo;
   counted: typeof countedRecord;
   reverse: typeof reverseActivity;
-  /** Which of these spends were registered from a partner's link. */
-  registered: (chainId: number, nullifiers: Hex[]) => Promise<boolean[]>;
+  /** Which of these cash outs were bound to a partner's link: the relay's binding of the transaction, or a wallet registration of the spend. */
+  registered: (chainId: number, logs: { txHash: Hex; nullifier: Hex }[]) => Promise<boolean[]>;
   /** Counts a registered transaction to its link (lib/partnerAttribution settleLinkTx). */
   settle: (net: GloamNetwork, hash: Hex) => Promise<void>;
   readCursor: (chainId: number) => Promise<bigint | null>;
@@ -112,10 +112,15 @@ export const backfillDeps: BackfillDeps = {
   attributed: attributedTo,
   counted: countedRecord,
   reverse: reverseActivity,
-  registered: async (chainId, nullifiers) => {
-    if (!nullifiers.length) return [];
-    const res = await kv(nullifiers.map((n) => ["EXISTS", k("reg", chainId, linkNullifierHash(n).toLowerCase())] as KvCommand));
-    return res.map((r) => Number(r) > 0);
+  registered: async (chainId, logs) => {
+    if (!logs.length) return [];
+    const res = await kv(
+      logs.flatMap((l) => [
+        ["EXISTS", k("relaytx", chainId, l.txHash.toLowerCase())],
+        ["EXISTS", k("reg", chainId, linkNullifierHash(l.nullifier).toLowerCase())],
+      ] as KvCommand[])
+    );
+    return logs.map((_, i) => Number(res[2 * i]) > 0 || Number(res[2 * i + 1]) > 0);
   },
   settle: async (net, hash) => {
     await settleLinkTx({ chainId: net.chainId, txHash: hash });
@@ -248,7 +253,7 @@ export async function runBackfill(
           scan.queries++;
           scan.logs += logs.length;
           const others = logs.filter((l) => !mine.has(l.to.toLowerCase()));
-          const reg = await deps.registered(net.chainId, others.map((l) => l.nullifier));
+          const reg = await deps.registered(net.chainId, others.map((l) => ({ txHash: l.txHash, nullifier: l.nullifier })));
           const linked = new Set(others.filter((_, i) => reg[i]).map((l) => l.txHash.toLowerCase()));
           for (const log of logs) {
             const partnerId = mine.get(log.to.toLowerCase());

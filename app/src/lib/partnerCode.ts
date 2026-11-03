@@ -6,9 +6,19 @@
  *
  * linkNullifierHash names one spend without revealing it: the app registers it
  * with the code before a wallet sends (lib/partnerAttribution), and the server
- * finds it again from the nullifier the transaction makes public.
+ * finds it again from the nullifier the transaction makes public. linkBindHash
+ * ties that registration to something only the spender knows when it sends (a
+ * private payment's new note commitment, a cash out's proof), so knowing a
+ * nullifier ahead of time is not enough to register its spend.
  */
 import { encodePacked, keccak256, type Hex } from "viem";
+
+/**
+ * Chains with a public mempool, where a pending transaction's calldata is seen
+ * before its block: a wallet send's registration there could be copied from it,
+ * so only relay-sent link payments count there.
+ */
+export const PUBLIC_MEMPOOL_CHAINS: readonly number[] = [1, 11155111];
 
 export const LINK_CODE_LENGTH = 20;
 const CODE_RE = new RegExp(`^[A-Za-z0-9]{${LINK_CODE_LENGTH}}$`);
@@ -30,4 +40,14 @@ export function linkNullifierHash(nullifier: Hex): Hex {
 
 export function isBytes32(raw: unknown): raw is Hex {
   return typeof raw === "string" && /^0x[0-9a-fA-F]{64}$/.test(raw);
+}
+
+/** The hash a registration's binding is kept under: keccak256("gloam-partner-bind-v1" ‖ value). */
+export function linkBindHash(value: Hex): Hex {
+  return keccak256(encodePacked(["string", "bytes32"], ["gloam-partner-bind-v1", value]));
+}
+
+/** What a wallet cash out binds to: its proof, which nobody but the spender has before it is sent. */
+export function proofBindValue(proof: Hex): Hex {
+  return keccak256(proof);
 }

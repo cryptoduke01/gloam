@@ -191,6 +191,12 @@ function memCommand(cmd: KvCommand): unknown {
       }
       return added;
     }
+    case "HSETNX": {
+      const h = typed(a[0]!, () => new Map<string, string>(), isHash);
+      if (h.has(a[1]!)) return 0;
+      h.set(a[1]!, a[2]!);
+      return 1;
+    }
     case "HGET": {
       const e = live(a[0]!);
       return e && isHash(e.v) ? (e.v.get(a[1]!) ?? null) : null;
