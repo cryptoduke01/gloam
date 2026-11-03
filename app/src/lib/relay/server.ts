@@ -71,6 +71,7 @@ import {
   TimeoutError,
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   keccak256,
   type Address,
   type Hex,
@@ -799,20 +800,48 @@ type SubmitOpts = {
   onEnd?: (status: SendEnd["status"]) => Promise<void>;
   /**
    * Called once, when the checks, the dry run and the holds have passed and the
-   * transaction is about to go out. Never waited on, and nothing it does or throws
-   * can stop or slow the send (a partner link's binding: lib/partnerAttribution).
+   * transaction is about to go out, with the call it carries (its target and
+   * calldata). Never waited on, and nothing it does or throws can stop or slow the
+   * send (a partner link's binding: lib/partnerAttribution). What it returns is
+   * called if the send then surely did not go out (the relay was busy, its lock
+   * store was down, the node refused it).
    */
-  beforeBroadcast?: () => void;
+  beforeBroadcast?: (tx: { to: Address; data: Hex }) => (() => void) | void;
 };
 
 /** Hooks a caller may hang on a send. */
 export type SendHooks = Pick<SubmitOpts, "beforeBroadcast">;
 
-function startBeforeBroadcast(hook: (() => void) | undefined): void {
+/** The call a spend sends, as calldata, for the before-broadcast hook. */
+function callTx(net: GloamNetwork, call: Call): { to: Address; data: Hex } | null {
+  switch (call.kind) {
+    case "transfer":
+      return { to: net.pool!, data: encodeFunctionData({ abi: relayPoolAbi, functionName: "transfer", args: call.args }) };
+    case "unshield":
+      return { to: net.pool!, data: encodeFunctionData({ abi: relayPoolAbi, functionName: "unshield", args: call.args }) };
+    case "swap":
+      return { to: call.router, data: encodeFunctionData({ abi: swapCallAbi, functionName: "swap", args: call.args }) };
+    case "swapV3":
+      return { to: call.router, data: encodeFunctionData({ abi: swapV3CallAbi, functionName: "swap", args: call.args }) };
+    default:
+      return null;
+  }
+}
+
+/** Runs the hook, if any, never letting it touch the send; returns what to call if the send surely did not go out. */
+function startBeforeBroadcast(net: GloamNetwork, call: Call, hook: SubmitOpts["beforeBroadcast"]): () => void {
   try {
-    hook?.();
+    const tx = hook ? callTx(net, call) : null;
+    const undo = tx ? hook!(tx) : undefined;
+    return () => {
+      try {
+        undo?.();
+      } catch {
+        /* never the send's business */
+      }
+    };
   } catch {
-    /* never the send's business */
+    return () => {};
   }
 }
 
@@ -1016,6 +1045,7 @@ async function submit(net: GloamNetwork, call: Call, opts: SubmitOpts = {}): Pro
 
   const holds: Hold[] = [];
   let mayBeOut = false;
+  let notSent = () => {};
   try {
     const budget = await opts.afterDryRun?.(padGas(gas));
     if (budget) holds.push(budget);
@@ -1030,7 +1060,7 @@ async function submit(net: GloamNetwork, call: Call, opts: SubmitOpts = {}): Pro
       }))
     );
     holds.push(await (call.kind === "memo" ? holdMemoSlot(net, call.budget) : holdNetworkSlot(net)));
-    startBeforeBroadcast(opts.beforeBroadcast);
+    notSent = startBeforeBroadcast(net, call, opts.beforeBroadcast);
 
     // one send at a time per relay account and chain, each with the next nonce; with
     // several accounts, the first free one sends (lib/relay/inflight)
@@ -1073,7 +1103,10 @@ async function submit(net: GloamNetwork, call: Call, opts: SubmitOpts = {}): Pro
     mayBeOut = true;
     throw new RelayError("The relay could not submit this payment.", 502, "rpc");
   } catch (e) {
-    if (!mayBeOut) await dropHolds(holds);
+    if (!mayBeOut) {
+      notSent();
+      await dropHolds(holds);
+    }
     throw e;
   }
 }
@@ -1416,9 +1449,7 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
       afterDryRun: (gasLimit) => (refunding ? holdWaiting(net, spend.asset, refund.amount, gasLimit) : holdSwap(net, gasLimit)),
       onEnd: (status) => noteEnded(net, refunding ? `refund|${escrow}` : spend.nullifier, status),
       // a refund is never a link's swap: no binding for it
-      beforeBroadcast: () => {
-        if (!refunding) hooks.beforeBroadcast?.();
-      },
+      beforeBroadcast: (tx) => (refunding ? undefined : hooks.beforeBroadcast?.(tx)),
     }
   );
 }
