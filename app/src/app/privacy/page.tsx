@@ -335,9 +335,11 @@ export default function PrivacyPage() {
         or swap from such a link, the app asks us which partner the code belongs
         to (to show their name), and ties your transaction to the code before it
         is sent: through the Gloam relay, the code goes with the send and the relay
-        ties it to the transaction it sends; from your own wallet, the app first
-        sends us one-way hashes of the payment and of a value only that payment
-        has, with the code. We keep that for an hour at most. Once your
+        ties it to a one-way hash of the payment just before sending, and to the
+        transaction it sends (kept seven days; an hour if the send never goes
+        out); from your own wallet, the app first sends us one-way hashes of the
+        payment and of a value only that payment has, with the code. We keep that
+        for an hour at most. Once your
         transaction lands, we read it on its chain and record it against the
         partner: the transaction hash, the network, the kind, the asset and amount
         where they are public, the vault&apos;s fee and the time, which anyone can
