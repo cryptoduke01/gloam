@@ -323,7 +323,7 @@ function groupGuide(c: BotConfig): string {
   return (
     `Hi, I'm ${c.persona}, Gloam's community helper bot. Tag me or reply to me with a question, or just ask in Help.\n\n` +
     `Ideas and bugs go in Feedback, or type /bug and what happened. /ca gives the $GLOAM contract, and replying /spam to a message reports it. ${testing}\n\n` +
-    `Docs live at gloam.trade/docs, news at @gloamtrade, and anything private goes to hello@gloam.trade. Admins never DM first.`
+    `Docs live at gloam.trade/docs, news at @gloamtrade, and anything private goes to hello@gloam.trade. Admins never ask for your keys or funds.`
   );
 }
 
@@ -442,7 +442,7 @@ function pointedWarning(name: string, removed: boolean): string {
   const first = removed
     ? `Thanks for flagging it, ${name}. I took that message down because it repeats the scam's words, so nobody acts on them. You're not in trouble.`
     : `Thanks for flagging it, ${name}.`;
-  return `${first}\n\nGloam admins never DM first and will never ask for your seed phrase, private key or funds. Reply /spam to a scam message and I'll deal with it.`;
+  return `${first}\n\nGloam admins will never ask for your seed phrase, private key or funds. Reply /spam to a scam message and I'll deal with it.`;
 }
 
 /** Words that read like a scam but that members say too ("everyone DM me"): the words go, the person stays. */
@@ -450,7 +450,7 @@ function warnOnlyWarning(name: string, removed: boolean): string {
   const first = removed
     ? `${name}, I took that message down because it reads like the scams that go around here. You're not removed, just keep chats in the group.`
     : `${name}, careful: that reads like the scams that go around here. Keep chats in the group, please.`;
-  return `${first}\n\nGloam admins never DM first and will never ask for your seed phrase, private key or funds.`;
+  return `${first}\n\nGloam admins will never ask for your seed phrase, private key or funds.`;
 }
 
 /** What the owner is told an account was removed for. */

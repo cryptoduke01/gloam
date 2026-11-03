@@ -1506,7 +1506,7 @@ export function welcomeHtml(joiners: Joiner[], testingOpen: boolean): string {
   return (
     `Welcome to Gloam, ${list}. Glad you're here.\n\n` +
     `Send and receive money privately on ${liveMainnetNames()} at gloam.trade/app. Questions go in Help.${testing}\n\n` +
-    `Admins never DM first.`
+    `Never share your keys with anyone.`
   );
 }
 

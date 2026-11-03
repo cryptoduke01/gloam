@@ -462,7 +462,7 @@ function mainnetLiveFacts(): string {
     "- A sender can take back a link nobody has claimed yet, from Sent links under Send privately (Take back).",
     "",
     "SAFETY",
-    "- Gloam and its team never DM first, and never ask for a seed phrase, private key, passkey or a claim link. Anyone who does is a scammer.",
+    "- Gloam and its team never ask for a seed phrase, private key, passkey, claim link or funds. Anyone who does is a scammer, whatever name they use.",
     "- Copycat GLOAM tokens exist. The only real one is the contract address in the token part; any other is fake.",
     "",
     "MORE ON MAINNET",

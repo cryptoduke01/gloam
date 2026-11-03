@@ -872,7 +872,7 @@ await test("welcome: tags, mention links, escaping, the others count", () => {
   assert.ok(html.includes("Send and receive money privately on Robinhood Chain, Tempo, Base and Ethereum at gloam.trade/app."), "the four mainnets as shipped");
   assert.ok(html.includes("Questions go in Help.\n\n"), "no testing line while the tester program is closed");
   assert.ok(!/testing directions|soon/i.test(html), "nothing promised for later");
-  assert.ok(html.endsWith("Admins never DM first."));
+  assert.ok(html.endsWith("Never share your keys with anyone."));
   assert.ok(html.split(/\s+/).length < 40, "short enough not to bury the chat");
   assert.ok(html.includes("gloam.trade/app"), "the welcome says where to start");
   assert.ok(!/@dukedotsol|@quinkardeeah|Kardeeah|assistant/.test(html), "the welcome never tags or names the admins");
