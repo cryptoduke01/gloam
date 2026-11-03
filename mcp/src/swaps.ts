@@ -17,6 +17,13 @@
  * is sent, and the refund note stays there, dead if need be, as long as the swapped
  * note's unshield proof could still land. A swap is never sent from the agent's wallet:
  * that would put the wallet next to the swap on the explorer.
+ *
+ * A swap that went out and reverted, or ran out of time, leaves that proof public and
+ * valid until the note is spent. So the note is held (moveFirst: no tool spends it) and
+ * moved whole to a fresh note right away, with the same private send to this server's
+ * own notes that splits a note (sendToSelf). A move that fails leaves it held, and each
+ * refresh tries again (moveDue), as the Gloam app does. A swap whose send got no clear
+ * answer and that shows nothing for an hour is treated the same way (SWAP_UNSEEN_MS).
  */
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -54,7 +61,7 @@ import {
 } from "@gloamtrade/sdk";
 import { KNOWN_ASSETS, type Spend } from "./policy.js";
 import { authorizeSpend, settleSpend } from "./spendGuard.js";
-import { deadCheckDue, noteView, type NoteStore, type StoredNote } from "./noteStore.js";
+import { deadCheckDue, heldMessage, isHeld, noteView, type NoteStore, type StoredNote } from "./noteStore.js";
 import { describeNetwork, networkByChainId, networkByKey, type McpNetwork, type NetworkKey } from "./networks.js";
 
 type Env = Record<string, string | undefined>;
@@ -276,19 +283,44 @@ export function applySwapOutcome(store: NoteStore, refund: StoredNote, outcome: 
       return "closed: the note was spent and nothing waits at the escrow";
     case "reverted":
     case "expired":
-      // The swap itself can't land. Its unshield proof is public until the note is spent,
-      // so the refund note is kept (dead), and the note is spendable again.
-      dead(out);
-      dead(refund);
-      if (input && input.status === "pending") set(input, { status: "unspent", recheck: true });
-      return `${outcome.state === "expired" ? "its deadline passed" : "it reverted"}: it can't land, and ${input?.handle ?? "the note"} is spendable again. Spending that note ends the swap for good.`;
+      return holdSwapNote(store, refund, outcome.state === "expired" ? "its deadline passed" : "it reverted", tryStore);
     case "pending":
       return "still open: the swap may land";
   }
 }
 
-/** The refresh pass for swaps, inside gloam_list_notes: read each open swap's outcome and settle its notes. */
-export async function refreshSwapNotes(ctx: Pick<SwapToolContext, "client" | "errMsg" | "tryStore">, store: NoteStore): Promise<string[]> {
+/**
+ * A swap that can't land. Its unshield proof went out and stays valid until the note is spent: the
+ * refund note is kept (dead), and the note is held until it moves to a fresh note (moveHeldNote). A
+ * refund note dead already is a swap settled before (or one the relay refused, which never went
+ * out): its note is left as it is.
+ */
+function holdSwapNote(store: NoteStore, refund: StoredNote, why: string, tryStore: (fn: () => void) => string | undefined): string {
+  const { out, input } = swapNotes(store, refund);
+  const settledBefore = refund.status === "dead";
+  for (const n of [out, refund]) if (n && n.status !== "dead" && n.status !== "spent") tryStore(() => void store.markDead(n.handle));
+  if (!input || settledBefore || input.status === "spent" || input.status === "dead") return `${why}: it can't land`;
+  const moveFirst = input.moveFirst ?? { at: new Date(Date.now()).toISOString(), swap: refund.handle, tries: 0 };
+  // a note another send has taken since (it showed its own hash) stays with that send, held if it fails
+  const sent = refund.swap?.info.sent?.hash;
+  const another = input.status === "pending" && input.spentTx && !(sent && same(input.spentTx, sent));
+  tryStore(() => void store.update(input.handle, another ? { moveFirst } : { status: "unspent", recheck: true, moveFirst }));
+  return `${why}: it can't land, but its proof stays valid until ${input.handle} is spent, so ${input.handle} is held and moves whole to a fresh note of this server's before anything else can spend it`;
+}
+
+/**
+ * How long a swap the relay gave no hash for (an unclear answer) may show nothing before its note is
+ * treated as if the swap had reverted, as the Gloam app does (SWAP_UNSEEN_MS). A guess, but one that can
+ * only cost a transfer: if the swap can still land, whichever spends the note first wins, and a refresh
+ * settles the notes from what landed.
+ */
+const SWAP_UNSEEN_MS = 60 * 60_000;
+
+/**
+ * The refresh pass for swaps, inside gloam_list_notes: read each open swap's outcome and settle
+ * its notes, then move each held note whose move is due to a fresh note.
+ */
+export async function refreshSwapNotes(ctx: SwapToolContext, store: NoteStore): Promise<string[]> {
   const out: string[] = [];
   const open = store.list().filter((n) => n.origin === "swap_refund" && n.swap && (n.status === "pending" || (n.status === "dead" && deadCheckDue(n))));
   for (const refund of open) {
@@ -304,12 +336,105 @@ export async function refreshSwapNotes(ctx: Pick<SwapToolContext, "client" | "er
         const o = swapNotes(store, refund).out;
         if (outcome.state === "swapped" && o && o.status !== "pending" && o.status !== "dead") continue;
       }
+      if (outcome.state === "pending" && !refund.swap!.info.sent && Date.now() - Date.parse(refund.createdAt) > SWAP_UNSEEN_MS) {
+        out.push(`swap ${refund.handle}: ${holdSwapNote(store, store.get(refund.handle)!, "it showed nothing for an hour after an unclear send", ctx.tryStore)}`);
+        continue;
+      }
       out.push(`swap ${refund.handle}: ${applySwapOutcome(store, store.get(refund.handle)!, outcome, ctx.tryStore)}`);
     } catch (e) {
       out.push(`swap ${refund.handle}: could not check (${ctx.errMsg(e)})`);
     }
   }
+  for (const n of store.list().filter(isHeld)) {
+    if (!moveDue(n)) {
+      out.push(`${n.handle}: held until it moves to a fresh note; the next try is due from ${new Date(moveDueAt(n)).toISOString()}`);
+      continue;
+    }
+    const r = await moveHeldNote(ctx, store, n.handle);
+    out.push(`${n.handle}: ${r.moved ? `moved whole to a fresh note, ${r.note.handle}` : r.spent ? r.message : `not moved yet, still held (${r.message})`}`);
+  }
   return out;
+}
+
+// ------------------------------------------------------------------ moving a held note
+
+/** A held note's next move a minute after a failed try, doubling up to 15 minutes: each try is a proof and a relay send. */
+const MOVE_RETRY_MS = 60_000;
+const MOVE_RETRY_MAX_MS = 15 * 60_000;
+
+/** When a held note's next move may be tried (ms). */
+function moveDueAt(n: StoredNote): number {
+  const m = n.moveFirst;
+  if (!m?.triedAt) return 0;
+  return Date.parse(m.triedAt) + Math.min(MOVE_RETRY_MS * 2 ** Math.max(0, m.tries - 1), MOVE_RETRY_MAX_MS);
+}
+
+/** Whether a held note's move may be tried now. */
+export function moveDue(n: StoredNote, now = Date.now()): boolean {
+  return isHeld(n) && now >= moveDueAt(n);
+}
+
+export type MoveResult =
+  | { moved: true; note: StoredNote; hash: Hex }
+  | { moved: false; spent?: boolean; maybeSent: boolean; message: string };
+
+/**
+ * Moves a held note whole to a fresh note of this server's, with the private send through the
+ * relay that splits a note (sendToSelf), so the reverted swap's proof can never be used. The
+ * fresh note is kept before the send. A try that fails leaves the note held (or pending, while
+ * the move may still land), and a refresh tries again.
+ */
+export async function moveHeldNote(ctx: SwapToolContext, store: NoteStore, handle: string): Promise<MoveResult> {
+  const note = store.get(handle);
+  if (!note || !isHeld(note)) return { moved: false, maybeSent: false, message: `note ${handle} is not waiting to move` };
+  const net = networkByChainId(note.chainId);
+  if (!net) return { moved: false, maybeSent: false, message: `this server has no network for chain ${note.chainId}` };
+  const spent = await ctx
+    .client(net)
+    .readContract({ address: net.pool, abi: POOL_READS, functionName: "isSpent", args: [note.nullifier] })
+    .catch(() => false);
+  if (spent) {
+    // spent another way (the swap's proof sent alone, say): nothing to move, and the swap's notes are looked at again
+    ctx.tryStore(() => {
+      store.update(handle, { status: "spent", recheck: false });
+      store.wakeDead();
+    });
+    return { moved: false, spent: true, maybeSent: false, message: `${handle} is already spent on chain. Call gloam_list_notes with refresh to see where its money went.` };
+  }
+  // the relay says it sends nothing now: no proof is made, and the try isn't counted
+  const relay = await relayFor(ctx, net.chainId);
+  if (relay && (!relay.enabled || relay.gasHigh)) return { moved: false, maybeSent: false, message: "the Gloam relay is not sending on this network right now" };
+  const m = note.moveFirst!;
+  ctx.tryStore(() => void store.update(handle, { moveFirst: { ...m, tries: m.tries + 1, triedAt: new Date(Date.now()).toISOString() } }));
+  const r = await sendToSelf(ctx, store, net, note, BigInt(note.amountWei), swapRelayUrl(ctx.env), {
+    move: true,
+    what: `Moving ${handle} to a fresh note`,
+    label: `moved from ${handle} after its swap reverted`,
+  });
+  if (r.ok) return { moved: true, note: r.note, hash: r.hash };
+  return { moved: false, maybeSent: r.maybeSent, message: String(r.result.error ?? "the move failed") };
+}
+
+/** A move as the agent sees it, in the answer of the tool that tried it. */
+function moveView(handle: string, r: MoveResult) {
+  if (r.moved) {
+    return {
+      status: "moved",
+      note: handle,
+      newNote: noteView(r.note),
+      hash: r.hash,
+      message: `${handle} moved whole to a fresh note of this server's, so the swap's proof can't be used. Use the new note.`,
+    };
+  }
+  if (r.spent) return { status: "spent", note: handle, message: r.message };
+  return {
+    status: r.maybeSent ? "moving" : "held",
+    note: handle,
+    error: r.message,
+    message: r.maybeSent
+      ? `The move of ${handle} to a fresh note may have gone out. Call gloam_list_notes with refresh: it settles the move, and tries again if it never landed. Do not use ${handle} meanwhile.`
+      : `${handle} has not moved to a fresh note yet. It is held: do not use it in a new swap or payment until it moves. Call gloam_list_notes with refresh in a minute to try again.`,
+  };
 }
 
 // ------------------------------------------------------------------ the tools
@@ -379,7 +504,7 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
     {
       title: "Execute a private swap",
       description:
-        "REAL execution. Swap one note's value from one asset into another, privately: proves locally (the swapped note's unshield to a one-time escrow, the new note, and a refund note) and sends it through the Gloam relay, never from this server's wallet. Who swapped stays private; the tokens and the amounts are public. A swap spends one whole note: with an amount below a note's value, the note is first split with a private send to this server's own notes. Checked first against the owner's spending limits (\"swap\" must be listed in the agent's tools) and everything gloam_swap_quote checks. Both new notes are kept before anything is sent; gloam_finish_swap brings back a swap whose money waits at its escrow.",
+        "REAL execution. Swap one note's value from one asset into another, privately: proves locally (the swapped note's unshield to a one-time escrow, the new note, and a refund note) and sends it through the Gloam relay, never from this server's wallet. Who swapped stays private; the tokens and the amounts are public. A swap spends one whole note: with an amount below a note's value, the note is first split with a private send to this server's own notes. Checked first against the owner's spending limits (\"swap\" must be listed in the agent's tools) and everything gloam_swap_quote checks. Both new notes are kept before anything is sent; gloam_finish_swap brings back a swap whose money waits at its escrow. A swap that reverts leaves its note held: it moves whole to a fresh note right away, and nothing spends it before that.",
       inputSchema: {
         network: ctx.networkArg("Which network to swap on:"),
         from: z.string().optional().describe('What you pay: a symbol or a 0x token address. Left out with a note handle: the note\'s asset.'),
@@ -403,6 +528,7 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
         chosen = store.get(note);
         if (!chosen) return text({ status: "error", error: `There is no note "${note}". Call gloam_list_notes.` });
         if (chosen.status !== "unspent") return text({ status: "error", error: `Note ${chosen.handle} is ${chosen.status}, not spendable.` });
+        if (isHeld(chosen)) return text({ status: "error", error: heldMessage(chosen.handle) });
         if (chosen.chainId !== net.chainId || !same(chosen.pool, net.pool)) return text({ status: "error", error: `Note ${chosen.handle} is on ${chosen.network}, not ${net.key}.` });
       }
       const fromInput = chosen?.asset ?? from;
@@ -438,7 +564,7 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
       } else {
         const candidates = store
           .list()
-          .filter((n) => n.status === "unspent" && fits(n, amountIn))
+          .filter((n) => n.status === "unspent" && !isHeld(n) && fits(n, amountIn))
           .sort((a, b) => (BigInt(a.amountWei) === amountIn ? -1 : BigInt(b.amountWei) === amountIn ? 1 : BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1));
         for (const c of candidates) {
           if (!(await spentOnChain(c))) {
@@ -486,12 +612,15 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
       // A larger note is split first: the part to swap and the change, both this server's own.
       let input: StoredNote = chosen;
       if (split) {
-        const r = await splitNote(ctx, store, net, chosen, amountIn, inRef, url);
+        const r = await sendToSelf(ctx, store, net, chosen, amountIn, url, {
+          what: "Setting the swap's amount aside",
+          label: `set aside for a swap of ${units(amountIn, inRef)}`,
+        });
         if (!r.ok) {
           settleSpend(gate, r.maybeSent ? "unconfirmed" : "failed", { reason: String(r.result.error ?? r.result.message ?? "split failed") });
           return text(r.result);
         }
-        input = r.exact;
+        input = r.note;
       }
 
       try {
@@ -628,6 +757,15 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
       const outcome = await readSwapOutcome(client, rec).catch(() => null);
       const fresh = store.get(refund.handle) ?? refund;
       const said = outcome ? applySwapOutcome(store, fresh, outcome, tryStore) : "not read yet";
+      if (!outcome && receipt === "reverted") {
+        // How it ended wasn't read, but it reverted: the note is held already, so nothing makes it
+        // spendable before it has moved. A refresh settles the swap and moves it.
+        const at = new Date(Date.now()).toISOString();
+        tryStore(() => void store.update(input.handle, { moveFirst: { at, swap: refund.handle, tries: 0 } }));
+      }
+      // One that can't land leaves its note held (applySwapOutcome): it moves to a fresh note now.
+      const held = store.get(input.handle);
+      const moved = held && isHeld(held) ? await moveHeldNote(ctx, store, input.handle) : null;
       const landed = outcome && ["swapped", "refunded", "refund_ready", "exit_ready", "closed"].includes(outcome.state);
       const logWarning = settleSpend(gate, landed ? "sent" : outcome?.state === "reverted" || receipt === "reverted" ? "reverted" : "unconfirmed", { hash });
       const now = (h: string) => {
@@ -645,6 +783,7 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
         paid: units(amountIn, inRef),
         receive: units(BigInt(built.recovery.out.amountWei), outRef),
         outcome: said,
+        ...(moved ? { move: moveView(input.handle, moved) } : {}),
         notes: { swapped: input.handle, newNote: now(out.handle), refundNote: now(refund.handle), ...(split ? { splitFrom: chosen.handle } : {}) },
         warnings: built.warnings,
         privacy: SWAP_PRIVACY,
@@ -749,10 +888,15 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
       }
 
       const said = applySwapOutcome(store, refund, outcome, tryStore);
+      // a swap that can't land leaves its note held: it moves now, when a try is due
+      const input = swapNotes(store, refund).input;
+      const moved = input && moveDue(input) ? await moveHeldNote(ctx, store, input.handle) : null;
       return text({
         status: outcome.state,
         note: refund.handle,
         outcome: said,
+        ...(moved && input ? { move: moveView(input.handle, moved) } : {}),
+        ...(!moved && input && isHeld(input) ? { move: { status: "held", note: input.handle, message: heldMessage(input.handle) } } : {}),
         ...(outcome.state === "pending" ? { deadline: outcome.deadline === null ? null : new Date(Number(outcome.deadline) * 1000).toISOString() } : {}),
       });
     }
@@ -763,27 +907,31 @@ const POOL_READS = [
   { type: "function", name: "isSpent", stateMutability: "view", inputs: [{ type: "bytes32" }], outputs: [{ type: "bool" }] },
 ] as const;
 
-type SplitResult = { ok: true; exact: StoredNote } | { ok: false; maybeSent: boolean; result: Record<string, unknown> };
+type SelfSendResult = { ok: true; note: StoredNote; hash: Hex } | { ok: false; maybeSent: boolean; result: Record<string, unknown> };
 
 /**
- * Splits `note` into a note of exactly `amount` and the change, both this server's own,
- * with a private send through the relay, and waits for it. Both new notes are kept
- * before the send, the way a payment's are.
+ * A private send through the relay from `note` to this server's own notes, waited for: a note of
+ * exactly `amount` and the change. It splits a note before a swap, and with `move` it moves a held
+ * note whole (`amount` its value, no change) to a fresh note. The new notes are kept before the
+ * send, the way a payment's are. A held note that isn't moved stays held: every way back to
+ * unspent keeps its moveFirst.
  */
-async function splitNote(
+async function sendToSelf(
   ctx: SwapToolContext,
   store: NoteStore,
   net: McpNetwork,
   note: StoredNote,
   amount: bigint,
-  asset: AssetRef,
-  url: string
-): Promise<SplitResult> {
+  url: string,
+  opts: { what: string; label: string; move?: boolean }
+): Promise<SelfSendResult> {
   const { tryStore, errMsg } = ctx;
+  const { what, move = false } = opts;
   const client = ctx.client(net);
-  const fail = (result: Record<string, unknown>, maybeSent = false): SplitResult => ({ ok: false, maybeSent, result });
+  const fail = (result: Record<string, unknown>, maybeSent = false): SelfSendResult => ({ ok: false, maybeSent, result });
   try {
-    store.reserveForSpend(note.handle, (n) => (n.chainId === net.chainId && same(n.asset, note.asset) && BigInt(n.amountWei) > amount ? null : `Note ${n.handle} no longer covers this swap.`));
+    const covers = (n: StoredNote) => n.chainId === net.chainId && same(n.asset, note.asset) && (move ? BigInt(n.amountWei) === amount : BigInt(n.amountWei) > amount);
+    store.reserveForSpend(note.handle, (n) => (covers(n) ? null : `Note ${n.handle} no longer covers this ${move ? "move" : "swap"}.`), { move });
   } catch (e) {
     return fail({ status: "error", error: errMsg(e) });
   }
@@ -829,7 +977,7 @@ async function splitNote(
         createdTx: null,
         label,
       });
-    exact = keep(intent.paymentNote, `set aside for a swap of ${units(amount, asset)}`);
+    exact = keep(intent.paymentNote, opts.label);
     if (BigInt(intent.changeNote.amountWei) > 0n) change = keep(intent.changeNote, `change from setting aside a swap`);
     sending = true;
     hash = await ctx.relay(intent, { url });
@@ -846,19 +994,22 @@ async function splitNote(
         tryStore(() => void store.markDead(exact!.handle));
         if (change) tryStore(() => void store.markDead(change!.handle));
         tryStore(() => void store.update(note.handle, { status: "unspent", recheck: true }));
-        return fail({ status: "error", error: `Setting the swap's amount aside reverted (${hash}). Nothing moved; the note is spendable again.` });
+        return fail({ status: "error", error: `${what} reverted (${hash}). Nothing moved${move ? "" : "; the note is spendable again"}.` });
       }
-      return fail({ status: "error", error: `Setting the swap's amount aside reverted (${hash}). Call gloam_list_notes with refresh before trying again.`, hash }, true);
+      return fail({ status: "error", error: `${what} reverted (${hash}). Call gloam_list_notes with refresh before trying again.`, hash }, true);
     }
     tryStore(() => void store.update(note.handle, { status: "spent", spentTx: sentHash }));
     tryStore(() => void store.update(exact!.handle, { status: "unspent", createdTx: sentHash }));
     if (change) tryStore(() => void store.update(change!.handle, { status: "unspent", createdTx: sentHash }));
-    return { ok: true, exact: store.get(exact.handle)! };
+    return { ok: true, note: store.get(exact.handle)!, hash: sentHash };
   } catch (e) {
-    const maybeSent = Boolean(hash) || (sending && (!(e instanceof GloamRelayError) || RELAY_MAYBE_SENT.has(e.code)));
+    // A move right after a swap reverted can find the relay still holding the note for that swap
+    // (in_flight): it turned this send away, so it never went out.
+    const turnedAway = e instanceof GloamRelayError && (!RELAY_MAYBE_SENT.has(e.code) || (move && e.code === "in_flight"));
+    const maybeSent = Boolean(hash) || (sending && !turnedAway);
     if (!maybeSent && sending) {
       // The relay refused it, but it has seen the proof, which stays valid until the note is spent:
-      // both new notes stay kept (dead), and the note is spendable again and checked on every refresh.
+      // both new notes stay kept (dead), and the note is back as it was and checked on every refresh.
       if (exact) tryStore(() => void store.markDead(exact!.handle));
       if (change) tryStore(() => void store.markDead(change!.handle));
       tryStore(() => void store.update(note.handle, { status: "unspent", recheck: true }));
@@ -871,7 +1022,7 @@ async function splitNote(
     return fail(
       {
         status: "error",
-        error: `Setting the swap's amount aside failed: ${errMsg(e)}`,
+        error: `${what} failed: ${errMsg(e)}`,
         ...(maybeSent ? { ...(hash ? { hash } : {}), check: "It may have gone out. Call gloam_list_notes with refresh before trying again." } : {}),
       },
       maybeSent
