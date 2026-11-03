@@ -3,14 +3,17 @@
  * so a trading app can offer "Trade privately with Gloam".
  *
  *   https://gloam.trade/app/vault?tab=swap#from=USDG&to=TSLA&amount=100
- *     &chain=robinhood-mainnet&ref=Motion
+ *     &chain=robinhood-mainnet&p=<partner link code>
  *
  * `from` and `to` are a token's symbol or address on that network. Only tokens
  * the swap router lists there are filled in (lib/vaultSwap VAULT_SWAP_ASSETS);
  * any other is left out and the person is told why. `amount` is in whole
  * tokens of `from` (100 is 100 USDG), not base units. `chain` is a network key,
  * the same keys a payment request link takes (lib/paymentRequest). `ref` is a
- * short name for whoever sent the link, shown as "From Motion".
+ * short name for whoever sent the link, shown as what the link says. `p` is a
+ * Gloam partner's link code (lib/partnerLinks): with a live one, the name shown
+ * is the partner's own from their Gloam account ("From Motion"), and the swap is
+ * counted to them once it lands. `ref` alone counts for nothing.
  *
  * Like a payment request link, it only fills in the form, and it stays in the
  * fragment (after #), which browsers never send to a server. Nothing swaps on
@@ -28,6 +31,7 @@
 import type { Address } from "viem";
 import { getNetwork, isNetworkKey, NETWORK_KEYS, networkName, type NetworkKey } from "./networks";
 import { REQUEST_NAME_MAX, cleanRequestText, normalizeRequestAmount } from "./paymentRequest";
+import { isLinkCodeShape, readLinkCode } from "./partnerCode";
 import { NATIVE_ETH_TOKEN, knownTokens } from "./tokens";
 import { VAULT_SWAP_ASSETS, swapMainnets, vaultSwapRouter } from "./vaultSwap";
 
@@ -61,8 +65,10 @@ export type SwapLink = {
   to: SwapLinkToken | null;
   /** In whole tokens of `from`, normalized ("100", "12.5"), or null when absent or invalid. */
   amount: string | null;
-  /** Who sent the link ("Motion"), cleaned, or null. */
+  /** Who sent the link ("Motion"), cleaned, or null. What the link says; never counted. */
   ref: string | null;
+  /** A partner link code's shape from `p`, or null. Whether it is live is the server's to say. */
+  partnerCode: string | null;
   /** Plain-language reasons a field was left out. */
   problems: string[];
 };
@@ -197,7 +203,7 @@ export function readSwapLink(params: Params, fallback: NetworkKey): SwapLink | n
   }
   if (refProblem) problems.push(refProblem);
 
-  return { network, on, from, to, amount, ref, problems };
+  return { network, on, from, to, amount, ref, partnerCode: readLinkCode(params), problems };
 }
 
 /** The swap link in a fragment, or null (lib/swapLink readSwapLink). */
@@ -250,7 +256,7 @@ function groupAmount(amount: string): string {
 
 /** The link that opens the Swap tab with this swap filled in. Fields ride in the fragment. */
 export function buildSwapLink(
-  d: { from: string; to: string; amount?: string; network: NetworkKey; ref?: string },
+  d: { from: string; to: string; amount?: string; network: NetworkKey; ref?: string; partnerCode?: string },
   origin = "https://gloam.trade"
 ): string {
   const p = new URLSearchParams();
@@ -260,6 +266,7 @@ export function buildSwapLink(
   p.set("chain", d.network);
   const { ref } = readSwapRef(d.ref);
   if (ref) p.set("ref", ref);
+  if (isLinkCodeShape(d.partnerCode)) p.set("p", d.partnerCode);
   return `${origin.replace(/\/+$/, "")}/app/vault?tab=swap#${p.toString()}`;
 }
 

@@ -116,6 +116,8 @@ export function useLocalShieldNotes(address?: string | null) {
       // Scheduled cash outs, after spent notes are retired: one that came back
       // unsent (and is unspent on its chain) makes its note spendable again.
       if ((await reconcileCashOuts().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
+      // Cash outs sent later from a partner's link: report the ones that have gone out (never waited on).
+      void import("@/lib/partnerLinkClient").then((m) => m.processPartnerQueue()).catch(() => undefined);
       // Ghost-note cleanup for old notes with no nullifier (isSpent can't
       // settle them): an empty ETH inventory means none of them is left. Read
       // and applied on this sync's own network only, so a switch halfway

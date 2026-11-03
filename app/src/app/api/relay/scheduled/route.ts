@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { randomUUID } from "crypto";
 import { logSafe } from "@/lib/logSafe";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
@@ -26,6 +26,7 @@ import {
 import { webhookUrlProblem } from "@/lib/relay/webhookUrl";
 import { scheduledStore, scheduledStoreReady } from "@/lib/relay/scheduledStore";
 import { RelayError, checkRateLimit, checkUnshieldForLater, networkForChain } from "@/lib/relay/server";
+import { bindScheduledJob } from "@/lib/partnerAttribution";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -120,6 +121,9 @@ function fail(e: unknown) {
  * { id, sendAfter, to }. A dated one may also carry { webhook: { url, series } }
  * (lib/relay/webhook). Asking again for the same spend returns the job already waiting; asking with
  * another address (or amount) is a 409 already_scheduled with that job.
+ * One opened from a partner's link may carry { partnerCode }: it is bound to the
+ * job's spend now, before anything is sent, and the scheduled run counts the
+ * transaction it sends (lib/partnerAttribution). It changes nothing about the job.
  */
 export async function POST(req: Request) {
   try {
@@ -180,6 +184,11 @@ export async function POST(req: Request) {
     // Saved in one step; a request for the same spend at the same moment gets this one back.
     const saved = await scheduleJob(store, job);
     if (saved.outcome !== "created") return answerExisting(saved.job, saved.outcome === "existing");
+    if (body.partnerCode !== undefined) {
+      const code = body.partnerCode;
+      // bound to the job's spend before anything is sent: the run is minutes away at least
+      after(() => bindScheduledJob({ jobId: job.id, chainId: net.chainId, nullifier, code, at: now }));
+    }
     return NextResponse.json({ ok: true, ...owned(job) }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);

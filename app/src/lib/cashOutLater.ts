@@ -99,6 +99,8 @@ export async function scheduleCashOut(p: {
   window?: CashOutWindow;
   day?: number;
   webhook?: { url: string; series: string };
+  /** A partner's link code: the relay registers the cash out under it when scheduling (lib/partnerAttribution). */
+  partnerCode?: string;
 }): Promise<OwnedCashOutJob> {
   // Recording demo: the pretend relay keeps the job (lib/demo/chain), by the same rules.
   if (readDemo()) {
@@ -188,7 +190,12 @@ export async function cancelCashOut(id: string, note: LocalNote): Promise<Cancel
  * relay holds, not the one asked for: when this money already has a cash out
  * waiting to another address, the note is marked with that one and this throws.
  */
-export async function scheduleNoteCashOut(note: LocalNote, call: CashOutCall, when: CashOutWhen): Promise<OwnedCashOutJob> {
+export async function scheduleNoteCashOut(
+  note: LocalNote,
+  call: CashOutCall,
+  when: CashOutWhen,
+  opts: { partnerCode?: string } = {}
+): Promise<OwnedCashOutJob> {
   // Every scheduled cash out comes through here. On disk before the proof goes:
   // however this ends, a closed tab included, the note can't be spent past that
   // proof. The lease keeps any tab's sync from moving it until the reply says how
@@ -202,7 +209,7 @@ export async function scheduleNoteCashOut(note: LocalNote, call: CashOutCall, wh
       : { day: when.day, ...(when.webhook && series ? { webhook: { url: when.webhook, series } } : {}) };
   let job: OwnedCashOutJob;
   try {
-    job = await scheduleCashOut({ ...call, ...at });
+    job = await scheduleCashOut({ ...call, ...at, ...(opts.partnerCode ? { partnerCode: opts.partnerCode } : {}) });
   } catch (e) {
     await updateLocalNote(note.id, e instanceof CashOutLaterError && e.job ? { cashOut: markFor(e.job), ...lease } : lease);
     throw e;

@@ -10,7 +10,7 @@ const SWAP_NETWORKS = swapNetworks();
 export const metadata: Metadata = {
   title: "Partner program and API",
   description:
-    "Add private payments to your app with a Gloam API key, set your own fee, and see attributed volume and commissions. Full v1 API reference with curl examples. Partner fees are not charged yet, on mainnet or testnet.",
+    "Add private payments to your app with a Gloam API key or a link with your partner code, set your own fee, and see attributed volume by source. Full v1 API reference with curl examples. Partner fees are not charged yet, on mainnet or testnet.",
 };
 
 const ERRORS: [string, number | string, string][] = [
@@ -42,7 +42,8 @@ const ERRORS: [string, number | string, string][] = [
   ["gas_high", 503, "Gas on this chain is over the relay's ceiling (Ethereum mainnet: 3 gwei). Nothing was sent. Try again shortly, or submit the call yourself."],
   ["rpc", 502, "The network did not answer. Try again."],
   ["bad_tx, tx_not_found, tx_failed, not_a_deposit, too_old", "400 to 422", "Deposit attribution: the hash is malformed, not found, failed, not a deposit into Gloam's vault, or older than 24 hours."],
-  ["already_attributed", 409, "That deposit is already counted to a partner."],
+  ["already_attributed", 409, "That transaction is already counted to a partner."],
+  ["bad_code, code_not_live", "400 or 404", "A payment request's partnerCode: not a link code, or one that is revoked, expired or not yours."],
   ["invalid_proof", 400, "Not a Gloam proof, or a damaged one."],
   ["bad_tag, unknown_network, unknown_asset, bad_amount", 400, "Payment request fields."],
   ["no_live_pool, unknown_network", 404, "No live vault on that network, or an unknown network in the path."],
@@ -55,7 +56,7 @@ export default function DocsPartnersPage() {
   return (
     <DocsLayout
       title="Partner program and API"
-      lede="Add private payments to your app with one API key. You set your own fee, and every payment your key brings in is counted to you as it happens. Partner fees are not charged yet, on mainnet or testnet."
+      lede="Add private payments to your app with one API key, or send people to Gloam with a link that carries your partner code. You set your own fee, and what your key or your links bring in is counted to you, checked on chain. Partner fees are not charged yet, on mainnet or testnet."
       glance={[
         { label: "Base URL", value: "https://gloam.trade/api/v1" },
         { label: "Auth", value: "Bearer API key" },
@@ -95,7 +96,19 @@ export default function DocsPartnersPage() {
           <strong>Relay payments with the key.</strong> The portal shows your
           volume, your would-be fees and every payment, updated every 20 seconds.
         </li>
+        <li>
+          <strong>Or send people with a link.</strong> Make a link code in the
+          portal and put it in your <Link href="#link-codes">pay and swap links</Link>{" "}
+          as <code>p=</code>. Payments, cash outs and swaps opened from them are
+          counted to you once Gloam has checked them on chain.
+        </li>
       </ul>
+      <p>
+        The portal and its CSV files show where each one came from: via API key,
+        via link, or matched on chain (past cash outs to your own receiving
+        addresses, <Link href="#matched-on-chain">below</Link>), with the
+        vault&apos;s own cash-out fee on each.
+      </p>
 
       <h2>What you can charge, and why</h2>
       <div className="overflow-x-auto">
@@ -514,9 +527,18 @@ curl https://gloam.trade/api/v1/relay \
   -H "Authorization: Bearer $GLOAM_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "to": "gloamr1.AbC...", "network": "robinhood-mainnet", "asset": "USDG",
-        "amount": "1250", "note": "Invoice 042", "name": "Acme" }'
+        "amount": "1250", "note": "Invoice 042", "name": "Acme",
+        "partnerCode": "<your link code>" }'
 
-# 201: data.url = "https://gloam.trade/app/vault?tab=move&mode=pay#to=gloamr1...&amount=1250&asset=0x5fc5..."`}</code>
+# 201: data.url = "https://gloam.trade/app/vault?tab=move&mode=pay#to=gloamr1...&amount=1250&asset=0x5fc5...&p=<your link code>"`}</code>
+      </pre>
+      <p>
+        <code>partnerCode</code> is optional: one of your account&apos;s live link
+        codes, added as <code>p=</code> so the payment counts to you. Built by
+        hand, the same link to a wallet looks like this:
+      </p>
+      <pre>
+        <code>{`https://gloam.trade/app/vault?tab=move&mode=pay#to=0x...&amount=25&asset=USDG&chain=robinhood-mainnet&name=Motion&p=<your link code>`}</code>
       </pre>
 
       <h2 id="swap-link">Trade privately with one link</h2>
@@ -528,7 +550,7 @@ curl https://gloam.trade/api/v1/relay \
         needed.
       </p>
       <pre>
-        <code>{`https://gloam.trade/app/vault?tab=swap#from=<token>&to=<token>&amount=<amount>&chain=<network>&ref=<your name>`}</code>
+        <code>{`https://gloam.trade/app/vault?tab=swap#from=<token>&to=<token>&amount=<amount>&chain=<network>&p=<your link code>`}</code>
       </pre>
       <ul>
         <li>
@@ -551,9 +573,14 @@ curl https://gloam.trade/api/v1/relay \
           now. A network without private swaps fills in nothing.
         </li>
         <li>
-          <code>ref</code>: optional, your app&apos;s name, shown to the person as
-          &quot;From Motion&quot;. Up to {SWAP_REF_MAX} characters and{" "}
-          {SWAP_REF_WORDS} words: letters, digits, spaces and{" "}
+          <code>p</code>: your <Link href="#link-codes">link code</Link>. With a
+          live one, the person sees &quot;From Motion&quot; with the name from your
+          Gloam account, and the swap counts to you once it lands.
+        </li>
+        <li>
+          <code>ref</code>: optional, a name for a link with no code, shown as
+          what the link says. It counts for nothing. Up to {SWAP_REF_MAX}{" "}
+          characters and {SWAP_REF_WORDS} words: letters, digits, spaces and{" "}
           <code>. &amp; &apos; _ -</code>. A web address, markup or a name with
           Gloam in it is left out.
         </li>
@@ -569,10 +596,10 @@ curl https://gloam.trade/api/v1/relay \
         Robinhood Chain:
       </p>
       <pre>
-        <code>{`https://gloam.trade/app/vault?tab=swap#from=USDG&to=TSLA&amount=100&chain=robinhood-mainnet&ref=Motion
+        <code>{`https://gloam.trade/app/vault?tab=swap#from=USDG&to=TSLA&amount=100&chain=robinhood-mainnet&p=<Motion's link code>
 
 # the same with addresses
-https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168&to=0x322F0929c4625eD5bAd873c95208D54E1c003b2d&amount=100&chain=robinhood-mainnet&ref=Motion`}</code>
+https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168&to=0x322F0929c4625eD5bAd873c95208D54E1c003b2d&amount=100&chain=robinhood-mainnet&p=<Motion's link code>`}</code>
       </pre>
       <p>
         The person sees &quot;From Motion&quot; and &quot;Swap 100 USDG for
@@ -588,6 +615,148 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
         and the two amounts are public, like any trade on that DEX. Keep the
         fields after the <code>#</code>: browsers never send that part to a
         server.
+      </p>
+
+      <h2 id="link-codes">Link codes: count what your links bring in</h2>
+      <p>
+        A link code is how Gloam knows a payment or a swap came from your link. It
+        is 20 random letters and digits that Gloam makes and keeps, mapped to your
+        partner account. A name in a link (<code>name</code>, <code>ref</code>)
+        is whatever its maker typed, so it never counts; only a live code does.
+      </p>
+      <ul>
+        <li>
+          <strong>Get one</strong> in the portal under Link codes, or ask us and we
+          issue one to your account. One code can go in every link you make. Label
+          it, and revoke it any time: links with a revoked or expired code still
+          open, but nothing from them counts from then on. What they counted stays.
+        </li>
+        <li>
+          <strong>Use it</strong> as <code>p=&lt;code&gt;</code> after the{" "}
+          <code>#</code> of a <Link href="#swap-link">swap link</Link> or a{" "}
+          <Link href="/docs/private-pay">pay link</Link>.
+        </li>
+        <li>
+          <strong>Your name in links.</strong> Once Gloam approves your
+          account&apos;s name, people who open your links see &quot;From Motion&quot;
+          with a Gloam partner mark. A name is a plain name: letters A to Z,
+          digits and spaces, no Gloam, no web address, at most 32 characters and
+          4 words. A rename shows only once
+          Gloam approves it again. Until then links show no partner name, and still
+          count to you.
+        </li>
+        <li>
+          <strong>Through the Gloam relay</strong> (the default for payments and
+          cash outs, and the only way for swaps): the payer&apos;s app hands your
+          code to the relay with the proof. Before it sends, the relay ties your
+          code to that exact proof; once sent, to the transaction&apos;s hash; and
+          it counts the transaction once it lands. A cash out the relay sends later
+          is tied to your code when it is scheduled. A transaction the relay sent is
+          counted only from the relay&apos;s own ties, never from anything else, so
+          nobody can get in ahead of them, even by reading the transaction while it
+          is pending. A tie to a proof counts only if it was made before the
+          transaction&apos;s block, so posting a copy of a landed proof to the relay
+          ties nothing; on Ethereum and Base, where pending calldata is public, the
+          relay ties by the transaction&apos;s hash only.
+        </li>
+        <li>
+          <strong>From the payer&apos;s own wallet:</strong> before the wallet is
+          asked, the app registers the payment with your code and a one-way hash of
+          something only that send has: a private payment&apos;s new note
+          commitment, or a cash out&apos;s proof. The transaction counts only if it
+          carries that value and the registration came before its block&apos;s
+          second began. Knowing the payment in advance is not enough to register
+          it. If two different codes register the same payment in time, it counts
+          for neither; a registration made too late plays no part. A registration
+          that matches no transaction is gone after an hour. A payment sent from a
+          wallet in the same second as its block doesn&apos;t count; that is the
+          price of the rule. Gloam takes wallet registrations only where a
+          transaction can&apos;t be read before its block (Robinhood Chain, Tempo
+          and their testnets). On Ethereum and Base, where pending transactions
+          are public early, only payments sent through the relay count to links.
+        </li>
+        <li>
+          <strong>What counts:</strong> Gloam reads each transaction on its chain
+          and counts it only if it is a real action in Gloam&apos;s vault that fits
+          the link: a private payment or a cash out to a wallet for a pay link, a
+          private swap through Gloam&apos;s router for a swap link. A transaction
+          counts once, for one partner, within seven days of landing. Nobody can
+          tie someone else&apos;s transaction to a code once it can be seen: a
+          relay-sent one counts only from the relay&apos;s own ties to it, and a
+          wallet registration counts only if it was made before anyone could read
+          the transaction.
+        </li>
+        <li>
+          <strong>What is kept:</strong> the transaction&apos;s public facts only:
+          hash, chain, kind, token, amount, the vault&apos;s fee, time, and you.
+          Never the payer&apos;s wallet, their IP, the address a cash out paid, or
+          anything else that ties a person to your link beyond the public
+          transaction. A private payment has no token or amount to keep.
+        </li>
+        <li>
+          <strong>What you see:</strong> your cash outs, deposits and swaps one by
+          one, with their transaction, network, token, amount, time and the link
+          code they came through, since those are public on chain anyway. Private
+          payments only as a count per day, and only for days that have ended
+          (UTC), in the portal, its CSV files and the API alike: never one by one,
+          never with a hash, an amount, a time or the code they came through, and
+          never in &quot;last activity&quot;. So a payment can&apos;t be tied to an
+          invoice or a moment, even if you make one code per invoice.
+        </li>
+        <li>
+          <strong>Nothing is charged,</strong> the same as for your API key.
+        </li>
+      </ul>
+
+      <h3 id="fee-split-grade">Which figures could carry a fee split</h3>
+      <p>
+        Fee-split grade, because the partner&apos;s side is proven: API-key counts
+        (your key sent or reported the transaction), relay-bound link counts (the
+        relay sent that very transaction with your code), and matched-on-chain
+        counts (the cash out paid an address that signed for you). Attribution
+        grade: link counts the payer&apos;s own wallet registered. They are bound to
+        the payment before it is sent, so nobody else can claim them, but the
+        payer&apos;s app chooses the code. The dashboards and the transactions CSV
+        show which is which (&quot;by wallet&quot;, &quot;Link bound by&quot;).
+      </p>
+      <p>
+        The limits, plainly. A code is not a secret: it is in every link you
+        share, so anyone can pay through it, you included, and a payer can choose
+        a code for their own payment. Gloam can&apos;t see which link a person
+        opened, only that the payment was tied to a code before it was sent.
+        Mainnet and testnet are counted apart, and testnet is never valued in
+        dollars.
+      </p>
+      <p>
+        Counting is the Gloam app&apos;s and the relay&apos;s job, not yours. The
+        endpoints the app calls are <code>POST /api/partners/register</code>, which
+        takes <code>{`{ chainId, nullifierHash, bindHash, code, flow: "pay" }`}</code>,
+        and <code>POST /api/partners/attribute</code>, which takes{" "}
+        <code>{`{ chainId, txHash }`}</code>. They take only requests whose Origin
+        is gloam.trade. That stops other websites from calling them from a
+        visitor&apos;s browser; it does not stop a script, which can send any
+        Origin. What stops a script from claiming a payment is the tie above,
+        made before the payment exists.
+      </p>
+
+      <h2 id="matched-on-chain">Matched on chain: past cash outs</h2>
+      <p>
+        For what came before your links, send us your own receiving addresses per
+        mainnet. Each address proves it is yours by signing a short message
+        (EIP-191) that names you, the chain and the date; we send you the
+        messages. Gloam reads every mainnet vault&apos;s cash outs from the day it
+        deployed and counts the ones that paid one of your proven addresses,
+        shown as &quot;matched on chain&quot;. A cash out to your address counts
+        to you even if it was opened from another partner&apos;s link; one sent
+        with an API key stays with that key&apos;s partner. Only your addresses
+        and their signatures are kept, nothing about who sent the money. A
+        transaction is never counted twice.
+      </p>
+      <p>
+        Past private payments can&apos;t be matched: inside the vault the payee and
+        the amount are hidden, from Gloam too. Swaps can&apos;t either: a
+        swap&apos;s output goes back into the vault as a private balance, not to
+        an address. Only cash outs to your public addresses can be found this way.
       </p>
 
       <h2>Public figures</h2>
@@ -627,17 +796,19 @@ await sendSwap({ intent, client, save: keepRecord, submit: gloam.swapSubmitter()
       <h2>What is recorded</h2>
       <ul>
         <li>
-          <strong>Per payment:</strong> network, kind, transaction hash, time, the
-          key that sent it, and the fee your setting gave it.
+          <strong>Per payment:</strong> network, kind, transaction hash, time,
+          where it came from (your key, your link code, or matched on chain), and
+          the fee your setting gave it.
         </li>
         <li>
           <strong>Only for deposits, cash outs and private swaps:</strong> the
-          token and amount (for a swap, what went in), which the chain already
-          shows.
+          token and amount (for a swap, what went in) and the vault&apos;s own
+          cash-out fee on it, which the chain already shows.
         </li>
         <li>
-          <strong>Never:</strong> notes, secrets, balances, private amounts, or who
-          received a private payment. Your API key is never stored, only its keyed
+          <strong>Never:</strong> notes, secrets, balances, private amounts, who
+          received a private payment, a payer&apos;s wallet or IP, or the address
+          a cash out paid. Your API key is never stored, only its keyed
           fingerprint.
         </li>
       </ul>

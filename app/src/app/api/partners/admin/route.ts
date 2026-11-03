@@ -3,52 +3,79 @@ import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { activeKeyCounts } from "@/lib/apiKeys";
 import { ApiError, jsonBody, portal } from "@/lib/partnersApi";
 import { sameSiteJson } from "@/lib/partnersAuth";
-import { listPartners, partnerView, readAllPartnerTotals, readPartnerStats, setRelayApproved } from "@/lib/partners";
+import { isTier, listPartners, migrationNote, partnerView, readAllPartnerTotals, setApprovedName, setRelayApproved } from "@/lib/partners";
 import { kvBackend } from "@/lib/partnersKv";
+import { linkCodeState, listLinkCodes } from "@/lib/partnerLinks";
+import { countAddresses, getPartnerAddresses } from "@/lib/partnerAddresses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Admin only: every partner, their keys and attributed volume, plus program totals. */
-export async function GET() {
+/**
+ * Admin only, GET ?tier=mainnet|testnet: every partner, their keys, link codes and
+ * receiving addresses, and what they brought in on that tier by source, plus the
+ * program's totals. Mainnet and testnet are never added together.
+ */
+export async function GET(req: NextRequest) {
   return portal(async () => {
     if (!(await isAdminAuthenticated())) throw new ApiError(401, "unauthorized", "Admin session required.");
+    const raw = new URL(req.url).searchParams.get("tier") ?? "mainnet";
+    const tier = isTier(raw) ? raw : "mainnet";
     const backend = kvBackend();
     if (backend === "none") {
-      return { data: { backend, partners: [], totals: null } };
+      return { data: { backend, tier, partners: [], totals: null } };
     }
     const partners = await listPartners();
     const ids = partners.map((p) => p.id);
-    const [totals, keys, all] = await Promise.all([readAllPartnerTotals(ids), activeKeyCounts(ids), readPartnerStats("all")]);
+    const now = Date.now();
+    const [totals, keys, codes, addrs] = await Promise.all([
+      readAllPartnerTotals(ids, tier),
+      activeKeyCounts(ids),
+      Promise.all(ids.map((id) => listLinkCodes(id))),
+      Promise.all(ids.map((id) => getPartnerAddresses(id))),
+    ]);
+    const notes = await Promise.all(ids.map((id) => migrationNote(id)));
     return {
       data: {
         backend,
-        partners: partners.map((p) => ({
+        tier,
+        partners: partners.map((p, i) => ({
           ...partnerView(p),
           activeKeys: keys[p.id] ?? 0,
-          totals: totals[p.id] ?? null,
+          liveCodes: codes[i]!.filter((c) => linkCodeState(c, now) === "live").length,
+          addresses: countAddresses(addrs[i]!),
+          totals: totals.byPartner[p.id] ?? null,
+          migration: notes[i],
         })),
-        totals: all.totals,
-        daily: all.daily,
+        totals: totals.program,
       },
     };
   });
 }
 
 /**
- * Admin only: { id, relayApproved }. An approved account's payment messages use the
- * relay's larger message budget (lib/relay/server, relayMemo).
+ * Admin only:
+ *   { id, relayApproved: boolean }  an approved account's payment messages use the
+ *                                   relay's larger message budget (lib/relay/server, relayMemo)
+ *   { id, approveName: boolean }    the account's current name shows in links as
+ *                                   "From <name> · Gloam partner"; a later rename needs this again
  */
 export async function POST(req: NextRequest) {
   return portal(async () => {
     if (!sameSiteJson(req)) throw new ApiError(403, "bad_origin", "Change partners from the Gloam site.");
     if (!(await isAdminAuthenticated())) throw new ApiError(401, "unauthorized", "Admin session required.");
     const body = await jsonBody(req);
-    if (typeof body.id !== "string" || typeof body.relayApproved !== "boolean") {
-      throw new ApiError(400, "bad_request", "Send { id, relayApproved: true | false }.");
+    if (typeof body.id !== "string") throw new ApiError(400, "bad_request", "Send { id, relayApproved } or { id, approveName }.");
+    if (typeof body.relayApproved === "boolean") {
+      const partner = await setRelayApproved(body.id, body.relayApproved);
+      if (!partner) throw new ApiError(404, "not_found", "No partner with that id.");
+      return { data: { partner: partnerView(partner) } };
     }
-    const partner = await setRelayApproved(body.id, body.relayApproved);
-    if (!partner) throw new ApiError(404, "not_found", "No partner with that id.");
-    return { data: { partner: partnerView(partner) } };
+    if (typeof body.approveName === "boolean") {
+      const partner = await setApprovedName(body.id, body.approveName);
+      if (!partner) throw new ApiError(404, "not_found", "No partner with that id.");
+      return { data: { partner: partnerView(partner) } };
+    }
+    throw new ApiError(400, "bad_request", "Send { id, relayApproved: true | false } or { id, approveName: true | false }.");
   });
 }

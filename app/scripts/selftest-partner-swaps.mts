@@ -99,7 +99,7 @@ await test("accounting: swaps are counted apart from public volume, per day and 
   assert.equal(stats.totals.publicVolumeUsd, 100, "public volume stays deposits and cash outs");
   assert.equal(stats.byKind.private_swap.count, 1);
   assert.equal(stats.byKind.private_swap.commissionUsd, 0);
-  assert.equal(stats.byNetwork["robinhood-mainnet"].private_swap, 1);
+  assert.equal(stats.byNetwork["robinhood-mainnet"]!.private_swap, 1);
   assert.equal(stats.daily.at(-1)!.swaps, 1);
   assert.equal(stats.daily.at(-1)!.volumeUsd, 100, "daily volume stays deposits and cash outs");
   const usdg = stats.byAsset.find((r) => r.asset.toLowerCase() === RH_USDG.toLowerCase());
@@ -112,7 +112,7 @@ await test("accounting: swaps are counted apart from public volume, per day and 
 type Call = string;
 function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
   const calls: Call[] = [];
-  const recorded: { kind: string; edge: unknown }[] = [];
+  const recorded: { kind: string; edge: unknown; vaultFee?: bigint | null; source?: string }[] = [];
   const memoFrom: unknown[] = [];
   const claimed: Hex[] = [];
   const senders: (string | readonly string[] | undefined)[] = [];
@@ -147,8 +147,10 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
       return opts.spent ?? false;
     },
     claim: (async (_p: unknown, _chainId: number, hash: Hex) => (claimed.push(hash), true)) as typeof claimTransaction,
+    // the vault's fee setting, never read from a chain here
+    vaultFeeBps: async () => 25,
     record: (async (a: Parameters<typeof recordActivity>[0]) => {
-      recorded.push({ kind: a.kind, edge: a.edge });
+      recorded.push({ kind: a.kind, edge: a.edge, vaultFee: a.vaultFee, source: a.source });
       return recordActivity(a);
     }) as typeof recordActivity,
   };
@@ -182,7 +184,8 @@ await test("partner relay: a swap of an unspent note is counted, with its input,
   assert.equal(r.action, "swap");
   assert.equal(r.attribution.recorded, true);
   assert.equal(r.attribution.kind, "private_swap");
-  assert.deepEqual(recorded[0], { kind: "private_swap", edge: { asset: RH_USDG, amount: 50_000_000n } });
+  // the vault's 0.25% on the swap's input, from its fee setting at the time
+  assert.deepEqual(recorded[0], { kind: "private_swap", edge: { asset: RH_USDG, amount: 50_000_000n }, vaultFee: 125_000n, source: "api" });
 });
 
 await test("partner relay: a send holds against the partner account's share of the cap, as the relay takes it", async () => {
