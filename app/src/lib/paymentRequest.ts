@@ -14,6 +14,11 @@
  *    payer's wallet does not show; the amount and the receiving wallet are
  *    public, like any transfer. The note is only shown to the payer.
  *
+ * `p` is a Gloam partner's link code (lib/partnerLinks), when a partner's app
+ * made the link: the payment is counted to that partner once it lands, and the
+ * partner's name shows from their Gloam account. A `name` alone counts for
+ * nothing and is only ever shown as what the link says.
+ *
  * `chain` is a network key (lib/networks): `robinhood-mainnet`,
  * `tempo-mainnet`, ... for mainnet; `robinhood`, `tempo`, `base`, `ethereum`
  * are the testnets. `asset` is the token's address or symbol on that network.
@@ -33,6 +38,7 @@ import { PAYMENT_NOTE_MAX, cleanText } from "./paymentNote";
 import { isValidReceiveTag } from "./receiveTag";
 import { readAmountText } from "./amountText";
 import { classifyPayRecipient } from "./payRecipient";
+import { isLinkCodeShape, readLinkCode } from "./partnerCode";
 import { isDollarStable, shieldTokensFor, supportsNativeShield, swapDisplayTokensFor } from "./tokens";
 
 /** Same cap as the private note the payment carries (lib/paymentNote). */
@@ -187,6 +193,8 @@ export type PaymentRequestDraft = {
   amount: string;
   note?: string;
   name?: string;
+  /** A partner's link code (lib/partnerLinks), so the payment counts to that partner. */
+  partnerCode?: string;
 };
 
 /**
@@ -207,6 +215,7 @@ export function buildPaymentRequestLink(
   p.set("chain", draft.network);
   const name = cleanRequestText(draft.name, REQUEST_NAME_MAX);
   if (name) p.set("name", name);
+  if (isLinkCodeShape(draft.partnerCode)) p.set("p", draft.partnerCode);
   return `${origin.replace(/\/+$/, "")}/app/vault?tab=move&mode=pay#${p.toString()}`;
 }
 
@@ -240,6 +249,8 @@ export type PaymentRequest = {
   amount: string | null;
   note: string | null;
   name: string | null;
+  /** A partner link code's shape from `p`, or null. Whether it is live is the server's to say. */
+  partnerCode: string | null;
   /** Plain-language reasons a field was left out. */
   problems: string[];
 };
@@ -324,6 +335,7 @@ export function readPaymentRequest(
     amount,
     note: cleanRequestText(params.get("note"), REQUEST_NOTE_MAX) || null,
     name: cleanRequestText(params.get("name"), REQUEST_NAME_MAX) || null,
+    partnerCode: readLinkCode(params),
     problems,
   };
 }

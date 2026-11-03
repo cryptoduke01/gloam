@@ -28,7 +28,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { formatUnits, type Address, type Hex } from "viem";
-import type { ReceiveKey } from "@gloamtrade/sdk";
+import type { PaymentReceiptRecord, ReceiveKey, SwapRecovery } from "@gloamtrade/sdk";
 import { withFileLock } from "./fileLock.js";
 import type { NetworkKey } from "./networks.js";
 
@@ -40,10 +40,31 @@ export type NoteStatus = "unspent" | "pending" | "spent" | "dead";
  * server received and swept. "payment" is a payment this server sent: the
  * payee's money, kept from before it is sent so a payment that lands is never
  * lost. It is never this server's balance and never pays; once it lands it is
- * marked spent (handed over).
+ * marked spent (handed over). "swap" is the new note a private swap makes, and
+ * "swap_refund" the refund note made with it: one of the two lands, the other
+ * never does, and the refund note keeps what finishes the swap any way it ends.
  */
-export type NoteOrigin = "shield" | "change" | "received" | "payment";
+export type NoteOrigin = "shield" | "change" | "received" | "payment" | "swap" | "swap_refund";
 export type KeySource = "GLOAM_NOTE_KEY" | "signer";
+
+/**
+ * The receipt of a payment VEYA allowed, kept on the payment's note. The record
+ * shows the asset, the minimum amount and the transaction hash, so it stays here
+ * and never goes in a noteView. "pending" has not been tried yet.
+ */
+export type NoteReceipt = {
+  /** VEYA's check id, sealed into the proof as its verifier. */
+  checkId: string;
+  /** The agent id this payment was checked under, so a retry names the same one. */
+  agentId: string;
+  /** Unix seconds, sealed into the proof. Fixed before the send, so a rebuilt receipt reads the same. */
+  expiresAt: number;
+  status: "pending" | "receipt_failed" | "anchor_failed" | "anchored";
+  leaf?: Hex;
+  /** The transaction VEYA says wrote the leaf. */
+  anchorTx?: Hex;
+  record?: PaymentReceiptRecord;
+};
 
 export type StoredNote = {
   handle: string;
@@ -86,6 +107,16 @@ export type StoredNote = {
   checkedAt?: string;
   /** What the note is for, e.g. the resource a received payment paid for. */
   label?: string;
+  /** Payments VEYA allowed with receipts on. */
+  receipt?: NoteReceipt;
+  /**
+   * A swap's refund note: everything that finishes the swap any way it ends (the SDK's
+   * SwapRecovery, which holds the new note's secret too). Kept even once the note is dead:
+   * the swapped note's unshield proof stays valid until that note is spent.
+   */
+  swap?: SwapRecovery;
+  /** A swap's new note: the handle of the refund note made with it. */
+  swapPair?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -295,6 +326,17 @@ export class NoteStore {
       if (next.status !== "pending") delete next.pending;
       d.notes[i] = next;
       return next;
+    });
+  }
+
+  /** Change a note's receipt from what the store holds now, under the lock, so two runs on one receipt can't undo each other. */
+  updateReceipt(handle: string, change: (current: NoteReceipt) => NoteReceipt): NoteReceipt | undefined {
+    return this.mutate((d) => {
+      const n = d.notes.find((x) => x.handle === handle);
+      if (!n?.receipt) return undefined;
+      n.receipt = change(n.receipt);
+      n.updatedAt = stamp();
+      return n.receipt;
     });
   }
 
@@ -590,6 +632,8 @@ export function balances(notes: StoredNote[]) {
   for (const n of notes) {
     if (n.status === "spent" || n.status === "dead" || n.origin === "payment") continue;
     if (n.status === "pending" && n.pending === "spend") continue;
+    // a pending swap makes two notes and only one lands: neither counts until it does
+    if (n.status === "pending" && (n.origin === "swap" || n.origin === "swap_refund")) continue;
     const k = `${n.chainId}:${n.asset.toLowerCase()}`;
     const cur = by.get(k) ?? { network: n.network, asset: n.asset, symbol: n.symbol, decimals: n.decimals, unspent: 0n, pending: 0n, notes: 0 };
     if (n.status === "unspent") {

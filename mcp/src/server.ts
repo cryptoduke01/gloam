@@ -6,14 +6,14 @@
  * limits, payments only) and testnet (dev keys). Tools take
  * a `network` (default: GLOAM_NETWORK, else Robinhood Chain testnet), and the
  * 402 payment tools settle on whatever network the price names. Private swaps
- * are live in the Gloam app, not here: the market and trade tools only plan,
- * for the retired sealed trade.
+ * (src/swaps.ts) run where the network has a swap router: who swapped stays
+ * private, the tokens and amounts are public. The old sealed trade is retired.
  *
  * This exposes read + planning tools that work today, and returns honest
  * "intent" objects for write actions (shield / pay / send) when there is no
  * signer. It never fakes a private fill or settlement.
  *
- * Every tool that moves money (shield, public send, private pay) first passes
+ * Every tool that moves money (shield, public send, private pay, private swap) first passes
  * the owner's spending limits (src/policy.ts, src/spendGuard.ts): allowed
  * tools, assets, recipients, a cap per payment and per rolling day, and an
  * expiry. No limits configured means no spending. The limits are enforced here,
@@ -35,11 +35,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { TransactionNotFoundError, formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
+import { TransactionNotFoundError, formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex, type PublicClient } from "viem";
 import {
   approveNeedsReset,
   buildShieldBoundIntent,
   artifactProver,
+  proveGroth16,
   NATIVE_ASSET,
   buildGloamPaymentRequirements,
   buildGloamPayment,
@@ -68,6 +69,8 @@ import {
   GLOAM_RELAY_URL,
   GLOAM_X402_SCHEME,
   relayIntent,
+  relaySwapCall,
+  relayStatus as readRelayStatus,
   GloamRelayError,
   assertDepositAllowed,
   assertDepositWithinLiveLimit,
@@ -76,14 +79,18 @@ import {
   type GloamPaymentRequirements,
   type NoteExport,
   type Prover,
+  type ReceiptProver,
+  type RelayNetworkStatus,
   type RelayOptions,
+  type SwapRelayCall,
   type SweepChain,
 } from "@gloamtrade/sdk";
-import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
+import { CHAIN, PRIVACY_STATUS } from "./data.js";
 import { getPublicClient, getSigner, signerSetup, type Signer } from "./signer.js";
 import { checkAccessKey } from "./accessKey.js";
 import { packageVersion } from "./version.js";
-import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
+import { receiptArtifacts, shieldArtifacts, transferArtifacts, unshieldArtifacts } from "./artifacts.js";
+import { SWAP_PRIVACY, refreshSwapNotes, registerSwapTools } from "./swaps.js";
 import {
   allNetworks,
   defaultNetworkKey,
@@ -101,6 +108,8 @@ import { balances, deadCheckDue, noteView, openNoteStore, servedPayment, type No
 import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
+import { checkVeyaBudget } from "./veyaGuard.js";
+import { plannedReceipt, settleReceiptInTime, settleReceiptLater, type ReceiptContext, type ReceiptOutcome } from "./veyaReceipt.js";
 import {
   allowedModes,
   credentialField,
@@ -147,9 +156,18 @@ export interface ServerDeps {
   /** The prover for `net`'s key set: dev keys on testnet, the ceremony's final keys on mainnet. */
   shieldProver(net?: McpNetwork): Promise<Prover>;
   transferProver(net?: McpNetwork): Promise<Prover>;
+  receiptProver(net?: McpNetwork): Promise<ReceiptProver>;
+  /** The unshield prover for `net`'s key set: a private swap's note leaves the vault by an unshield to its escrow. */
+  unshieldProver(net?: McpNetwork): Promise<Prover>;
   syncTree: typeof syncTree;
   relay(intent: GloamIntent, opts: RelayOptions): Promise<Hex>;
+  /** A private swap, its refund or its exit, through the relay. */
+  relaySwap(call: SwapRelayCall, opts: RelayOptions): Promise<Hex>;
+  /** The relay's state per network (whether it is on, gas over its ceiling). */
+  relayStatus(opts: RelayOptions): Promise<RelayNetworkStatus[]>;
   fetch: typeof fetch;
+  /** Hears about each VEYA receipt left to finish after a payment's answer, by the payment's note (tests, embedders). */
+  receiptWork?(note: string, work: Promise<ReceiptOutcome>): void;
 }
 
 function defaultDeps(env: Env): ServerDeps {
@@ -159,8 +177,15 @@ function defaultDeps(env: Env): ServerDeps {
     publicClient: (net) => getPublicClient(net),
     shieldProver: async (net) => artifactProver(await shieldArtifacts(net?.ceremony ?? "dev")),
     transferProver: async (net) => artifactProver(await transferArtifacts(net?.ceremony ?? "dev")),
+    receiptProver: async (net) => {
+      const { wasm, zkey } = await receiptArtifacts(net?.ceremony ?? "dev");
+      return (input) => proveGroth16(input, wasm, zkey);
+    },
+    unshieldProver: async (net) => artifactProver(await unshieldArtifacts(net?.ceremony ?? "dev")),
     syncTree,
     relay: relayIntent,
+    relaySwap: relaySwapCall,
+    relayStatus: readRelayStatus,
     fetch: guardedFetch(env),
   };
 }
@@ -424,14 +449,14 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         })),
         defaultNetwork: defaultNet,
         mainnet:
-          `Mainnet is beta. The mainnet pools take payments only (private swaps run in the Gloam app, not this server), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
+          `Mainnet is beta. Private payments on every mainnet, and private swaps where the network has a swap router (gloam_swap_quote says), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
             ethNativeLimitText()
           }). Direct deposits and private payments are free; cashing out costs 0.5%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
-          "gloam_list_markets: markets from the retired sealed trade, with indicative testnet marks; nothing here trades (read)",
-          "gloam_quote: indicative quote for the retired sealed trade (read)",
-          "gloam_plan_private_trade: describe a sealed trade; it never executes, the sealed trade is retired (planning)",
+          "gloam_swap_quote: price a private swap of one note's value, with everything that would stop it (read)",
+          "gloam_execute_private_swap: REAL private swap. Proves locally and sends through the Gloam relay; who swapped stays private, the tokens and amounts are public (execution; \"swap\" must be in the agent's limits)",
+          "gloam_finish_swap: settle a swap whose money waits at its escrow: the refund, or an exit to an address you name (execution)",
           "gloam_plan_shield: describe a shield before executing (planning)",
           "gloam_execute_shield: REAL private deposit. Mints a note, proves, and broadcasts shieldBound; returns a note handle (execution; needs a signer)",
           "gloam_execute_transfer: sign and broadcast a public transfer of test ETH on Robinhood Chain testnet, for funding (execution; needs a signer)",
@@ -450,6 +475,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           : "Note secrets stay inside this server, encrypted. Tools give the agent handles (like n-k3x9p2qw7m) and amounts, never a secret.",
         spendingLimits:
           "Every execute tool that moves money checks the owner's limits first (tools, assets, recipients, per payment, per day, expiry) and logs the spend. The MCP server enforces them, off-chain; the vault contract does not.",
+        privateSwaps: `${SWAP_PRIVACY} A swap spends one whole note; both notes it makes are kept here before it is sent.`,
         privatePayments:
           "Agent payments over HTTP 402 (x402, or MPP with the gloam method) settle privately through the Gloam pool, sealed to the payee's receive tag. The payee sweeps each payment into a fresh note before serving, so a payer cannot take it back. Unlike a Tempo Zone, there is no operator that sees the transaction.",
       })
@@ -460,90 +486,28 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Privacy status",
       description:
-        "Honest, current privacy posture: what is live, what is not, and how strong the anonymity set is. Agents should check this before assuming a trade is fully private.",
+        "Honest, current privacy posture: what is live, what is not, and how strong the anonymity set is. Agents should check this before assuming what a payment or a swap keeps private.",
     },
     async () => text(PRIVACY_STATUS)
   );
 
-  server.registerTool(
-    "gloam_list_markets",
-    {
-      title: "List markets",
-      description:
-        "List the markets from Gloam's retired sealed trade, with indicative testnet marks. Nothing here trades. Private swaps are live in the Gloam app (Vault > Swap), and this server does not swap.",
-      inputSchema: {
-        kind: z.enum(["stock", "crypto", "all"]).default("all").describe("Filter by asset kind."),
-      },
-    },
-    async ({ kind }) => {
-      const list = kind === "all" ? MARKETS : MARKETS.filter((m) => m.kind === kind);
-      return text({
-        count: list.length,
-        note: "Marks are indicative testnet values from the retired sealed trade. Nothing here trades: private swaps are in the Gloam app, and this server does not swap.",
-        markets: list,
-      });
-    }
-  );
-
-  server.registerTool(
-    "gloam_quote",
-    {
-      title: "Quote a private trade",
-      description:
-        "Indicative quote for buying or selling a market, plus exactly what stays private and what becomes public.",
-      inputSchema: {
-        market: z.string().describe("Symbol or id, e.g. TSLA or eth."),
-        side: z.enum(["buy", "sell"]),
-        usd: z.number().positive().describe("Trade size in USD."),
-      },
-    },
-    async ({ market, side, usd }) => {
-      const m = findMarket(market);
-      if (!m) return text({ error: `Unknown market "${market}". Call gloam_list_markets.` });
-      const units = usd / m.mark;
-      return text({
-        market: m.symbol,
-        side,
-        usd,
-        estimatedUnits: Number(units.toFixed(6)),
-        markUsd: m.mark,
-        staysPrivate: ["who swapped"],
-        becomesPublic: ["the tokens", "the amounts"],
-        note: "Indicative only, for the retired sealed trade; this server does not swap. Private swaps are live in the Gloam app (Vault > Swap): who swapped stays private, and the tokens and amounts are public.",
-      });
-    }
-  );
-
-  server.registerTool(
-    "gloam_plan_private_trade",
-    {
-      title: "Plan a private trade",
-      description:
-        "Describe a sealed trade (never executes; the sealed trade is retired). Private swaps are live in the Gloam app, and this server does not swap.",
-      inputSchema: {
-        market: z.string().describe("Symbol or id, e.g. TSLA."),
-        side: z.enum(["buy", "sell"]),
-        usd: z.number().positive(),
-        agentAddress: z.string().optional().describe("The agent wallet address that would own the private position."),
-      },
-    },
-    async ({ market, side, usd, agentAddress }) => {
-      const m = findMarket(market);
-      if (!m) return text({ error: `Unknown market "${market}". Call gloam_list_markets.` });
-      return text({
-        intent: "private_trade",
-        chainId: CHAIN.chainId,
-        market: m.symbol,
-        side,
-        usd,
-        estimatedUnits: Number((usd / m.mark).toFixed(6)),
-        agentAddress: agentAddress ?? null,
-        privacy: "In a private swap, who swapped stays private; the tokens and amounts are public.",
-        status: "The sealed trade is retired on every network, and this server does not swap. Private swaps are live in the Gloam app (Vault > Swap).",
-        execution: AGENT_WALLET_NOTE,
-      });
-    }
-  );
+  // Private swaps: quote, execute and finish (src/swaps.ts). They replace the retired sealed-trade tools.
+  registerSwapTools(server, {
+    env,
+    text,
+    networkArg,
+    openStore,
+    tryStore,
+    errMsg,
+    client: (net) => (deps.signer(net)?.publicClient ?? deps.publicClient(net)) as unknown as PublicClient,
+    shieldProver: (net) => deps.shieldProver(net),
+    unshieldProver: (net) => deps.unshieldProver(net),
+    transferProver: (net) => deps.transferProver(net),
+    syncTree: deps.syncTree,
+    relay: (intent, opts) => deps.relay(intent, opts),
+    relaySwap: (call, opts) => deps.relaySwap(call, opts),
+    relayStatus: (opts) => deps.relayStatus(opts),
+  });
 
   server.registerTool(
     "gloam_plan_shield",
@@ -837,9 +801,18 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const notes = opened.store;
       const refreshed: string[] = [];
       if (refresh) {
+        // A swap's two notes settle together, from how the swap ended (src/swaps.ts).
+        refreshed.push(
+          ...(await refreshSwapNotes(
+            { client: (net) => (deps.signer(net)?.publicClient ?? deps.publicClient(net)) as unknown as PublicClient, errMsg, tryStore },
+            notes
+          ))
+        );
         // Pending notes and notes made spendable again whose old spend may have landed since; then dead ones (in
         // case a read was wrong) when a look is due, or all of them once this pass sees a late send land.
-        const listed = notes.list();
+        const swapOpen = (x: StoredNote) =>
+          (x.origin === "swap" || x.origin === "swap_refund") && (x.status === "dead" || (x.status === "pending" && x.pending === "create"));
+        const listed = notes.list().filter((x) => !swapOpen(x));
         let woke = false;
         for (const n of [
           ...listed.filter((x) => x.status === "pending" || (x.status === "unspent" && x.recheck)),
@@ -1075,6 +1048,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const { req, mpp } = priced;
       const netForReq = networkByChainId(Number(req.network));
       const tagOk = isReceiveTag(String(req.payTo ?? ""));
+      const guardsBeforePay = [
+        ...(env.GLOAM_WORMHOLE_KEY?.trim() ? ["Agent Wormhole checks this payment request first (GLOAM_WORMHOLE_KEY). Only an allow pays."] : []),
+        ...(env.GLOAM_VEYA_KEY?.trim()
+          ? ["VEYA checks this payment against the agent's budget (GLOAM_VEYA_KEY) and sees the agent id, chain, asset, amount and payee, and nothing about the resource. Only an allow pays."]
+          : []),
+        ...(env.GLOAM_VEYA_KEY?.trim() && env.GLOAM_VEYA_ANCHOR_URL?.trim()
+          ? ["Once it lands, this server proves the payment and sends VEYA only the receipt's leaf and the agent id (GLOAM_VEYA_ANCHOR_URL), after the payment's answer, which never waits on it."]
+          : []),
+      ];
       return text({
         status: "plan",
         intent: "private_pay_x402",
@@ -1104,9 +1086,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         settlement: settlementNote(Boolean(relayUrl())),
         notVsZone: GLOAM_VS_ZONE,
         sourceNote: note ?? "the smallest note that covers the amount",
-        ...(env.GLOAM_WORMHOLE_KEY?.trim()
-          ? { checkBeforePay: "Agent Wormhole checks this payment request first (GLOAM_WORMHOLE_KEY). Only an allow pays." }
-          : {}),
+        ...(guardsBeforePay.length ? { checkBeforePay: guardsBeforePay.join(" ") } : {}),
       });
     }
   );
@@ -1137,6 +1117,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     return "a paid resource";
   };
 
+  const receiptContext = (net: McpNetwork, notes: NoteStore): ReceiptContext => ({
+    net,
+    client: (deps.signer(net)?.publicClient ?? deps.publicClient(net)) as ReceiptContext["client"],
+    syncTree: deps.syncTree,
+    prover: () => deps.receiptProver(net),
+    notes,
+    env,
+  });
+
   /** The payment request as Agent Wormhole reads it: the price itself, decoded (an MPP challenge's request, else the x402 requirements). */
   const quoteText = (req: GloamPaymentRequirements, mpp?: PaymentChallenge | null): string =>
     JSON.stringify(
@@ -1150,7 +1139,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
    * the MPP credential when `mpp` is the challenge being paid (push mode: this
    * server broadcasts, so limits and the note store work exactly as for x402).
    * With GLOAM_WORMHOLE_KEY set, `quote` (the payment request as the payee sent
-   * it) goes to Agent Wormhole after the spend gate, and only an allow pays.
+   * it) goes to Agent Wormhole after the spend gate, and only an allow pays. With
+   * GLOAM_VEYA_KEY set the payment then goes to VEYA (the agent id, chain, asset,
+   * amount and payee only), and only an allow pays. With GLOAM_VEYA_ANCHOR_URL
+   * set too, the payment's receipt is built after its answer, which never waits on
+   * it and never changes because of it.
    */
   async function payPrivately(
     req: GloamPaymentRequirements,
@@ -1192,6 +1185,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     } catch {
       return fail({ status: "error", error: "The requirements carry an amount that is not a whole number of base units." });
     }
+    // Zero or less is never a payment, whatever the limits mode: with GLOAM_LIMITS=off nothing else stops it before the checks.
+    if (spend.amountWei <= 0n) return fail({ status: "refused", code: "bad_amount", message: "The amount must be above zero. Not paying." });
     const sealed = isReceiveTag(String(req.payTo ?? ""));
     if (!sealed && !legacy) {
       return fail({
@@ -1289,6 +1284,18 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         wormhole: { decision: wormhole.decision, findings: wormhole.findings, attestation: wormhole.attestation, signature: wormhole.signature },
       });
     }
+    // VEYA, when the operator turned it on: last, so a request Agent Wormhole stopped never counts against the budget.
+    // It gets the payment's chain, asset, amount and payee, never the resource or the payment request text.
+    const veya = await checkVeyaBudget({ chainId: net.chainId, asset: spend.asset, amountWei: spend.amountWei, payee: String(req.payTo ?? "") }, env);
+    if (veya && !veya.pay) {
+      settleSpend(gate, "failed", { reason: `VEYA: ${veya.decision}${veya.reason ? ` (${veya.reason})` : ""}` });
+      return fail({
+        status: "refused",
+        code: "veya_refused",
+        message: veya.message,
+        veya: { decision: veya.decision, reason: veya.reason },
+      });
+    }
     if (input.handle) {
       try {
         notes.reserveForSpend(input.handle, fits);
@@ -1369,6 +1376,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         origin: "payment",
         createdTx: null,
         label: `payment for ${paidLabel(opts.requested ?? req.resource)}`,
+        ...(veya?.receipt ? { receipt: plannedReceipt(veya.receipt) } : {}),
       });
       // The sealed payment, to present if the send has an unclear outcome (no tx hash yet).
       header = encodePaymentHeader(payment.payload);
@@ -1451,6 +1459,14 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           mppWarning = `Paid, but the MPP credential could not be built (${errMsg(e)}). The x402 header still carries the payment.`;
         }
       }
+      // The receipt VEYA anchors, finished after this answer: the payment and its credential never wait on it, since a
+      // challenge can expire meanwhile and the agent would pay again. It never throws, and gloam_retry_veya_receipts joins it.
+      let veyaReceipt: ReceiptOutcome | undefined;
+      if (sent?.receipt) {
+        const later = settleReceiptLater({ ...sent, receipt: sent.receipt, createdTx: sentHash }, receiptContext(net, notes));
+        veyaReceipt = later.now;
+        deps.receiptWork?.(sent.handle, later.work);
+      }
       const noteWarning = storeWarnings.filter(Boolean).join(" ") || undefined;
       return {
         ok: true,
@@ -1460,6 +1476,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           status: "paid",
           ...(opts.mpp ? { protocol: "mpp" } : {}),
           ...(wormhole ? { wormhole: { decision: wormhole.decision, attestation: wormhole.attestation, signature: wormhole.signature } } : {}),
+          ...(veya ? { veya: { decision: veya.decision, ...(veya.checkId ? { checkId: veya.checkId } : {}), ...(veyaReceipt ? { receipt: veyaReceipt } : {}) } } : {}),
           ...(mppWarning ? { mppWarning } : {}),
           ...(logWarning ? { logWarning } : {}),
           ...(noteWarning ? { noteWarning } : {}),
@@ -1496,7 +1513,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const maybeSent = Boolean(hash) || (sending && mayHaveSent(err, viaRelay));
       // Broadcast but unconfirmed still counts against the limit, to be safe.
       settleSpend(gate, maybeSent ? "unconfirmed" : "failed", { hash, reason: error });
-      if (!maybeSent) {
+      if (!maybeSent && sending) {
+        // Refused, but the relay (or the wallet's RPC) has seen the proof, which stays valid until
+        // the note is spent: the change and the payment stay kept (dead), and the note is spendable
+        // again and checked on every refresh, so whichever send lands first, nothing is lost.
+        if (change) tryStore(() => void notes.markDead(change!.handle));
+        if (sent) tryStore(() => void notes.markDead(sent!.handle));
+        if (input.handle) tryStore(() => void notes.update(input.handle!, { status: "unspent", recheck: true }));
+      } else if (!maybeSent) {
+        // nothing left this server: the notes it would have made are forgotten
         release();
         if (change) tryStore(() => notes.remove(change!.handle));
         if (sent) tryStore(() => notes.remove(sent!.handle));
@@ -1513,6 +1538,43 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           : {}),
       });
     }
+  }
+
+  if (env.GLOAM_VEYA_KEY?.trim() && env.GLOAM_VEYA_ANCHOR_URL?.trim()) {
+    server.registerTool(
+      "gloam_retry_veya_receipts",
+      {
+        title: "Retry VEYA receipts",
+        description:
+          "See where the receipts of payments that already went through stand, and retry any that failed. A payment's answer says its receipt is pending, since the receipt is built after it; this waits up to 30 seconds on one still being built. Spends nothing and pays nothing: it builds a missing receipt and sends VEYA its leaf. A leaf VEYA already took is not sent again. Returns each payment's note handle, leaf and status, never the record.",
+        inputSchema: {
+          note: z.string().optional().describe("Handle of one payment's note. Omit for every receipt VEYA has not taken."),
+        },
+      },
+      async ({ note }) => {
+        const opened = openStore();
+        if (!opened.ok) return text({ status: "error", error: opened.error });
+        const notes = opened.store;
+        const listed = notes.list().filter((n) => n.receipt && (note ? n.handle === note : n.receipt.status !== "anchored"));
+        if (note && !listed.length) return text({ status: "error", error: `There is no payment with a receipt under "${note}".` });
+        const receipts: (ReceiptOutcome | { status: "not_landed"; note: string; checkId: string; leaf: null; message: string })[] = [];
+        for (const n of listed) {
+          const net = networkByChainId(n.chainId);
+          if (!net || n.status !== "spent" || !n.createdTx) {
+            receipts.push({
+              status: "not_landed",
+              note: n.handle,
+              checkId: n.receipt!.checkId,
+              leaf: null,
+              message: "This payment has not shown as landed. Call gloam_list_notes with refresh first.",
+            });
+            continue;
+          }
+          receipts.push(await settleReceiptInTime({ ...n, receipt: n.receipt! }, receiptContext(net, notes)));
+        }
+        return text({ status: "ok", receipts, ...(receipts.length ? {} : { message: "Nothing to retry." }) });
+      }
+    );
   }
 
   const PAY_SHAPE = {

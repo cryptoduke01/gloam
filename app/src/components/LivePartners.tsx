@@ -2,10 +2,10 @@ import Image from "next/image";
 
 /**
  * Partners already live on Gloam: a plain logo row on the landing page and /partners.
- * Raeto and Agent Wormhole are drawn inline so they follow the theme: Raeto's ring
- * takes the text colour, Agent Wormhole keeps its own dark disc. Zedkr's mark is a
- * rendered file, so it ships as its own black and white PNGs and the theme picks
- * one. Static copies of all three live in public/brand/partners.
+ * Raeto, Agent Wormhole and Motion are drawn inline so they follow the theme: Raeto's
+ * ring takes the text colour, Agent Wormhole and Motion keep their own dark grounds.
+ * Zedkr's mark and VEYA's wordmark are rendered files, so each ships as a light and a
+ * dark PNG and the theme picks one. Static copies of all five live in public/brand/partners.
  */
 
 /** Raeto's mark: an open ring, a centre dot and the green dot in the gap. */
@@ -49,6 +49,17 @@ export function AgentWormholeMark({ size = 40 }: { size?: number }) {
   );
 }
 
+/** Motion's mark: their two forward triangles on a dark tile, edged in the text colour so it holds on dark grounds. */
+export function MotionMark({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+      <rect width="64" height="64" rx="14" fill="#000000" />
+      <rect x="0.8" y="0.8" width="62.4" height="62.4" rx="13.2" fill="none" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1.6" />
+      <path d="M10.88 14.72 L32 32 L10.88 49.28 Z M35.21 14.72 L56.33 32 L35.21 49.28 Z" fill="#F2F4FF" />
+    </svg>
+  );
+}
+
 /** Zedkr's mark: their own files from zedkr.finance, black on light and white on dark. */
 export function ZedkrMark({ size = 40 }: { size?: number }) {
   const width = Math.round((size * 230) / 256);
@@ -60,18 +71,34 @@ export function ZedkrMark({ size = 40 }: { size?: number }) {
   );
 }
 
+/** VEYA's wordmark: their own file from veyanet.tech, with its dark letters turned white for dark grounds. It carries the name, so no name is set beside it. */
+export function VeyaWordmark({ size = 40 }: { size?: number }) {
+  const height = Math.round(size * 0.55);
+  const width = Math.round((height * 391) / 69);
+  return (
+    <>
+      <Image src="/brand/partners/veya-wordmark.png" alt="" width={width} height={height} className="block dark:hidden" />
+      <Image src="/brand/partners/veya-wordmark-white.png" alt="" width={width} height={height} className="hidden dark:block" />
+    </>
+  );
+}
+
 type Partner = {
   name: string;
   href: string;
   /** One short line, shown on /partners only. */
   line: string;
   Mark: (p: { size?: number }) => React.JSX.Element;
+  /** The mark is a wordmark that already spells the name, so the name is only read out, not shown. */
+  wordmark?: boolean;
 };
 
 export const LIVE_PARTNERS: Partner[] = [
   { name: "Raeto", href: "https://raeto.cc", line: "Private agent funding", Mark: RaetoMark },
   { name: "Agent Wormhole", href: "https://agentwormhole.com", line: "Agent payments checked before they go", Mark: AgentWormholeMark },
   { name: "Zedkr", href: "https://zedkr.finance", line: "Shop Amazon and eBay from a private balance", Mark: ZedkrMark },
+  { name: "Motion", href: "https://motion.gift", line: "Fund a trading wallet privately", Mark: MotionMark },
+  { name: "VEYA", href: "https://www.veyanet.tech", line: "Budget checks before an agent pays", Mark: VeyaWordmark, wordmark: true },
 ];
 
 function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?: boolean; size?: number }) {
@@ -82,11 +109,27 @@ function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?
       rel="noopener noreferrer"
       className="flex min-h-11 items-center gap-3 rounded-lg text-foreground transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-4"
     >
-      <p.Mark size={size} />
-      <span>
-        <span className={`block leading-tight tracking-[-0.01em] ${size > 32 ? "text-[19px]" : "text-[17px]"}`}>{p.name}</span>
-        {withLine && <span className="mt-0.5 block text-[13px] text-mute">{p.line}</span>}
-      </span>
+      {p.wordmark && !withLine ? (
+        <>
+          <p.Mark size={size} />
+          <span className="sr-only">{p.name}</span>
+        </>
+      ) : (
+        <>
+          {!p.wordmark && <p.Mark size={size} />}
+          <span>
+            {p.wordmark ? (
+              <span className="block py-0.5">
+                <p.Mark size={size} />
+                <span className="sr-only">{p.name}</span>
+              </span>
+            ) : (
+              <span className={`block leading-tight tracking-[-0.01em] ${size > 32 ? "text-[19px]" : "text-[17px]"}`}>{p.name}</span>
+            )}
+            {withLine && <span className="mt-0.5 block text-[13px] text-mute">{p.line}</span>}
+          </span>
+        </>
+      )}
     </a>
   );
 }

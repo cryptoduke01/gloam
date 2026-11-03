@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalLayout } from "@/components/LegalLayout";
+import { EMBEDDED_WALLETS } from "@/lib/embeddedWallet";
 
 export const metadata: Metadata = { title: "Privacy Policy" };
 
@@ -35,6 +36,18 @@ export default function PrivacyPage() {
         your browser too. We never receive your keys, your seed phrase or your
         note secrets.
       </p>
+      {EMBEDDED_WALLETS && (
+        <p>
+          If you sign in with your email or a passkey and create a Gloam wallet,
+          that wallet&apos;s key is made and kept by Turnkey, the service Gloam
+          wallets run on, inside its secure hardware. It never reaches the page
+          or our servers. Turnkey signs with it when your signed-in session
+          asks, and keeps a record of each request, signatures included. Turnkey
+          gives Gloam&apos;s Turnkey account read-only visibility into the
+          account it keeps for you. Your private balance still lives in your
+          browser, as above.
+        </p>
+      )}
       <p>
         We never hold your funds. Money in the Gloam vault contract leaves only
         with a valid proof, and there is no admin withdraw. Any change to how
@@ -152,8 +165,10 @@ export default function PrivacyPage() {
         sign-in cookies for the partner portal and the team&apos;s admin page.
         The app keeps your private balance, settings and preferences in your
         browser&apos;s local storage, and none of it is sent to us except an
-        encrypted recovery backup if you turn recovery on (section 8). Details
-        and your choices:{" "}
+        encrypted recovery backup if you turn recovery on (section 8).
+        {EMBEDDED_WALLETS &&
+          " If you sign in to a Gloam wallet, Turnkey's code keeps your sign-in session in this browser: a session key in its database and a session token in local storage, until you sign out or the session ends."}{" "}
+        Details and your choices:{" "}
         <a href="/cookies">
           Cookie Policy
         </a>
@@ -217,13 +232,26 @@ export default function PrivacyPage() {
       <p>
         It is encrypted in your browser, before it leaves, with a key made
         from your wallet&apos;s signature or your passkey. We can&apos;t read
-        it, and it is filed under an id that doesn&apos;t reveal your wallet.
+        it{EMBEDDED_WALLETS && " (except a backup made with a Gloam wallet's signature, below)"},
+        and it is filed under an id that doesn&apos;t reveal your wallet.
         It is replaced each time your browser backs up, and it stays until you
         turn recovery off in Settings, which deletes it from our servers. We
         don&apos;t delete it on a schedule. Anyone who gets your recovery
         signature or passkey could open your backup and spend what is in it,
         so only sign the recovery message on gloam.trade.
       </p>
+      {EMBEDDED_WALLETS && (
+        <p>
+          With a Gloam wallet, the app offers recovery with a passkey: the key
+          comes from the passkey on your device and never leaves it, so neither
+          we nor Turnkey can open that backup. Nothing turns on without your
+          say. If your browser can&apos;t make a passkey backup, you can choose
+          the Gloam wallet&apos;s signature instead. Turnkey makes and keeps
+          that signature, so Turnkey, and anyone with access to Gloam&apos;s
+          Turnkey account, could open a backup made with it. The app says so
+          before you choose it.
+        </p>
+      )}
       <h2>9. Tester applications</h2>
       <p>
         If you apply at gloam.trade/testers, we keep what you send: your name,
@@ -302,6 +330,43 @@ export default function PrivacyPage() {
         private send or a private amount. A sign-in cookie keeps you signed in
         for up to 7 days.
       </p>
+      <p>
+        <strong>Paying or swapping through a partner&apos;s link.</strong>{" "}A
+        partner&apos;s link can carry their partner code. When you pay, cash out
+        or swap from such a link, the app asks us which partner the code belongs
+        to (to show their name), and ties your transaction to the code before it
+        is sent: through the Gloam relay, the code goes with the send and the relay
+        ties it to a one-way hash of the payment just before sending, and to the
+        transaction it sends (kept seven days; an hour if the send never goes
+        out); from your own wallet, the app first sends us one-way hashes of the
+        payment and of a value only that payment has, with the code. We keep that
+        for an hour at most. Once your
+        transaction lands, we read it on its chain and record it against the
+        partner: the transaction hash, the network, the kind, the asset and amount
+        where they are public, the vault&apos;s fee and the time, which anyone can
+        already see on chain. We do not record your wallet address, your IP
+        address, the address a cash out paid, or anything else about you with it.
+        For a cash out sent later by the relay, the code is kept with the relay&apos;s
+        job until it goes out, and the app keeps the job&apos;s id in your browser
+        for at most seven days.
+      </p>
+      <p>
+        <strong>What the partner sees.</strong>{" "}For a cash out or a swap from
+        their link: its transaction hash, network, token, amount and time, and
+        which of their link codes it came through. All of that is public on chain
+        already. For a private payment from their link: only a count per day,
+        added once the day has ended (UTC), in their dashboard, its spreadsheets
+        and their API alike. Never its hash, amount, time, recipient or the code
+        it came through, and it never changes the &quot;last activity&quot; they
+        see, so they can&apos;t tell which payment was yours. They never see your
+        wallet or IP address.
+      </p>
+      <p>
+        <strong>Partners&apos; own addresses.</strong>{" "}A partner can give us
+        their own receiving addresses. We then count past cash outs from the vault
+        to those addresses as theirs, from the same public facts. We keep only the
+        partner&apos;s addresses, nothing about who sent the money.
+      </p>
       <h2>12. Hosted MCP server (gloam.trade/mcp)</h2>
       <p>
         The hosted MCP server lets AI clients such as Claude, ChatGPT and Cursor
@@ -371,6 +436,20 @@ export default function PrivacyPage() {
           that Relay makes for you. We then ask Relay how the order is going.
           Relay fills the order under its own terms.
         </li>
+        {EMBEDDED_WALLETS && (
+          <li>
+            Turnkey, only when you sign in with your email or a passkey to use
+            a Gloam wallet. Turnkey receives your email address (it sends you
+            the sign-in code), your passkey&apos;s public key and name, the
+            account and wallet it makes for you and their addresses, every
+            request your wallet signs (messages and transactions, with their
+            chain) and the signatures it makes, which Gloam&apos;s Turnkey
+            account can also view, and your IP address and browser details. When Gloam covers
+            a network fee for you, Turnkey sends that transaction and records
+            its cost. It keeps your wallet&apos;s key encrypted in its secure
+            hardware and processes all of this under its own privacy policy.
+          </li>
+        )}
         <li>
           WalletConnect (Reown), only when you choose Use a wallet app: its
           relay passes encrypted messages between the page and your wallet app

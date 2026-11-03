@@ -48,4 +48,8 @@ for (const [id, name] of CHAINS) {
   chains[id] = { name, venue: "v4", address, poolManager, weth, poolIds: pools.map(poolId), pools };
   console.log(`${name}: ${pools.length} pools, ${address}`);
 }
-writeFileSync(path, JSON.stringify({ note: old.note, escrowCodeHash: old.escrowCodeHash, chains }, null, 2) + "\n");
+// SwapEscrow2's creation code, as this checkout compiles it: every v3 escrow address hangs on it
+const escrow = JSON.parse(readFileSync(new URL("../out/SwapEscrow2.sol/SwapEscrow2.json", import.meta.url), "utf8")).bytecode.object;
+const escrowCodeHash = run("cast", ["keccak", escrow]);
+if (escrowCodeHash !== old.escrowCodeHash) console.log(`SwapEscrow2 code hash: ${escrowCodeHash}`);
+writeFileSync(path, JSON.stringify({ note: old.note, escrowCodeHash, chains }, null, 2) + "\n");

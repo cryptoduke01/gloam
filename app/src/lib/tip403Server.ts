@@ -87,7 +87,7 @@ export async function tip403AssetStatus(chainId: unknown, asset: unknown): Promi
  * Screen public addresses against the issuer policy of `asset` for one edge of
  * the vault. Allowed when no check applies. The issuer policy passes when the
  * RPC cannot answer. On a cash out, each recipient's receive policy must accept
- * `sender` (the vault unless set: a swap's exit pays from its router), and when
+ * `sender` (the vault unless set: a swap's exit pays from its escrow), and when
  * it can't be read the verdict is "unchecked", which refuses.
  */
 export async function screenTip403(

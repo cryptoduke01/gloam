@@ -23,6 +23,7 @@ import type { RelayVolume } from "@/lib/relayVolume";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
 import { VotesPanel } from "./AdminVotes";
+import { AdminBackfill, AdminPartnerDetail } from "./AdminPartnerDetail";
 import { ActivityFeed, ChainCards, MovedHero, Stat, VolumeChart, type Moved, type VolumeDay } from "./AdminCharts";
 
 type MetricsPayload = {
@@ -1075,7 +1076,7 @@ export function AdminDashboard() {
 
         {shown === "relay" && <RelayPanel relay={relay} counters={counters} dims={prod.dims} />}
 
-        {shown === "partners" && <PartnersPanel />}
+        {shown === "partners" && <PartnersPanel tier={env} />}
         {shown === "testers" && <TestersPanel />}
         {shown === "bugs" && <BugsPanel />}
         {shown === "votes" && <VotesPanel />}
@@ -1241,34 +1242,68 @@ type AdminPartner = {
   website: string | null;
   fees: { privatePaymentCents: number; cashoutBps: number; depositBps: number };
   relayApproved: boolean;
+  /** The name approved to show in links, or null. */
+  approvedName?: string | null;
+  nameAwaitingApproval?: boolean;
   createdAt: number;
   activeKeys: number;
+  /** Live link codes. */
+  liveCodes?: number;
+  /** Receiving addresses for the on-chain match: all, and proven by signature. */
+  addresses?: { total: number; verified: number };
+  /** "partial:<n>" when older activity outran what could be split into mainnet and testnet. */
+  migration?: string | null;
   totals: {
     privatePayments: number;
     cashOuts: number;
     deposits: number;
+    privateSwaps?: number;
     publicVolumeUsd: number;
+    swapVolumeUsd?: number;
     commissionUsd: number;
+    vaultFeeUsd?: number;
     unpriced: number;
     lastActivity: number | null;
+    bySource?: Record<"api" | "link" | "chain", { counts: Record<string, number>; volumeUsd: number; vaultFeeUsd: number }>;
   } | null;
 };
 
 type PartnersPayload = {
   backend: "redis" | "memory" | "none";
   partners: AdminPartner[];
-  totals: { privatePayments: number; cashOuts: number; deposits: number; publicVolumeUsd: number; commissionUsd: number } | null;
+  totals: {
+    privatePayments: number;
+    cashOuts: number;
+    deposits: number;
+    privateSwaps?: number;
+    publicVolumeUsd: number;
+    swapVolumeUsd?: number;
+    commissionUsd: number;
+    vaultFeeUsd?: number;
+  } | null;
 };
 
-/** The partner program: every partner, their keys and the volume their keys brought in. */
-function PartnersPanel() {
+/** How many a source brought in, every kind. */
+function sourceCount(t: AdminPartner["totals"], s: "api" | "link" | "chain"): number {
+  const c = t?.bySource?.[s]?.counts;
+  return c ? Object.values(c).reduce((a, b) => a + b, 0) : 0;
+}
+
+/**
+ * The partner program: every partner, their keys, link codes and receiving
+ * addresses, and what they brought in by source (API key, link, matched on chain).
+ * Details opens one partner's breakdown, codes and addresses.
+ */
+function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
   const [data, setData] = useState<PartnersPayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
-  /** Approves an account for the relay's larger message budget, or takes that back. */
-  const setApproved = async (id: string, relayApproved: boolean) => {
+  /** Approves an account for the relay's larger message budget, or its name to show in links, or takes either back. */
+  const save = async (id: string, change: { relayApproved: boolean } | { approveName: boolean }) => {
     setSaving(id);
     setSaveErr(null);
     try {
@@ -1276,15 +1311,30 @@ function PartnersPanel() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, relayApproved }),
+        body: JSON.stringify({ id, ...change }),
       });
-      const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: { partner?: { relayApproved?: boolean } }; error?: { message?: string } } | null;
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        data?: { partner?: { relayApproved?: boolean; approvedName?: string | null; nameAwaitingApproval?: boolean } };
+        error?: { message?: string };
+      } | null;
       if (!res.ok || !json?.ok) {
         setSaveErr(json?.error?.message ?? `Saving failed (${res.status})`);
         return;
       }
-      const saved = json.data?.partner?.relayApproved === true;
-      setData((d) => (d ? { ...d, partners: d.partners.map((p) => (p.id === id ? { ...p, relayApproved: saved } : p)) } : d));
+      const saved = json.data?.partner ?? {};
+      setData((d) =>
+        d
+          ? {
+              ...d,
+              partners: d.partners.map((p) =>
+                p.id === id
+                  ? { ...p, relayApproved: saved.relayApproved === true, approvedName: saved.approvedName ?? null, nameAwaitingApproval: saved.nameAwaitingApproval }
+                  : p
+              ),
+            }
+          : d
+      );
     } catch {
       setSaveErr("Network error saving the partner");
     } finally {
@@ -1296,7 +1346,7 @@ function PartnersPanel() {
     let live = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/partners/admin", { credentials: "include", cache: "no-store" });
+        const res = await fetch(`/api/partners/admin?tier=${tier}`, { credentials: "include", cache: "no-store" });
         const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: PartnersPayload; error?: { message?: string } } | null;
         if (!live) return;
         if (!res.ok || !json?.ok || !json.data) {
@@ -1317,7 +1367,7 @@ function PartnersPanel() {
       live = false;
       window.clearInterval(id);
     };
-  }, []);
+  }, [reload, tier]);
 
   if (err) {
     return (
@@ -1334,19 +1384,40 @@ function PartnersPanel() {
       </p>
     );
   }
+  const openPartner = data.partners.find((p) => p.id === open) ?? null;
   const t = data.totals;
   const pct = (bps: number) => `${(bps / 100).toFixed(2)}%`;
   return (
     <>
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Partners" value={n(data.partners.length)} sub={`${n(data.partners.reduce((s, p) => s + p.activeKeys, 0))} active keys`} />
-        <Kpi label="Private payments" value={n(t?.privatePayments)} sub="relayed with a partner key" />
-        <Kpi label="Public volume" value={fmtUsd(t?.publicVolumeUsd ?? 0)} sub={`${n((t?.cashOuts ?? 0) + (t?.deposits ?? 0))} cash outs and deposits`} />
-        <Kpi label="Would-be fees" value={fmtUsd(t?.commissionUsd ?? 0)} sub={MAINNET_ENABLED ? "partner fees not charged yet" : "testnet, nothing charged"} />
+        <Kpi label="Private payments" value={n(t?.privatePayments)} sub={`through partner keys and links, and ${n(t?.privateSwaps ?? 0)} private swaps`} />
+        <Kpi
+          label="Public volume"
+          value={tier === "testnet" ? "Not priced" : fmtUsd(t?.publicVolumeUsd ?? 0)}
+          sub={`${n((t?.cashOuts ?? 0) + (t?.deposits ?? 0))} cash outs and deposits${tier === "testnet" ? ", testnet" : ""}`}
+        />
+        <Kpi
+          label="Vault fees"
+          value={tier === "testnet" ? "Not priced" : fmtUsd(t?.vaultFeeUsd ?? 0)}
+          sub={`Gloam's cash-out fee on partner flows; would-be partner fees ${fmtUsd(t?.commissionUsd ?? 0)}, ${MAINNET_ENABLED ? "not charged" : "testnet"}`}
+        />
       </section>
-      <Panel title="Partners">
+      <Panel
+        title="Partners"
+        action={
+          <span className="flex flex-wrap gap-1">
+            <a href={`/api/partners/admin/export?id=all&type=daily&tier=${tier}`} className="btn btn-ghost btn-sm" download>
+              Daily CSV
+            </a>
+            <a href={`/api/partners/admin/export?id=all&type=transactions&tier=${tier}`} className="btn btn-ghost btn-sm" download>
+              Transactions CSV
+            </a>
+          </span>
+        }
+      >
         <DataTable
-          headers={["Partner", "Owner", "Keys", "Messages", "Private payments", "Cash outs", "Deposits", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
+          headers={["Partner", "", "Name in links", "Owner", "Keys", "Codes", "Addresses (proven)", "Messages", "Private payments", "Cash outs", "Deposits", "Swaps", "Via API key", "Via link", "Matched on chain", "Public volume", "Vault fees", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
           rows={data.partners.map((p) => [
             <span key="n" className="text-foreground">
               {p.website ? (
@@ -1357,15 +1428,51 @@ function PartnersPanel() {
                 p.name
               )}
             </span>,
+            <button
+              key="d"
+              type="button"
+              aria-expanded={open === p.id}
+              onClick={() => setOpen((o) => (o === p.id ? null : p.id))}
+              className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong"
+            >
+              {open === p.id ? "Close" : "Details"}
+            </button>,
+            <span key="nm" className="inline-flex items-center gap-2">
+              <span className={p.approvedName ? "text-foreground" : "text-mute"} title={p.nameAwaitingApproval ? `Account name now: ${p.name}` : undefined}>
+                {p.approvedName ?? "Not shown"}
+              </span>
+              {p.nameAwaitingApproval ? (
+                <button
+                  type="button"
+                  disabled={saving === p.id}
+                  onClick={() => void save(p.id, { approveName: true })}
+                  className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong disabled:opacity-50"
+                  title={`Show "${p.name}" in links as a Gloam partner. Check it is the partner's real name, not Gloam or another brand.`}
+                >
+                  Approve {p.name}
+                </button>
+              ) : p.approvedName ? (
+                <button
+                  type="button"
+                  disabled={saving === p.id}
+                  onClick={() => void save(p.id, { approveName: false })}
+                  className="rounded-full border border-line px-3 py-1 text-[13px] text-mute transition-colors hover:border-line-strong disabled:opacity-50"
+                >
+                  Hide
+                </button>
+              ) : null}
+            </span>,
             <span key="o" title={p.owner}>
               {shortAddress(p.owner, 4)}
             </span>,
             n(p.activeKeys),
+            n(p.liveCodes ?? 0),
+            `${n(p.addresses?.total ?? 0)} (${n(p.addresses?.verified ?? 0)})`,
             <button
               key="r"
               type="button"
               disabled={saving === p.id}
-              onClick={() => void setApproved(p.id, !p.relayApproved)}
+              onClick={() => void save(p.id, { relayApproved: !p.relayApproved })}
               className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong disabled:opacity-50"
               title={p.relayApproved ? "Their keys use the larger message budget. Click to take it back." : "Their keys share the small message budget. Click to approve."}
             >
@@ -1374,14 +1481,19 @@ function PartnersPanel() {
             n(p.totals?.privatePayments),
             n(p.totals?.cashOuts),
             n(p.totals?.deposits),
-            fmtUsd(p.totals?.publicVolumeUsd ?? 0),
-            fmtUsd(p.totals?.commissionUsd ?? 0),
+            n(p.totals?.privateSwaps ?? 0),
+            n(sourceCount(p.totals, "api")),
+            n(sourceCount(p.totals, "link")),
+            n(sourceCount(p.totals, "chain")),
+            tier === "testnet" ? "Not priced" : fmtUsd(p.totals?.publicVolumeUsd ?? 0),
+            tier === "testnet" ? "Not priced" : fmtUsd(p.totals?.vaultFeeUsd ?? 0),
+            tier === "testnet" ? "Not priced" : fmtUsd(p.totals?.commissionUsd ?? 0),
             `$${(p.fees.privatePaymentCents / 100).toFixed(2)} · ${pct(p.fees.cashoutBps)} · ${pct(p.fees.depositBps)}`,
             p.totals?.lastActivity ? new Date(p.totals.lastActivity).toLocaleString() : "None yet",
             new Date(p.createdAt).toLocaleDateString(),
           ])}
           empty={data.backend === "none" ? "Partner storage is not configured (set Upstash Redis)." : "No partners yet"}
-          minWidth={1200}
+          minWidth={1900}
         />
         {saveErr && (
           <p className="mt-3 text-[13px] text-danger" role="alert">
@@ -1390,9 +1502,23 @@ function PartnersPanel() {
         )}
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           Messages: payment messages from an approved account&apos;s keys use the relay&apos;s larger budget. Every other
-          account&apos;s keys share a small one. Fee setting is per private payment, cash outs, deposits. Volume counts payments relayed with a partner key and
-          deposits partners reported (checked on chain). Store: {data.backend}.
+          account&apos;s keys share a small one. Fee setting is per private payment, cash outs, deposits. Via API key: payments
+          relayed with a partner key and deposits partners reported (checked on chain). Via link: payments, cash outs and swaps
+          opened from a link with the partner&apos;s code, checked on chain. Matched on chain: past cash outs to the partner&apos;s own
+          receiving addresses, proven by signature. {tier === "testnet" ? "Testnet: counted, never valued. " : "Mainnet only; testnet is counted apart. "}Name in links: an
+          account&apos;s name shows as &quot;From name · Gloam partner&quot; only once approved here, and a rename needs approving again.
+          Only public transaction facts are kept, never a payer&apos;s wallet or IP.
+          {data.partners.some((p) => p.migration) ? " Some older activity could not be split into mainnet and testnet: see the partner's details." : ""}{" "}
+          Store: {data.backend}.
         </p>
+      </Panel>
+      {openPartner && (
+        <Panel title={openPartner.name} action={<span className="tnum text-[12.5px] text-mute">{openPartner.id}</span>}>
+          <AdminPartnerDetail key={`${openPartner.id}-${tier}`} id={openPartner.id} tier={tier} onChanged={() => setReload((v) => v + 1)} />
+        </Panel>
+      )}
+      <Panel title="On-chain match">
+        <AdminBackfill onDone={() => setReload((v) => v + 1)} />
       </Panel>
     </>
   );

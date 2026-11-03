@@ -359,7 +359,7 @@ export async function checkReceivePolicy(
  * the vault. On deposit each address must be an authorized sender; on cash out
  * an authorized recipient, and unless `receive` is false its own TIP-1028
  * receive policy must accept `sender` (the vault unless set: a swap's exit pays
- * from its router); with no flow, both. A wallet the issuer blocks gets the
+ * from its escrow); with no flow, both. A wallet the issuer blocks gets the
  * same neutral line as sanctions screening. Throws on RPC failure; callers
  * decide, and refuse a payout whose receive policy could not be read.
  */

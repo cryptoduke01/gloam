@@ -149,6 +149,8 @@ export async function runVaultSwap(args: {
   /** The note's tree path, read fresh. */
   pathFor: (note: LocalNote) => Promise<PoseidonMerklePath | null>;
   onStatus: (s: string) => void;
+  /** A partner's link code: it goes to the relay with the swap, which counts it to them once it lands. */
+  partnerCode?: string;
 }): Promise<SwapResult> {
   const { network, note, amount, router } = args;
   if (!network.pool) throw new Error("This network has no vault yet.");
@@ -278,6 +280,7 @@ export async function runVaultSwap(args: {
       refund: { proof: back.proof, commitment: refundNote.commitment, asset: target.asset, amount: BigInt(refundNote.amountWei) },
       route: plan.route,
       ...(exitKey ? { exitKey, deadline } : {}),
+      ...(args.partnerCode ? { partnerCode: args.partnerCode } : {}),
     },
     { spentId: target.id, outId: outNote.id, refund: refundNote },
     {
@@ -410,6 +413,9 @@ export async function exitVaultSwap(note: LocalNote, to: Address): Promise<Hex> 
   const account = exitAccount(note.secret);
   if (account.address.toLowerCase() !== info.exitKey.toLowerCase()) throw new Error("This note doesn't hold this swap's exit key.");
   const escrow = escrowAddress(info.router, info.assetIn, key);
+  // the router refuses these (BadExit): the money would stop there for good
+  const stops = [escrow, info.router, networkOfNote(note)?.pool ?? null, info.assetIn].filter(Boolean) as Address[];
+  if (stops.some((a) => a.toLowerCase() === to.toLowerCase())) throw new Error("An exit can't go to that address. Pick a wallet address.");
   const unshieldTx = await unshieldTxOf(note, escrow).catch(() => null);
   if (!unshieldTx) throw new Error("The vault's payment to this swap can't be read yet. Try again in a minute.");
   const signature = await account.sign({ hash: exitDigest(note.chainId, info.router, escrow, to) });

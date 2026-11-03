@@ -110,7 +110,6 @@ async function test(name: string, fn: () => void | Promise<void>) {
 const HOST = "localhost:3121";
 const ORIGIN = `http://${HOST}`;
 const RH = getNetwork("robinhood");
-const TEMPO = getNetwork("tempo");
 const USDG = "0x7E955252E15c84f5768B83c41a71F9eba181802F" as Address;
 const pepper = (() => {
   const p = apiKeyPepper(HOST);
@@ -118,8 +117,9 @@ const pepper = (() => {
   return p.pepper;
 })();
 
-function req(path: string, init: { method?: string; key?: string; body?: unknown; cookie?: string; origin?: string | null } = {}) {
+function req(path: string, init: { method?: string; key?: string; body?: unknown; cookie?: string; origin?: string | null; ip?: string } = {}) {
   const headers: Record<string, string> = { "x-forwarded-host": HOST };
+  if (init.ip) headers["x-forwarded-for"] = init.ip;
   if (init.key) headers.authorization = `Bearer ${init.key}`;
   if (init.body !== undefined) headers["content-type"] = "application/json";
   if (init.cookie) headers.cookie = init.cookie;
@@ -542,10 +542,14 @@ await test("keys: per-minute limit", async () => {
 
 // ---------------------------------------------------------------- attribution
 
+// Valued on mainnet only: a testnet transaction is counted, never priced (see the last test of this block).
+const RHM = getNetwork("robinhood-mainnet");
+const TEMPOM = getNetwork("tempo-mainnet");
+const USDG_M = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168" as Address;
 const TX = (n: number) => `0x${n.toString(16).padStart(64, "0")}` as Hex;
 
 await test("attribution: private payments keep no amount, asset or recipient", async () => {
-  const r = await recordActivity({ partner, keyId, network: RH, kind: "private_payment", txHash: TX(1) });
+  const r = await recordActivity({ partner, keyId, network: RHM, kind: "private_payment", txHash: TX(1) });
   assert.ok(r.recorded);
   const rec = r.record;
   assert.equal(rec.asset, null);
@@ -554,21 +558,25 @@ await test("attribution: private payments keep no amount, asset or recipient", a
   assert.equal(rec.feeUsd, 0.05);
   assert.deepEqual(
     Object.keys(rec).sort(),
-    ["amount", "asset", "chainId", "decimals", "feeBasis", "feeToken", "feeUsd", "id", "keyId", "kind", "network", "symbol", "ts", "txHash", "volumeUsd"].sort()
+    ["amount", "asset", "chainId", "decimals", "feeBasis", "feeToken", "feeUsd", "id", "keyId", "kind", "linkBind", "linkCode", "network", "source", "symbol", "ts", "txHash", "v", "vaultFee", "vaultFeeUsd", "volumeUsd"].sort()
   );
+  // a private payment is free in the vault, and came in with a key
+  assert.equal(rec.source, "api");
+  assert.equal(rec.vaultFee, "0");
+  assert.equal(rec.linkCode, null);
 });
 
 await test("attribution: a transaction counts once, for one partner", async () => {
-  const again = await recordActivity({ partner, keyId, network: RH, kind: "private_payment", txHash: TX(1) });
+  const again = await recordActivity({ partner, keyId, network: RHM, kind: "private_payment", txHash: TX(1) });
   assert.deepEqual(again, { recorded: false, reason: "duplicate" });
-  const upper = await recordActivity({ partner, keyId, network: RH, kind: "private_payment", txHash: TX(1).toUpperCase().replace("0X", "0x") as Hex });
+  const upper = await recordActivity({ partner, keyId, network: RHM, kind: "private_payment", txHash: TX(1).toUpperCase().replace("0X", "0x") as Hex });
   assert.equal(upper.recorded, false, "hash case does not matter");
-  const otherChain = await recordActivity({ partner, keyId, network: TEMPO, kind: "private_payment", txHash: TX(1) });
+  const otherChain = await recordActivity({ partner, keyId, network: TEMPOM, kind: "private_payment", txHash: TX(1) });
   assert.equal(otherChain.recorded, true, "same hash on another chain is another transaction");
 });
 
 await test("attribution: public edges are valued and summed", async () => {
-  const c = await recordActivity({ partner, keyId, network: RH, kind: "cash_out", txHash: TX(2), edge: { asset: USDG, amount: 250_000_000n } });
+  const c = await recordActivity({ partner, keyId, network: RHM, kind: "cash_out", txHash: TX(2), edge: { asset: USDG_M, amount: 250_000_000n } });
   assert.ok(c.recorded);
   assert.equal(c.record.symbol, "USDG");
   assert.equal(c.record.volumeUsd, 250);
@@ -576,7 +584,7 @@ await test("attribution: public edges are valued and summed", async () => {
   assert.equal(c.record.feeToken, "625000");
   // A stock token has no price here: counted, not valued.
   const tsla = "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E" as Address;
-  const s = await recordActivity({ partner, keyId, network: RH, kind: "cash_out", txHash: TX(3), edge: { asset: tsla, amount: 10n ** 18n } });
+  const s = await recordActivity({ partner, keyId, network: RHM, kind: "cash_out", txHash: TX(3), edge: { asset: tsla, amount: 10n ** 18n } });
   assert.ok(s.recorded && s.record.feeUsd === null && s.record.feeToken === "2500000000000000");
 
   const stats = await readPartnerStats(partner.id, { recent: 10 });
@@ -585,8 +593,8 @@ await test("attribution: public edges are valued and summed", async () => {
   assert.equal(stats.totals.publicVolumeUsd, 250);
   assert.equal(stats.totals.unpriced, 1);
   assert.ok(Math.abs(stats.totals.commissionUsd - (0.05 * 2 + 0.625)) < 1e-9);
-  assert.equal(stats.byNetwork.robinhood.private_payment, 1);
-  assert.equal(stats.byNetwork.tempo.private_payment, 1);
+  assert.equal(stats.byNetwork["robinhood-mainnet"]!.private_payment, 1);
+  assert.equal(stats.byNetwork["tempo-mainnet"]!.private_payment, 1);
   const usdg = stats.byAsset.find((a) => a.symbol === "USDG")!;
   assert.equal(usdg.volume, "250");
   assert.equal(usdg.commission, "0.625");
@@ -597,15 +605,23 @@ await test("attribution: public edges are valued and summed", async () => {
   assert.equal(today.cashOuts, 2);
   assert.equal(stats.daily.length, 14);
 
-  const all = await readPartnerStats("all");
-  assert.equal(all.totals.cashOuts, 2);
   const totals = await readAllPartnerTotals((await listPartners()).map((p) => p.id));
-  assert.equal(totals[partner.id]!.privatePayments, 2);
+  assert.equal(totals.byPartner[partner.id]!.privatePayments, 2);
+  assert.ok(totals.program.cashOuts >= 2, "the program's sum holds every partner's");
+
+  // testnet is counted apart and never valued
+  const t = await recordActivity({ partner, keyId, network: RH, kind: "cash_out", txHash: TX(9), edge: { asset: USDG, amount: 1_000_000_000_000n } });
+  assert.ok(t.recorded && t.record.volumeUsd === null && t.record.feeUsd === null);
+  const test = await readPartnerStats(partner.id, { tier: "testnet" });
+  assert.equal(test.totals.cashOuts, 1);
+  assert.equal(test.totals.publicVolumeUsd, 0);
+  assert.equal(test.totals.unpriced, 1);
+  assert.equal((await readPartnerStats(partner.id)).totals.cashOuts, 2, "mainnet unchanged");
 });
 
 await test("attribution: fee setting applies at the time of the transaction", async () => {
   const updated = await upsertPartner(wallet.address, { fees: { privatePaymentCents: 20 } });
-  const r = await recordActivity({ partner: updated, keyId, network: RH, kind: "private_payment", txHash: TX(4) });
+  const r = await recordActivity({ partner: updated, keyId, network: RHM, kind: "private_payment", txHash: TX(4) });
   assert.ok(r.recorded && r.record.feeUsd === 0.2);
   const stats = await readPartnerStats(partner.id, { recent: 5 });
   assert.ok(stats.recent.some((x) => x.txHash === TX(1) && x.feeUsd === 0.05), "earlier records keep their fee");
@@ -702,6 +718,30 @@ await test("v1 payment requests: link with the details after the #", async () =>
   ] as const) {
     const r = await requestPost(req("/api/v1/payment-requests", { method: "POST", key: secret, body }));
     assert.equal((await json(r)).error!.code, code, JSON.stringify(body));
+  }
+});
+
+await test("v1 payment requests: partnerCode adds p= only for the key's own live link code", async () => {
+  const { issueLinkCode, revokeLinkCode } = await import("../src/lib/partnerLinks");
+  const pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const tag = "gloamr1." + Buffer.from(new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey))).toString("base64url");
+  const own = await issueLinkCode({ partnerId: partner.id, by: "partner" });
+  const res = await requestPost(req("/api/v1/payment-requests", { method: "POST", key: secret, body: { to: tag, asset: "USDG", partnerCode: own.code } }));
+  const b = await json(res);
+  assert.equal(res.status, 201);
+  assert.equal(new URLSearchParams(new URL(b.data!.url as string).hash.slice(1)).get("p"), own.code);
+  assert.equal(b.data!.partnerCode, own.code);
+  const none = await json(await requestPost(req("/api/v1/payment-requests", { method: "POST", key: secret, body: { to: tag, asset: "USDG" } })));
+  assert.ok(!(none.data!.url as string).includes("p="), "no code asked for, none added");
+  // another account's code, a revoked one and a made-up one are refused
+  const other = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Someone else" });
+  const theirs = await issueLinkCode({ partnerId: other.id, by: "admin" });
+  const gone = await issueLinkCode({ partnerId: partner.id, by: "partner" });
+  await revokeLinkCode({ code: gone.code, partnerId: partner.id });
+  for (const code of [theirs.code, gone.code, "AAAAAAAAAAAAAAAAAAAA", 42]) {
+    const r = await requestPost(req("/api/v1/payment-requests", { method: "POST", key: secret, body: { to: tag, asset: "USDG", partnerCode: code } }));
+    assert.equal(r.status, 400);
+    assert.equal((await json(r)).error!.code, "bad_code");
   }
 });
 
@@ -970,23 +1010,43 @@ await test("relay messages: a new account is not approved; only an admin, from t
   assert.equal(await setRelayApproved("ptr_nobody00", true), null);
 });
 
+/** Requests through the v1 relay (an action it turns away after the per-sender check) until one is refused. */
+async function untilRefused(send: (i: number) => Request) {
+  let accepted = 0;
+  for (let i = 0; i < 1_000; i++) {
+    const b = await json(await relayPost(send(i)));
+    if (b.error?.code !== "bad_action") return { accepted, refusedBy: b.error?.code ?? "ok" };
+    accepted++;
+  }
+  return { accepted, refusedBy: "none" };
+}
+const shield = (secret: string, ip: string) => req("/api/v1/relay", { method: "POST", key: secret, ip, body: { chainId: 46630, action: "shield" } });
+
 await test("v1 relay: every key of one account counts as one sender", async () => {
   const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Many keys", website: "https://example.com" });
+  await setRelayApproved(owner.id, true);
   const keys = await Promise.all(Array.from({ length: 4 }, (_, i) => createApiKey({ partnerId: owner.id, name: `k${i}`, env: "test", pepper })));
-  let accepted = 0;
-  let refusedBy = "";
-  for (let i = 0; i < 1_000 && !refusedBy; i++) {
-    const key = keys[i % keys.length]!;
-    const b = await json(await relayPost(req("/api/v1/relay", { method: "POST", key: key.secret, body: { chainId: 46630, action: "shield" } })));
-    if (b.error?.code === "bad_action") accepted++;
-    else refusedBy = b.error?.code ?? "ok";
-  }
-  assert.equal(refusedBy, "rate_limit");
-  assert.equal(accepted, 400, "the relay's limit for one sender, shared by the account's four keys");
+  // from several IPs: an approved account is the sender, whatever IP it calls from
+  assert.deepEqual(await untilRefused((i) => shield(keys[i % keys.length]!.secret, `198.51.100.${70 + (i % 3)}`)), { accepted: 400, refusedBy: "rate_limit" });
   // another account is its own sender
   const other = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Other", website: "https://example.com" });
+  await setRelayApproved(other.id, true);
   const otherKey = await createApiKey({ partnerId: other.id, name: "k", env: "test", pepper });
-  assert.equal((await json(await relayPost(req("/api/v1/relay", { method: "POST", key: otherKey.secret, body: { chainId: 46630, action: "shield" } })))).error?.code, "bad_action");
+  assert.equal((await json(await relayPost(shield(otherKey.secret, "198.51.100.70")))).error?.code, "bad_action");
+});
+
+await test("v1 relay: accounts no admin approved count as their IP too, so a second account from it adds nothing", async () => {
+  const make = async (name: string) => {
+    const p = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name, website: "https://example.com" });
+    return { p, key: await createApiKey({ partnerId: p.id, name: "k", env: "test", pepper }) };
+  };
+  const [a, b, approved] = await Promise.all([make("Free one"), make("Free two"), make("Approved")]);
+  await setRelayApproved(approved.p.id, true);
+  const IP = "198.51.100.80";
+  assert.deepEqual(await untilRefused((i) => shield((i % 2 === 0 ? a : b).key.secret, IP)), { accepted: 400, refusedBy: "rate_limit" }, "both accounts, one IP's limit");
+  // the same accounts from elsewhere, and an approved account from that IP, still go
+  assert.equal((await json(await relayPost(shield(a.key.secret, "198.51.100.81")))).error?.code, "bad_action");
+  assert.equal((await json(await relayPost(shield(approved.key.secret, IP)))).error?.code, "bad_action");
 });
 
 console.log(`\n${passed} partner tests passed`);

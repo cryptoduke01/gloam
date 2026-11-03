@@ -131,6 +131,11 @@ contract GloamVaultSwapV4c is GloamVaultSwap2 {
         if (!_inSwap() || (msg.sender != weth && msg.sender != address(poolManager))) revert NativeRefused();
     }
 
+    /// @dev The PoolManager and WETH hold nothing for an exit's recipient.
+    function _stopsHere(address to) internal view override returns (bool) {
+        return to == address(poolManager) || to == weth;
+    }
+
     // ───────────────────────────────────────────────────────────── the allowlist
 
     /// @notice Whether a route may use this pool now.

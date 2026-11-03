@@ -85,6 +85,7 @@ import { gasHighMessage } from "@/lib/relay/gasCeiling";
 import { RelayToggle } from "./RelayToggle";
 import { RelayGasNotice } from "./RelayGasNotice";
 import { PaymentRequestBanner, RequestPaymentCard } from "./PaymentRequest";
+import { queuePartnerJobs, registerLinkSpend, settlePartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
 import {
   claimNetworkProblem,
   isWalletRequest,
@@ -158,7 +159,8 @@ import { ClaimSafetyLine } from "./ClaimSafetyLine";
 import { canSwapAfterClaim, takeFirstClaim } from "@/lib/afterClaim";
 import { TokenLogo } from "./TokenLogo";
 import { AddTokenToWallet } from "./AddTokenToWallet";
-import { checkSweep, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
+import { checkSweep, sweepVerdict, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
+import { EMBEDDED_CONNECTOR_ID } from "@/lib/embeddedWallet";
 import { moveModeFromParam, searchWithMoveMode } from "@/lib/vaultNav";
 import { cashOutHandoff, classifyPayRecipient, isWalletRecipient } from "@/lib/payRecipient";
 import { useEnsAddress } from "@/hooks/useEnsAddress";
@@ -183,7 +185,16 @@ const RELAY_MAYBE_SENT = new Set(["maybe_sent", "rpc", "network", "error", "inte
 export function MoveView() {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
-  const { address, isConnected, chainId } = useAppAccount();
+  const { address, isConnected, chainId, connector } = useAppAccount();
+  /** `to` is the Gloam wallet connected now (lib/sweepCheck sweepVerdict: its own sponsored deposits look like a sweep). */
+  const ownGloamWallet = (to: string | null | undefined) =>
+    Boolean(
+      to &&
+        address &&
+        connector?.id === EMBEDDED_CONNECTOR_ID &&
+        connector.type === "turnkey" &&
+        to.toLowerCase() === address.toLowerCase()
+    );
   const { network } = useNetwork();
   const onProduct = chainId === network.chainId;
   const { open, local: allLocal, refresh: refreshNotes } = useLocalShieldNotes(address);
@@ -210,6 +221,8 @@ export function MoveView() {
           network.key
         )
   );
+  // A partner's link code (p=): their name from their Gloam account, once the server says the code is live.
+  const partnerName = usePartnerName(request?.partnerCode ?? null);
   // The first-payment nudge (FirstPaymentCard) opens Send with a small amount
   // in one stablecoin (?suggest=5&suggestAsset=0x…). A request link wins over
   // it. Read once; the URL is cleaned up below so a refresh starts blank.
@@ -483,6 +496,13 @@ export function MoveView() {
   const pendingShare = useRef<{ blob: string; amountLabel: string } | null>(
     null
   );
+  /**
+   * The payment or cash out in flight came from a partner's link: its spend was
+   * registered under the link's code before it was sent (by the app, or by the
+   * relay with the code it was handed), and it is asked to be counted once it
+   * lands (lib/partnerLinkClient). Never waited on.
+   */
+  const partnerSend = useRef<{ chainId: number } | null>(null);
   /** Analytics for the payment in flight: sent on a request, carrying a note. */
   const payTrack = useRef<{ chainId: number; request: boolean; note: boolean } | null>(null);
   /** The payment's code for Sent links, saved once the payment lands. */
@@ -565,6 +585,13 @@ export function MoveView() {
       }
 
       if (pendingAction.current === "cashout") countPerson("cashout", address, network.testnet);
+
+      // From a partner's link: the server checks this transaction on chain and counts it to the link it was registered under.
+      if ((pendingAction.current === "send" || pendingAction.current === "cashout") && partnerSend.current) {
+        const ps = partnerSend.current;
+        partnerSend.current = null;
+        settlePartnerTx({ chainId: ps.chainId, txHash });
+      }
 
       if (pendingAction.current === "send" && payTrack.current) {
         const t = payTrack.current;
@@ -704,6 +731,8 @@ export function MoveView() {
     pendingClaimLink.current = false;
     spentNoteId.current = null;
     payTrack.current = null;
+    // the wallet refused or the write failed: a memo's failure comes after the payment was reported
+    partnerSend.current = null;
     setShareBlob(landed?.blob ?? null);
     if (landed) {
       setShareAmountLabel(landed.amountLabel);
@@ -719,6 +748,10 @@ export function MoveView() {
     if (!receiptLost || !txHash || !busy) return;
     const action = pendingAction.current;
     keptBeforeSend.current = null;
+    // it may still land: the report waits for the chain, and counts nothing if it never does
+    const ps = partnerSend.current;
+    partnerSend.current = null;
+    if (ps && (action === "send" || action === "cashout")) settlePartnerTx({ chainId: ps.chainId, txHash });
     pendingChange.current = null;
     pendingShare.current = null;
     pendingMemo.current = null;
@@ -970,7 +1003,8 @@ export function MoveView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sweepKey]);
   const sweepNow = sweepKey ? (sweepResults[sweepKey] ?? null) : null;
-  const sweepHold = Boolean(sweepNow?.swept) && sweepOkFor !== sweepKey;
+  const sweepSays = sweepVerdict(sweepNow, { ownGloamWallet: ownGloamWallet(cashOutTo) });
+  const sweepHold = sweepSays === "swept" && sweepOkFor !== sweepKey;
 
   /** What Round it starts from and gives: the amount (or the whole balance) down to whole units. */
   const roundFrom = cashOutAmountInvalid ? noteWei : cashOutAmount;
@@ -1088,14 +1122,18 @@ export function MoveView() {
       spentNoteId.current = target.id;
       setStatus("Proving privately, this takes 10 to 30 seconds…");
       const call = await proveCashOut(target, to, path, network.chainId);
+      // From a partner's link to the request's own wallet: bound to the link's code before anything is sent.
+      const fromLink = requestPartner(to);
       if (later) {
         setStatus("Scheduling with the Gloam relay…");
         // Out of the balance while it waits; the chain settles it once it goes out. The
         // address shown is the one the relay holds, not the one asked for (and when this
         // money already has a cash out waiting, the note shows that one).
-        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow, cashOutFeeBps);
+        // the relay registers it under the code as it schedules it, and counts it as it sends it
+        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow, cashOutFeeBps, fromLink ? { partnerCode: fromLink.code } : {});
         spentNoteId.current = null;
         countPerson("cashout", address, network.testnet);
+        if (fromLink) queuePartnerJobs(network.chainId, [job.id]);
         setScheduledNotice({ at: job.sendAfter, label: formatAssetLabel(target.amountWei, target.asset) });
         setCashOutInput("");
         refreshNotes();
@@ -1106,15 +1144,19 @@ export function MoveView() {
         });
         return;
       }
+      partnerSend.current = fromLink ? { chainId: network.chainId } : null;
       if (relayOn) {
         setStatus("Sending through the Gloam relay…");
-        const h = await relayUnshield(call);
+        // the relay registers it under the code as it sends it
+        const h = await relayUnshield({ ...call, ...(fromLink ? { partnerCode: fromLink.code } : {}) });
         setCashedOut({ to, asset: target.asset as Address });
         setRelayHash(h);
         setSuccessTitle("Cashed out");
         setCashOutInput("");
         return;
       }
+      // from the wallet: registered under the code now, before the wallet is asked, bound to this cash out's proof
+      if (fromLink) registerLinkSpend({ code: fromLink.code, chainId: network.chainId, nullifier: call.nullifier, proof: call.proof });
       setStatus("Confirm the cash out in your wallet…");
       writeContract({
         address: network.pool,
@@ -1139,6 +1181,16 @@ export function MoveView() {
       setStatus(null);
       refreshNotes();
     }
+  }
+
+  /**
+   * The partner a cash out counts to: one from a partner's request link (p=) to a
+   * wallet, paying the very wallet the link asked for. null otherwise.
+   */
+  function requestPartner(to: Address | null | undefined): { code: string; chainId: number } | null {
+    const code = request?.partnerCode;
+    if (!code || !isWalletRequest(request) || handedOffRequest.current !== request || !handedOffTo.current || !to) return null;
+    return to.toLowerCase() === handedOffTo.current.toLowerCase() ? { code, chainId: network.chainId } : null;
   }
 
   /**
@@ -1168,7 +1220,8 @@ export function MoveView() {
           runSweepCheck(key, t, asset, network.chainId),
           new Promise<null>((r) => window.setTimeout(() => r(null), 4_000)),
         ]);
-        if (!result?.swept) continue;
+        // the person's own connected Gloam wallet gets a note under To, not a hold
+        if (sweepVerdict(result, { ownGloamWallet: ownGloamWallet(t) }) !== "swept") continue;
         if (quiet && t.toLowerCase() === quiet.toLowerCase()) return false;
         setError(
           `Money sent to ${shortAddress(t, 4)} has been moved out automatically within seconds before, by another account. Use another address for that piece.`
@@ -1245,6 +1298,9 @@ export function MoveView() {
     setCashedOut(null);
     setPlanRun(pieces.map((p, i) => ({ amount: p, to: targets[i]!, state: "waiting" })));
     setRunNote(note);
+    // From a partner's link: the pieces that pay the request's own wallet carry its code to the relay as they are scheduled.
+    const fromLink = requestPartner(cashOutTo);
+    const toRequest = (a: Address) => Boolean(fromLink && cashOutTo && a.toLowerCase() === cashOutTo.toLowerCase());
     try {
       const r = await runPrivateCashOut({
         note,
@@ -1255,7 +1311,11 @@ export function MoveView() {
         feeBps: cashOutFeeBps,
         onStatus: setStatus,
         onPiece: (i, patch) => setPlanRun((rows) => rows && rows.map((row, j) => (j === i ? { ...row, ...patch } : row))),
+        ...(fromLink
+          ? { deps: { schedule: (n, c, when, feeBps) => scheduleNoteCashOut(n, c, when, feeBps, toRequest(c.to) ? { partnerCode: fromLink.code } : {}) } }
+          : {}),
       });
+      if (fromLink) queuePartnerJobs(network.chainId, r.jobs.filter((j) => toRequest(j.to)).map((j) => j.id));
       if (r.jobs.length) {
         // Jobs come back in piece order: the first ones are what was scheduled.
         const times = r.jobs.map((j) => j.sendAfter);
@@ -1420,6 +1480,22 @@ export function MoveView() {
       });
       if (w.blocker) throw new Error(w.blocker);
 
+      // From a partner's link, to the request's own Gloam address: bound to the link's code before
+      // anything is sent. Through the relay, the code goes with the send. From the wallet, it is
+      // registered now, before proving, bound to this payment's new note commitment, which only
+      // this send has.
+      const linkCode =
+        request?.partnerCode && request.toKind === "gloam" && payStyle === "direct" && recipientTag.trim() === request.to ? request.partnerCode : null;
+      partnerSend.current = linkCode ? { chainId: network.chainId } : null;
+      if (linkCode && !relayOn) {
+        registerLinkSpend({
+          code: linkCode,
+          chainId: network.chainId,
+          nullifier: fieldToBytes32(w.publicInputs.nullifier),
+          bind: fieldToBytes32(w.publicInputs.newCommitment0),
+        });
+      }
+
       const { proofBytes } = await proveTransferInBrowser(w.circomInput);
 
       // Change stays with sender only. Payment secret goes solely into share package.
@@ -1537,6 +1613,7 @@ export function MoveView() {
             fieldToBytes32(w.publicInputs.newCommitment0),
             fieldToBytes32(w.publicInputs.newCommitment1),
           ],
+          ...(linkCode ? { partnerCode: linkCode } : {}),
         });
         setRelayHash(h);
         setSuccessTitle("Sent privately");
@@ -2086,6 +2163,8 @@ export function MoveView() {
    * mode reaches the URL after the first render has synced it.
    */
   const handedOffRequest = useRef<PaymentRequest | null>(null);
+  /** The wallet a request was handed off to Cash out with: a cash out from a partner's link counts only when it pays this one. */
+  const handedOffTo = useRef<Address | null>(null);
   useEffect(() => {
     if (!request || !isWalletRequest(request) || handedOffRequest.current === request) return;
     if (mode !== "send" || !payWalletTo || recipientTag !== request.to) return;
@@ -2093,6 +2172,7 @@ export function MoveView() {
     const amount = request.amount ?? "";
     const t = window.setTimeout(() => {
       handedOffRequest.current = request;
+      handedOffTo.current = to;
       const h = cashOutHandoff(to, amount);
       setCashOutDest(h.dest);
       setOtherTo(h.to);
@@ -2228,6 +2308,7 @@ export function MoveView() {
               onSwitchNetwork={setNetworkKey}
               onDismiss={() => setRequest(null)}
               balanceHint={requestHint}
+              partnerName={partnerName}
             />
           )}
 
@@ -2945,7 +3026,22 @@ export function MoveView() {
                         For privacy, a fresh wallet that never added money to Gloam is best.
                       </p>
                     ) : null}
-                    {sweepNow?.swept && cashOutTo ? (
+                    {sweepNow?.swept && cashOutTo && sweepSays === "own-wallet" ? (
+                      <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+                        Money that reached this Gloam wallet left again soon after, in a transaction another account sent.
+                        Adding money privately with the network fee covered looks like that. If you didn&apos;t add
+                        money privately, someone else may be moving money out of this wallet: don&apos;t cash out
+                        here, and sign out.{" "}
+                        <a
+                          href={network.explorerTx(sweepNow.swept.evidenceTx)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-foreground underline underline-offset-2"
+                        >
+                          See it on the explorer
+                        </a>
+                      </p>
+                    ) : sweepNow?.swept && cashOutTo ? (
                       <SweptWarning
                         address={cashOutTo}
                         evidenceHref={network.explorerTx(sweepNow.swept.evidenceTx)}

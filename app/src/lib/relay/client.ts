@@ -132,6 +132,8 @@ export async function relayTransfer(p: {
   root: Hex;
   nullifier: Hex;
   commitments: readonly [Hex, Hex];
+  /** A partner's link code: the relay counts the payment to them once it lands (lib/partnerAttribution). */
+  partnerCode?: string;
 }): Promise<Hex> {
   const { hash, memoTicket } = await post({ action: "transfer", ...p });
   // commitments[0] is the payment, the one its heads-up is for
@@ -147,6 +149,8 @@ export async function relayUnshield(p: {
   asset: Address;
   to: Address;
   amount: bigint;
+  /** A partner's link code: the relay counts the cash out to them once it lands. */
+  partnerCode?: string;
 }): Promise<Hex> {
   return (await post({ action: "unshield", ...p })).hash;
 }
@@ -170,6 +174,8 @@ export async function relayVaultSwap(p: {
   /** v3: the swap's exit key and deadline. */
   exitKey?: Address;
   deadline?: bigint;
+  /** A partner's link code: the relay counts the swap to them once it lands. */
+  partnerCode?: string;
 }): Promise<Hex> {
   return (await post({ action: "swap", ...p })).hash;
 }
