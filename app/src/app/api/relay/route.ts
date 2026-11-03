@@ -54,14 +54,15 @@ export async function POST(req: Request) {
     const takenAt = Date.now();
     const partnerCode = body.partnerCode;
     const net = networkForChain(body.chainId);
-    const spend = partnerCode !== undefined ? relaySpendOf(body) : null;
-    const bound = spend
-      ? bindRelaySpend({ chainId: net.chainId, nullifier: spend.nullifier, proof: spend.proof, code: partnerCode, flow: spend.flow, at: takenAt }).catch(() => false)
-      : undefined;
     const requester = clientIp(req);
     await checkRateLimit(requester);
     // payment messages have budgets of their own (lib/relay/server holdMemoSlot)
     if (body.action !== "memo") await checkChainRateLimit(net, requester);
+    // within the limits only; started alongside the send, never waited on before it
+    const spend = partnerCode !== undefined ? relaySpendOf(body) : null;
+    const bound = spend
+      ? bindRelaySpend({ chainId: net.chainId, nullifier: spend.nullifier, proof: spend.proof, code: partnerCode, flow: spend.flow, at: takenAt }).catch(() => false)
+      : undefined;
 
     let hash: `0x${string}`;
     switch (body.action) {

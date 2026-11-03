@@ -13,8 +13,10 @@
  *    scheduled (bindScheduledJob). A transaction the relay itself sent is counted
  *    from relay bindings only, never from a wallet registration, so nobody can get
  *    in first with one; a count asked for before the relay's binding is written
- *    just fails and leaves the transaction for it. A copied proof sent to the relay
- *    binds only what the relay itself sends.
+ *    just fails and leaves the transaction for it. A binding of the proof counts
+ *    only if made before the block's second began (and is not kept on Ethereum or
+ *    Base, whose pending calldata is public), so a proof copied from a landed
+ *    transaction and posted to the relay binds nothing that counts.
  *
  *  - Wallet-registered (attribution grade). Before the payer's wallet is asked,
  *    the app registers the spend: a hash of its nullifier, the link's code, and a
@@ -90,8 +92,12 @@ const proofField = (proof: Hex) => linkBindHash(proofBindValue(proof)).toLowerCa
  * spend and the exact proof it was asked to send (a scheduled cash out: to the
  * spend, as "job", since its proof can be renewed while it waits). Only a
  * transaction the relay itself sends is ever counted from this, and only when its
- * calldata carries that proof (or is the job's spend). The first binding of a
- * proof stands.
+ * calldata carries that proof (or is the job's spend), and only when the binding
+ * was made before the transaction's block's second began: a copy of the proof read
+ * from a landed transaction and posted to the relay binds nothing that counts. The
+ * first binding of a proof stands. Not kept on chains whose public mempool shows a
+ * pending transaction's calldata (there the relay's binding by transaction hash is
+ * the only one).
  */
 export async function bindRelaySpend(args: {
   chainId: number;
@@ -102,7 +108,7 @@ export async function bindRelaySpend(args: {
   at: number;
   ttlSec?: number;
 }): Promise<boolean> {
-  if (!isLinkCodeShape(args.code)) return false;
+  if (!isLinkCodeShape(args.code) || PUBLIC_MEMPOOL_CHAINS.includes(args.chainId)) return false;
   const resolved = await resolveLinkCode(args.code, args.at);
   if (!resolved) return false;
   const key = k("relaynf", args.chainId, linkNullifierHash(args.nullifier).toLowerCase());
@@ -341,9 +347,11 @@ export async function settleLinkTx(
   let bound: { partnerId: string; code: string; flow: LinkFlow; by: "relay" | "wallet" } | null = null;
   if (deps.relaySigners().includes(t.from.toLowerCase())) {
     // 1. Sent by the relay: its own bindings only, never a wallet registration. Bound to this very
-    // transaction after the send, or to the proof in its calldata (or the scheduled job's spend) before it.
+    // transaction after the send, or to the proof in its calldata (or the scheduled job's spend) before
+    // it. A binding of the proof counts only if made before the block's second began, so a copy of the
+    // proof posted to the relay after the transaction landed binds nothing; none on a public-mempool chain.
     let relay = await relayBindingOf(net.chainId, input.txHash);
-    if (!relay) {
+    if (!relay && !PUBLIC_MEMPOOL_CHAINS.includes(net.chainId)) {
       const spend = spendInCall(net, t);
       if (spend && spend.nullifier.toLowerCase() === facts.nullifier.toLowerCase()) {
         const key = k("relaynf", net.chainId, linkNullifierHash(spend.nullifier).toLowerCase());
@@ -351,7 +359,7 @@ export async function settleLinkTx(
           ["HGET", key, proofField(spend.proof)],
           ["HGET", key, "job"],
         ]);
-        relay = jsonOf<RelayBinding>(byProof) ?? jsonOf<RelayBinding>(byJob);
+        relay = [jsonOf<RelayBinding>(byProof), jsonOf<RelayBinding>(byJob)].find((b) => b !== null && b.at < ts * 1000) ?? null;
       }
     }
     if (relay) bound = { ...relay, by: "relay" };
