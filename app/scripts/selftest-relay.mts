@@ -48,7 +48,7 @@
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-relay.mts
  */
 import assert from "node:assert/strict";
-import { getAddress, toFunctionSelector, toHex, type Address, type Hex } from "viem";
+import { encodeFunctionData, getAddress, toFunctionSelector, toHex, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
 
 delete process.env.UPSTASH_REDIS_REST_URL;
@@ -64,6 +64,7 @@ const {
   asMemo,
   memoTicket,
   relayMemo,
+  relayPoolAbi,
   relayTransfer,
   relayUnshield,
   sendFailure,
@@ -86,6 +87,7 @@ const partners = await import("../src/lib/partners");
 const partnerLinks = await import("../src/lib/partnerLinks");
 const { k: partnersKey } = await import("../src/lib/partnersKv");
 const { linkNullifierHash } = await import("../src/lib/partnerCode");
+const { spendIdOf } = await import("../src/lib/partnerAttribution");
 const { resetRpcChecks, serverTransport } = await import("../src/lib/serverRpc");
 const { getNetwork } = await import("../src/lib/networks");
 const { buildNotePackage, encodeNotePackage } = await import("../src/lib/notePackage");
@@ -651,6 +653,32 @@ await test("V2: the before-broadcast hook runs once the checks, dry run and hold
   assert.equal(seen.length, 1);
   assert.ok(seen[0]!.includes("eth_estimateGas") && !seen[0]!.includes("eth_sendRawTransaction"));
   assert.ok(calls.includes("eth_sendRawTransaction"));
+  // it is handed the call that goes out, so a binding names that exact payment (lib/partnerAttribution spendIdOf)
+  reset();
+  const handed: { to: string; data: Hex }[] = [];
+  const nulA = nullifier();
+  assert.equal(await relayUnshield(net, unshieldBody(nulA, CLEAN), undefined, { beforeBroadcast: (tx) => void handed.push(tx) }), TX_HASH);
+  assert.equal(handed.length, 1);
+  assert.equal(handed[0]!.to.toLowerCase(), POOL.toLowerCase());
+  const id = spendIdOf(net, { to: handed[0]!.to, input: handed[0]!.data });
+  assert.ok(id && id.nullifier.toLowerCase() === nulA.toLowerCase());
+  // the same payment with another proof is the same payment; another recipient is not
+  const call = (proof: Hex, to: Address) =>
+    encodeFunctionData({ abi: relayPoolAbi, functionName: "unshield", args: [proof, H32, nulA, "0x0000000000000000000000000000000000000000", to, 1n] });
+  assert.equal(spendIdOf(net, { to: POOL, input: call(("0x" + "33".repeat(256)) as Hex, CLEAN) })?.id, id.id);
+  assert.notEqual(spendIdOf(net, { to: POOL, input: call(PROOF, "0x2222222222222222222222222222222222222222") })?.id, id.id);
+  // what the hook returns is called when the send surely didn't go out (the node refused it), not when it went out
+  let undone = 0;
+  reset({ send: "reject" });
+  await assert.rejects(relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: () => () => void undone++ }), isRelayError("relay_empty", 503));
+  assert.equal(undone, 1);
+  reset();
+  assert.equal(await relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: () => () => void undone++ }), TX_HASH);
+  assert.equal(undone, 1);
+  // a send the node may have taken keeps it
+  reset({ send: "drop" });
+  await assert.rejects(relayTransfer(net, transferBody(nullifier()), undefined, { beforeBroadcast: () => () => void undone++ }), isRelayError("maybe_sent", 502, MAYBE_SENT_MESSAGE));
+  assert.equal(undone, 1);
   // a hook that throws changes nothing about the send
   reset();
   assert.equal(await relayUnshield(net, unshieldBody(nullifier(), CLEAN), undefined, { beforeBroadcast: () => {
@@ -677,7 +705,9 @@ await test("V2, V3: a relay request with a partner's code that the relay refuses
   const p = await partners.upsertPartner("0x000000000000000000000000000000000000dEaD", { name: "Mallory" });
   const code = (await partnerLinks.issueLinkCode({ partnerId: p.id, by: "partner" })).code;
   const mem = (globalThis as { __gloamPartnersMem?: Map<string, unknown> }).__gloamPartnersMem;
-  const bound = (nul: Hex) => mem?.has(partnersKey("relaynf", net.chainId, linkNullifierHash(nul).toLowerCase())) ?? false;
+  const bound = (nul: Hex) =>
+    mem?.has(partnersKey("relayspendnf", net.chainId, linkNullifierHash(nul).toLowerCase())) ||
+    [...(mem?.keys() ?? [])].some((key) => key.startsWith(partnersKey("relayspend", net.chainId) + ":"));
   const cases: [Partial<typeof chain>, string][] = [
     [{ spent: true }, "transfer"],
     [{ known: false }, "transfer"],

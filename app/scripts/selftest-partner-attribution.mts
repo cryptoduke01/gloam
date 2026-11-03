@@ -68,7 +68,7 @@ const AD = await import("../src/lib/partnerAddresses");
 const { linkNullifierHash, linkBindHash, proofBindValue } = await import("../src/lib/partnerCode");
 const { relayPoolAbi } = await import("../src/lib/relay/server");
 const { getNetwork } = await import("../src/lib/networks");
-const { swapRoutersOn, EVERY_SWAP_ROUTER } = await import("../src/lib/vaultSwap");
+const { swapRoutersOn, EVERY_SWAP_ROUTER, vaultSwapAbi, vaultSwapV3Abi } = await import("../src/lib/vaultSwap");
 const { buildPaymentRequestLink, readPaymentRequest, requestParamsFrom, requestAssetsFor } = await import("../src/lib/paymentRequest");
 const { buildSwapLink, swapLinkFromHash } = await import("../src/lib/swapLink");
 const { ApiError } = await import("../src/lib/partnersApi");
@@ -181,12 +181,27 @@ function unclaim(hashes: Hex[]) {
 function unregister(hashes: Hex[]) {
   const g = globalThis as { __gloamPartnersMem?: Map<string, unknown> };
   for (const h of hashes) {
-    g.__gloamPartnersMem?.delete(k("reg", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
-    g.__gloamPartnersMem?.delete(k("relaynf", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
-    g.__gloamPartnersMem?.delete(k("relayjob", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
+    // a hash made up for a test has no receipt of its own, and no registration
+    if (FX.receipts[h.toLowerCase()] ?? FX.receipts[h]) g.__gloamPartnersMem?.delete(k("reg", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase()));
     g.__gloamPartnersMem?.delete(k("relaytx", RH.chainId, h.toLowerCase()));
   }
+  // every relay payment binding on the chain
+  for (const key of [...(g.__gloamPartnersMem?.keys() ?? [])]) {
+    if (key.startsWith(k("relayspend", RH.chainId) + ":") || key.startsWith(k("relayspendnf", RH.chainId) + ":")) g.__gloamPartnersMem?.delete(key);
+  }
 }
+/** A fixture cash out's call to the vault: the one it landed with, or with another proof, recipient, root or amount. */
+function unshieldCall(h: Hex, over: { proof?: Hex; to?: Address; root?: Hex; amount?: bigint } = {}): Hex {
+  const l = FX.unshieldLogs.find((x) => x.txHash.toLowerCase() === h.toLowerCase())!;
+  return encodeFunctionData({
+    abi: relayPoolAbi,
+    functionName: "unshield",
+    args: [over.proof ?? proofFor(h), over.root ?? `0x${"00".repeat(32)}`, l.nullifier, l.asset, over.to ?? l.to, over.amount ?? BigInt(l.amount)],
+  });
+}
+/** What the relay route's beforeBroadcast hook does for a cash out it is about to send: binds the code to that payment. */
+const bindPay = (code: string, h: Hex, at: number, data: Hex = unshieldCall(h), net = RH) =>
+  A.bindRelaySpend({ net, tx: { to: net.pool!, data }, code, flow: "pay", at });
 /** The value only the spender had when it sent: a payment's new note commitment, a cash out's proof. */
 const bindFor = (h: Hex): Hex => {
   const f = classifyVaultTx(rcpt(h).logs, ctxRH);
@@ -476,8 +491,8 @@ await test("B2 fixed: a transaction the relay sent counts from relay bindings on
   // a count asked for before the relay's binding exists: nobody gets it, and nothing is claimed
   await throwsApi(settle(h), 404, "not_registered");
   assert.equal(await P.attributedTo(RH.chainId, h), null);
-  // the relay binds the code to the spend just before the send goes out: it counts at once
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: offrampCode, flow: "pay", at: before(h, 3) });
+  // the relay binds the code to the payment just before the send goes out: it counts at once
+  assert.equal((await bindPay(offrampCode, h, before(h, 3)))?.wrote, true);
   const r = await settle(h);
   assert.equal(r.record.linkCode, offrampCode);
   assert.equal(r.record.linkBind, "relay");
@@ -491,106 +506,201 @@ await test("B2: a proof copied from a landed relay transaction and posted to the
   const h = FX.cashOuts[3]!;
   sentByRelay(h);
   const landed = rcpt(h).blockTimestamp * 1000;
-  // the relay sent it with no code; Mallory reads its calldata once it lands and posts the proof to
-  // the relay under her code. The relay refuses the spent note before binding anything (selftest-relay);
-  // even a tie written after it landed (a node a block behind let the dry run pass) counts for nothing
+  // the relay sent it with no code; Mallory reads its calldata once it lands and posts it to the relay
+  // under her code. The relay refuses the spent note before binding anything (selftest-relay); even a
+  // binding written after it landed (a node a block behind let the dry run pass) counts for nothing
   for (const at of [landed + 300, landed + 5_000]) {
-    assert.equal(await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: malloryCode, flow: "pay", at }), true);
+    assert.equal((await bindPay(malloryCode, h, at))?.wrote, true);
     await throwsApi(settle(h), 404, "not_registered");
     unregister([h]);
   }
-  // nor a scheduled job asked for the spent note after it landed
-  await A.bindScheduledJob({ jobId: "job-late", chainId: RH.chainId, nullifier: nullifierOf(h), code: malloryCode, at: landed + 2_000 });
-  await throwsApi(settle(h), 404, "not_registered");
   assert.equal(await P.attributedTo(RH.chainId, h), null);
-  // a tie made in the second before the block began still counts
-  unregister([h]);
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: offrampCode, flow: "pay", at: landed - 1 });
+  // a binding made in the second before the block began still counts
+  await bindPay(offrampCode, h, landed - 1);
   assert.equal((await settle(h)).record.linkCode, offrampCode);
   unclaim([h]);
   unregister([h]);
   sentByRelay(h, false);
-  // on Ethereum and Base no tie to a proof is kept at all: only the relay's tie by transaction hash
-  const g = globalThis as { __gloamPartnersMem?: Map<string, unknown> };
-  for (const chainId of [1, 11155111, 8453, 84532]) {
-    assert.equal(await A.bindRelaySpend({ chainId, nullifier: nullifierOf(h), proof: proofFor(h), code: offrampCode, flow: "pay", at: landed - 60_000 }), false);
-    assert.equal(g.__gloamPartnersMem?.has(k("relaynf", chainId, linkNullifierHash(nullifierOf(h)).toLowerCase())), false);
+  // on Ethereum and Base no payment binding is kept at all: only the relay's binding by transaction hash
+  for (const key of ["ethereum-mainnet", "ethereum", "base-mainnet", "base"] as const) {
+    const net = getNetwork(key);
+    assert.equal(await bindPay(offrampCode, h, landed - 60_000, unshieldCall(h), net), null);
+    assert.ok(![...g().keys()].some((x) => x.startsWith(k("relayspend", net.chainId) + ":")));
   }
 });
 
-await test("V1 fixed: a reverted link spend resent through the relay with another code stays with the first link, whatever proof the resend carries", async () => {
+await test("V1 fixed: a reverted link payment resent through the relay with another code stays with the first link, even with a re-randomized proof", async () => {
   const h = FX.cashOuts[3]!;
-  const reverted = `0x${"e1".repeat(32)}` as Hex; // Motion's link send of this spend: the relay sent it, it reverted
-  const resend = `0x${"e2".repeat(32)}` as Hex; // the same spend, sent again by the relay for Mallory
+  const reverted = `0x${"e1".repeat(32)}` as Hex; // Motion's link send of this payment: the relay sent it, it reverted
+  const resend = `0x${"e2".repeat(32)}` as Hex; // the same payment, sent again by the relay for Mallory
   rhChain.get(RH.chainId)!.set(resend, rcpt(h));
   sentByRelay(resend);
-  const nf = nullifierOf(h);
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: motionCode, flow: "pay", at: before(h, 120) });
+  const rerandomized = unshieldCall(h, { proof: `0x${"ab".repeat(128)}` }); // another valid proof of the same payment
+  inputs.set(resend, rerandomized);
+  assert.equal(A.spendIdOf(RH, { to: RH.pool!, input: rerandomized })?.id, A.spendIdOf(RH, { to: RH.pool!, input: unshieldCall(h) })?.id);
+  await bindPay(motionCode, h, before(h, 120));
   await A.bindRelayTx({ chainId: RH.chainId, txHash: reverted, code: motionCode, flow: "pay", at: before(h, 120) });
-  // Mallory copies the reverted call and asks the relay to send it again under her code, once with the
-  // same proof (Motion's binding of it stands) and once with another valid proof of the same spend
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: malloryCode, flow: "pay", at: before(h, 10) });
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: `0x${"ab".repeat(64)}`, code: malloryCode, flow: "pay", at: before(h, 10) });
+  // Mallory copies the reverted call and asks the relay to send it again under her code: with the same
+  // proof, or a re-randomized one, it is the same payment, and Motion's binding of it stands
+  assert.equal((await bindPay(malloryCode, h, before(h, 10)))?.wrote, false);
+  const mine = bindPay(malloryCode, h, before(h, 10), rerandomized);
+  assert.equal((await mine)?.wrote, false);
   // the relay's after-send step binds the resend's hash to Mallory's code and counts it
-  await A.afterRelaySend({ net: RH, hash: resend, code: malloryCode, flow: "pay", at: before(h, 10), nullifier: nf, wait: async () => {}, deps: after(h) });
+  await A.afterRelaySend({ net: RH, hash: resend, code: malloryCode, flow: "pay", at: before(h, 10), bound: mine, wait: async () => {}, deps: after(h) });
   const c = await P.countedRecord(RH.chainId, resend);
-  assert.equal(c?.partnerId, motion.id, "the earliest binding of the spend, not the resend's hash binding");
+  assert.equal(c?.partnerId, motion.id, "the first binding of the payment, not the resend's hash binding");
   assert.equal(c?.record.linkCode, motionCode);
   assert.equal(c?.record.linkBind, "relay");
   unclaim([resend]);
   unregister([h]);
-  // with no binding of the spend at all, the resend's hash binding counts: it went out with Mallory's code
-  await A.afterRelaySend({ net: RH, hash: resend, code: malloryCode, flow: "pay", at: before(h, 10), nullifier: nf, wait: async () => {}, deps: after(h) });
+  // with no binding of the payment, the resend's hash binding counts: it went out with Mallory's code
+  await A.afterRelaySend({ net: RH, hash: resend, code: malloryCode, flow: "pay", at: before(h, 10), wait: async () => {}, deps: after(h) });
   assert.equal((await P.countedRecord(RH.chainId, resend))?.partnerId, mallory.id);
   unclaim([resend]);
   unregister([h]);
-  // a binding of the spend made after the block plays no part: the hash binding counts
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: malloryCode, flow: "pay", at: rcpt(h).blockTimestamp * 1000 + 300 });
-  await A.afterRelaySend({ net: RH, hash: resend, code: offrampCode, flow: "pay", at: before(h, 2), nullifier: nf, wait: async () => {}, deps: after(h) });
+  // a binding of the payment made after the block plays no part: the hash binding counts
+  await bindPay(malloryCode, h, rcpt(h).blockTimestamp * 1000 + 300, rerandomized);
+  await A.afterRelaySend({ net: RH, hash: resend, code: offrampCode, flow: "pay", at: before(h, 2), wait: async () => {}, deps: after(h) });
   assert.equal((await P.countedRecord(RH.chainId, resend))?.partnerId, offramp.id);
   unclaim([resend]);
-  unregister([h]);
-  g().delete(k("relaytx", RH.chainId, resend));
-  g().delete(k("relaytx", RH.chainId, reverted));
+  unregister([h, resend, reverted]);
   sentByRelay(resend, false);
+  inputs.delete(resend);
   rhChain.get(RH.chainId)!.delete(resend);
 });
 
-await test("V3 fixed: a spend binding made just before a send lasts an hour, and only a send that went out keeps it a week", async () => {
-  const h = FX.cashOuts[3]!;
-  const nf = nullifierOf(h);
-  const key = k("relaynf", RH.chainId, linkNullifierHash(nf).toLowerCase());
-  const ttlSec = () => Math.round((g().get(key)!.exp! - Date.now()) / 1000);
-  assert.equal(A.RELAY_PENDING_TTL_SEC, 3600);
-  await A.bindRelaySpend({ chainId: RH.chainId, nullifier: nf, proof: proofFor(h), code: offrampCode, flow: "pay", at: Date.now() });
-  assert.ok(ttlSec() <= 3600 && ttlSec() > 3590, `pending: ${ttlSec()} s`);
-  // the send went out: the hash binding is written, and the spend binding is kept as long
-  await A.afterRelaySend({ net: RH, hash: h, code: offrampCode, flow: "pay", at: Date.now(), nullifier: nf, wait: async () => {
-    throw new Error("not landed yet");
-  } });
-  assert.ok(ttlSec() > 7 * 86_400 - 10, `after the send: ${ttlSec()} s`);
-  unregister([h]);
-  // a scheduled job's binding lasts as long as the job may wait, in a key of its own
-  await A.bindScheduledJob({ jobId: "job-ttl", chainId: RH.chainId, nullifier: nf, code: offrampCode, at: Date.now() });
-  const job = g().get(k("relayjob", RH.chainId, linkNullifierHash(nf).toLowerCase()))!;
-  assert.ok(job.exp! - Date.now() > 99 * 86_400_000);
-  assert.equal(g().has(key), false, "no pending spend binding for a job");
-  unregister([h]);
-  // none of it on Ethereum or Base
-  for (const chainId of [1, 8453]) {
-    await A.bindScheduledJob({ jobId: `job-${chainId}`, chainId, nullifier: nf, code: offrampCode, at: Date.now() });
-    assert.equal(g().has(k("relayjob", chainId, linkNullifierHash(nf).toLowerCase())), false);
-  }
+await test("payment identity: every proof left out; the same payment matches, any other public input does not (transfers, cash outs, both swap routers)", () => {
+  const nf = `0x${"5a".repeat(32)}` as Hex;
+  const P1 = `0x${"01".repeat(256)}` as Hex;
+  const P2 = `0x${"02".repeat(256)}` as Hex;
+  const R = `0x${"0e".repeat(32)}` as Hex;
+  const id = (to: string, input: Hex) => A.spendIdOf(RH, { to, input })?.id;
+  // a private payment
+  const tr = (proof: Hex, c1: Hex) => encodeFunctionData({ abi: relayPoolAbi, functionName: "transfer", args: [proof, R, nf, [`0x${"c0".repeat(32)}`, c1]] });
+  assert.equal(id(RH.pool!, tr(P1, `0x${"c1".repeat(32)}`)), id(RH.pool!, tr(P2, `0x${"c1".repeat(32)}`)));
+  assert.notEqual(id(RH.pool!, tr(P1, `0x${"c1".repeat(32)}`)), id(RH.pool!, tr(P1, `0x${"c2".repeat(32)}`)));
+  assert.equal(A.spendIdOf(RH, { to: RH.pool!, input: tr(P1, `0x${"c1".repeat(32)}`) })?.nullifier, nf);
+  // swaps, on each router version
+  const note = (proof: Hex, c: string) => ({ proof, commitment: `0x${c.repeat(32)}` as Hex, asset: USDG, amount: 5n });
+  const sp = (proof: Hex) => ({ proof, root: R, nullifier: nf, asset: USDG, amount: 10n });
+  const router = swapRoutersOn(RH.chainId)[0]!.address;
+  const v2 = (p: Hex, c: string) => encodeFunctionData({ abi: vaultSwapAbi, functionName: "swap", args: [sp(p), note(p, c), note(p, "f0"), "0x01"] });
+  const v3 = (p: Hex, c: string, deadline: bigint) =>
+    encodeFunctionData({ abi: vaultSwapV3Abi, functionName: "swap", args: [sp(p), note(p, c), note(p, "f0"), "0x01", "0x000000000000000000000000000000000000e1e1", deadline] });
+  assert.ok(id(router, v2(P1, "d0")));
+  assert.equal(id(router, v2(P1, "d0")), id(router, v2(P2, "d0")));
+  assert.notEqual(id(router, v2(P1, "d0")), id(router, v2(P1, "d1")));
+  assert.equal(id(router, v3(P1, "d0", 9n)), id(router, v3(P2, "d0", 9n)));
+  assert.notEqual(id(router, v3(P1, "d0", 9n)), id(router, v3(P1, "d0", 10n)));
+  assert.notEqual(id(router, v2(P1, "d0")), id(router, v3(P1, "d0", 0n)));
+  // another contract, or a call that isn't a spend: no identity
+  assert.equal(id(USDG, tr(P1, `0x${"c1".repeat(32)}`)), undefined);
+  assert.equal(id(RH.pool!, "0x12345678"), undefined);
 });
 
-await test("F1, B2 fixed: a cash out scheduled for later is bound to its job's spend when scheduled, before the run sends it", async () => {
+await test("J1 fixed: a payer's scheduled cash out of its payee's note never takes the payee's own spends of it", async () => {
+  const h = FX.cashOuts[3]!;
+  sentByRelay(h);
+  // the payer picked the note's secret, so it can prove a spend of it: it schedules a cash out far
+  // ahead under its own code (Mallory's); the job passed the relay's checks
+  await A.bindScheduledJob({ jobId: "job-payer", code: malloryCode, at: before(h, 2 * 86_400) });
+  // the payee cashes out first, without a link (its secure sweep, or a plain cash out): nobody's
+  await throwsApi(settle(h), 404, "not_registered");
+  assert.equal(await P.attributedTo(RH.chainId, h), null);
+  // or through Offramp's link: Offramp's
+  const b = bindPay(offrampCode, h, before(h, 4));
+  await A.afterRelaySend({ net: RH, hash: h, code: offrampCode, flow: "pay", at: before(h, 4), bound: b, wait: async () => {}, deps: after(h) });
+  assert.equal((await P.countedRecord(RH.chainId, h))?.partnerId, offramp.id);
+  // the payer's job, when its run comes, fails (the note is spent) and sends nothing to bind
+  unclaim([h]);
+  unregister([h]);
+  // the form already on main: a binding of the note under the old per-note key is never read
+  const oldKey = k("relaynf", RH.chainId, linkNullifierHash(nullifierOf(h)).toLowerCase());
+  await kv1(["HSETNX", oldKey, "job", JSON.stringify({ partnerId: mallory.id, code: malloryCode, flow: "pay", at: before(h, 86_400) })]);
+  await kv1(["HSETNX", oldKey, linkBindHash(proofBindValue(proofFor(h))).toLowerCase(), JSON.stringify({ partnerId: mallory.id, code: malloryCode, flow: "pay", at: before(h, 86_400) })]);
+  await throwsApi(settle(h), 404, "not_registered");
+  g().delete(oldKey);
+  sentByRelay(h, false);
+});
+
+await test("J1, X1 fixed: a payer's own relay send of its payee's note binds only that payment, even once it reverts and is kept a week", async () => {
+  const h = FX.cashOuts[3]!;
+  const payerSend = `0x${"a1".repeat(32)}` as Hex;
+  const payer = wallet();
+  // the payer gets a relay send of a spend of the note through the hook (a cash out to itself, its own
+  // proof and root), which passes the dry run and then reverts on chain
+  const theirs = unshieldCall(h, { proof: `0x${"aa".repeat(128)}`, to: payer, root: `0x${"07".repeat(32)}` });
+  const b = bindPay(malloryCode, h, before(h, 3600), theirs);
+  await A.afterRelaySend({ net: RH, hash: payerSend, code: malloryCode, flow: "pay", at: before(h, 3600), bound: b, wait: async () => {
+    throw new Error("reverted");
+  } });
+  const key = (await b)!.key;
+  assert.ok(g().get(key)!.exp! - Date.now() > 6 * 86_400_000, "a send that went out keeps its binding a week, reverted or not");
+  // later the payee spends the note its own way, through Offramp's link: Offramp's, not the payer's
+  sentByRelay(h);
+  const ob = bindPay(offrampCode, h, before(h, 4));
+  await A.afterRelaySend({ net: RH, hash: h, code: offrampCode, flow: "pay", at: before(h, 4), bound: ob, wait: async () => {}, deps: after(h) });
+  assert.equal((await P.countedRecord(RH.chainId, h))?.partnerId, offramp.id);
+  unclaim([h]);
+  // nor the same spend of its own sent with no code (no binding of it, no hash binding)
+  g().delete(k("relaytx", RH.chainId, h));
+  g().delete((await ob)!.key);
+  await throwsApi(settle(h), 404, "not_registered");
+  // the reverted payment itself, sent again unchanged, is still the payer's: the first code tied to that payment
+  const again = `0x${"a2".repeat(32)}` as Hex;
+  rhChain.get(RH.chainId)!.set(again, rcpt(h));
+  inputs.set(again, theirs);
+  sentByRelay(again);
+  assert.equal((await settle(again, after(h))).record.linkCode, malloryCode);
+  unclaim([again]);
+  unregister([h, payerSend, again]);
+  sentByRelay(h, false);
+  sentByRelay(again, false);
+  inputs.delete(again);
+  rhChain.get(RH.chainId)!.delete(again);
+});
+
+await test("V3 fixed: a payment binding made just before a send lasts an hour, a send that surely didn't go out takes it back, one that went out keeps it a week", async () => {
+  const h = FX.cashOuts[3]!;
+  assert.equal(A.RELAY_PENDING_TTL_SEC, 3600);
+  const b = bindPay(offrampCode, h, Date.now());
+  const bound = (await b)!;
+  const ttlSec = (key: string) => Math.round((g().get(key)!.exp! - Date.now()) / 1000);
+  assert.ok(ttlSec(bound.key) <= 3600 && ttlSec(bound.key) > 3590, `pending: ${ttlSec(bound.key)} s`);
+  assert.ok(ttlSec(bound.seen) <= 3600);
+  // the send went out: the hash binding is written, and the payment binding is kept as long
+  await A.afterRelaySend({ net: RH, hash: h, code: offrampCode, flow: "pay", at: Date.now(), bound: b, wait: async () => {
+    throw new Error("not landed yet");
+  } });
+  assert.ok(ttlSec(bound.key) > 7 * 86_400 - 10, `after the send: ${ttlSec(bound.key)} s`);
+  assert.ok(ttlSec(bound.seen) > 7 * 86_400 - 10);
+  unregister([h]);
+  // the relay was busy, its lock store down or the node refused: the binding is taken back
+  const gone = (await bindPay(offrampCode, h, Date.now()))!;
+  await A.unbindRelaySpend(gone);
+  assert.equal(g().has(gone.key), false);
+  // but only a binding this request wrote: an earlier one of the same payment stays
+  const first = (await bindPay(motionCode, h, Date.now()))!;
+  const second = (await bindPay(offrampCode, h, Date.now()))!;
+  assert.equal(second.wrote, false);
+  await A.unbindRelaySpend(second);
+  assert.equal(g().has(first.key), true);
+  unregister([h]);
+  // a scheduled job keeps only its code with the job: no binding of any payment
+  await A.bindScheduledJob({ jobId: "job-ttl", code: offrampCode, at: Date.now() });
+  assert.ok(![...g().keys()].some((x) => x.startsWith(k("relayspend", RH.chainId) + ":")));
+  assert.ok(g().get(k("jobcode", "job-ttl"))!.exp! - Date.now() > 99 * 86_400_000);
+});
+
+await test("F1, B2, J1 fixed: a cash out scheduled for later counts to its job's code only for the transaction the run sends for that job", async () => {
   const h = FX.cashOuts[2]!;
   sentByRelay(h);
-  await A.bindScheduledJob({ jobId: "job-1", chainId: RH.chainId, nullifier: nullifierOf(h), code: motionCode, at: before(h, 6 * 3600) });
-  // Mallory copies the proof from the run's pending calldata and registers it; she settles first
+  await A.bindScheduledJob({ jobId: "job-1", code: motionCode, at: before(h, 6 * 3600) });
+  // Mallory copies the proof from the run's pending calldata and registers it; she settles first: nothing
   await regApp(malloryCode, h, before(h, 1));
-  const first = await settle(h, after(h, 26 * 3600));
-  assert.equal(first.record.linkCode, motionCode, "the job's binding, made when it was scheduled");
+  await throwsApi(settle(h, after(h, 26 * 3600)), 404, "not_registered");
+  assert.equal(await P.attributedTo(RH.chainId, h), null);
+  // the run binds the job's code to the transaction it sent and counts it
   await A.afterScheduledSend({ net: RH, jobId: "job-1", hash: h, deps: after(h, 26 * 3600) });
   const c = await P.countedRecord(RH.chainId, h);
   assert.equal(c?.partnerId, motion.id);
