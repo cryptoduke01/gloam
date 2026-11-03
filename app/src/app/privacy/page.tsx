@@ -334,26 +334,28 @@ export default function PrivacyPage() {
         partner&apos;s link can carry their partner code. When you pay, cash out
         or swap from such a link, the app asks us which partner the code belongs
         to (to show their name), and ties your transaction to the code before it
-        is sent: through the Gloam relay, the code goes with the send; from your
-        own wallet, the app first sends us a one-way hash of the spend with the
-        code, which says nothing about you or the spend until the transaction
-        happens. Once your transaction lands, we read it on its chain and record
-        it against the partner: the transaction hash, the network, the kind, the
-        asset and amount where they are public, the vault&apos;s fee and the
-        time, which anyone can already see on chain. We do not record your
-        wallet address, your IP address, the address a cash out paid, or
-        anything else about you with it. For a cash out sent later by the relay,
-        the app keeps the relay&apos;s job id in your browser until it goes out,
+        is sent: through the Gloam relay, the code goes with the send and the relay
+        ties it to the transaction it sends; from your own wallet, the app first
+        sends us one-way hashes of the payment and of a value only that payment
+        has, with the code. We keep that for an hour at most. Once your
+        transaction lands, we read it on its chain and record it against the
+        partner: the transaction hash, the network, the kind, the asset and amount
+        where they are public, the vault&apos;s fee and the time, which anyone can
+        already see on chain. We do not record your wallet address, your IP
+        address, the address a cash out paid, or anything else about you with it.
+        For a cash out sent later by the relay, the code is kept with the relay&apos;s
+        job until it goes out, and the app keeps the job&apos;s id in your browser
         for at most seven days.
       </p>
       <p>
         <strong>What the partner sees.</strong>{" "}For a cash out or a swap from
         their link: its transaction hash, network, token, amount and time, and
         which of their link codes it came through. All of that is public on chain
-        already. For a private payment from their link: only that it happened,
-        counted per day with the day&apos;s other payments, never its hash, amount,
-        recipient or the code it came through, so they can&apos;t tell which
-        payment was yours. They never see your wallet or IP address.
+        already. For a private payment from their link: only a count per day,
+        added once the day has ended (UTC). Never its hash, amount, time,
+        recipient or the code it came through, and it never changes the
+        &quot;last activity&quot; they see, so they can&apos;t tell which payment
+        was yours. They never see your wallet or IP address.
       </p>
       <p>
         <strong>Partners&apos; own addresses.</strong>{" "}A partner can give us
