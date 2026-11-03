@@ -121,9 +121,9 @@ function fail(e: unknown) {
  * { id, sendAfter, to }. A dated one may also carry { webhook: { url, series } }
  * (lib/relay/webhook). Asking again for the same spend returns the job already waiting; asking with
  * another address (or amount) is a 409 already_scheduled with that job.
- * One opened from a partner's link may carry { partnerCode }: it is kept with the
- * job, and the scheduled run binds it to the transaction it sends
- * (lib/partnerAttribution). It changes nothing about the job.
+ * One opened from a partner's link may carry { partnerCode }: it is bound to the
+ * job's spend now, before anything is sent, and the scheduled run counts the
+ * transaction it sends (lib/partnerAttribution). It changes nothing about the job.
  */
 export async function POST(req: Request) {
   try {
@@ -186,7 +186,8 @@ export async function POST(req: Request) {
     if (saved.outcome !== "created") return answerExisting(saved.job, saved.outcome === "existing");
     if (body.partnerCode !== undefined) {
       const code = body.partnerCode;
-      after(() => bindScheduledJob({ jobId: job.id, code, at: now }));
+      // bound to the job's spend before anything is sent: the run is minutes away at least
+      after(() => bindScheduledJob({ jobId: job.id, chainId: net.chainId, nullifier, code, at: now }));
     }
     return NextResponse.json({ ok: true, ...owned(job) }, { headers: NO_STORE });
   } catch (e) {

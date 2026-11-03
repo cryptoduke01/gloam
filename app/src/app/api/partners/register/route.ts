@@ -21,9 +21,10 @@ const PER_CODE_IP_PER_MIN = 10;
  * the spend without revealing it; bindHash names a value only the spender has when
  * it sends (the payment's new note commitment, or the cash out's proof), so knowing
  * a nullifier ahead of time is not enough. The transaction counts only when it
- * carries that value and the registration came no later than its block. Kept for
- * an hour; counted only if a real transaction matches it. Not taken on Ethereum,
- * which has a public mempool: there only relay-sent link payments count. Nothing
+ * carries that value and the registration came before its block's second began.
+ * Kept for an hour; counted only if a real transaction matches it. Not taken on
+ * Ethereum or Base, where a pending transaction can be read before its block:
+ * there only relay-sent link payments count. Nothing
  * about the caller is kept. The app sends this and never waits on it.
  */
 export async function POST(req: NextRequest) {

@@ -6,23 +6,27 @@
  * someone else's transaction afterwards:
  *
  *  - Relay-bound (fee-split grade). The app hands the link's code to the relay
- *    with the proof (payments and cash outs by default, swaps always). The relay
- *    binds the code to the transaction hash it sent itself (bindRelayTx) and counts
- *    the transaction once it lands. A cash out sent later is bound when the
- *    scheduled run sends it (bindScheduledJob, then the run). A relay binding is
- *    authoritative: nothing else is read for that transaction. A copied proof the
- *    relay sends binds only the relay's own transaction, which reverts.
+ *    with the proof (payments and cash outs by default, swaps always). Before the
+ *    send starts, the relay binds the code to that exact proof (bindRelaySpend);
+ *    after it, to the hash of the transaction it sent (bindRelayTx); then it counts
+ *    the transaction once it lands. A cash out sent later is bound when it is
+ *    scheduled (bindScheduledJob). A transaction the relay itself sent is counted
+ *    from relay bindings only, never from a wallet registration, so nobody can get
+ *    in first with one; a count asked for before the relay's binding is written
+ *    just fails and leaves the transaction for it. A copied proof sent to the relay
+ *    binds only what the relay itself sends.
  *
  *  - Wallet-registered (attribution grade). Before the payer's wallet is asked,
  *    the app registers the spend: a hash of its nullifier, the link's code, and a
  *    hash of a value only the spender has when it sends (POST /api/partners/register):
  *    the payment's new note commitment, or the cash out's proof. The transaction
- *    counts only when that value is the one in it, and the registration came no
- *    later than its block's second. Knowing a nullifier ahead of time (a payer
+ *    counts only when that value is the one in it, and the registration came
+ *    before its block's second began. Knowing a nullifier ahead of time (a payer
  *    knows the nullifier of every note it pays out) is not enough. If two codes
- *    register the same spend with the right value, it counts for nobody.
- *    Registrations last an hour. Not taken on chains with a public mempool
- *    (Ethereum), where a pending transaction's calldata could be copied.
+ *    register the same spend with the right value in time, it counts for nobody; a
+ *    late registration plays no part. Registrations last an hour. Not taken on
+ *    chains where pending transactions are readable before their block (Ethereum,
+ *    Base), where the value could be copied.
  *
  * Counting (settleLinkTx: POST /api/partners/attribute, the relay, the scheduled run,
  * the on-chain match) reads the receipt on its chain through the relay's read-only
@@ -43,8 +47,9 @@ import { isBytes32, isLinkCodeShape, linkBindHash, linkNullifierHash, proofBindV
 import { classifyVaultTx, kindFitsFlow, LINK_FLOWS, type LinkFlow, type ReceiptLog, type VaultTxFacts } from "./partnerVerify";
 import { jsonOf, k, kv, kv1 } from "./partnersKv";
 import { addressOwner } from "./partnerAddresses";
-import { networkForChain, relayPoolAbi, relayPublicClient } from "./relay/server";
-import { EVERY_SWAP_ROUTER, swapRoutersOn } from "./vaultSwap";
+import { networkForChain, relayerAccounts, relayPoolAbi, relayPublicClient } from "./relay/server";
+import { EVERY_SWAP_ROUTER, swapRoutersOn, vaultSwapAbi, vaultSwapV3Abi } from "./vaultSwap";
+import { GLOAM_RELAYERS } from "./contractDirectory";
 import { logSafe } from "./logSafe";
 import type { GloamNetwork } from "./networks";
 
@@ -71,6 +76,81 @@ export type Registration = {
 };
 
 export type RelayBinding = { partnerId: string; code: string; flow: LinkFlow; at: number };
+
+/** The relay's signing accounts: a transaction from one of these is counted from relay bindings only. */
+export function relaySigners(): string[] {
+  return [...relayerAccounts().map((a) => a.address), ...GLOAM_RELAYERS].map((a) => a.toLowerCase());
+}
+
+/** The field a relay spend binding is kept under: the proof it was asked to send ("job" for a scheduled cash out). */
+const proofField = (proof: Hex) => linkBindHash(proofBindValue(proof)).toLowerCase();
+
+/**
+ * Before the relay sends a spend from a partner's link: binds the code to the
+ * spend and the exact proof it was asked to send (a scheduled cash out: to the
+ * spend, as "job", since its proof can be renewed while it waits). Only a
+ * transaction the relay itself sends is ever counted from this, and only when its
+ * calldata carries that proof (or is the job's spend). The first binding of a
+ * proof stands.
+ */
+export async function bindRelaySpend(args: {
+  chainId: number;
+  nullifier: Hex;
+  proof: Hex | "job";
+  code: unknown;
+  flow: LinkFlow;
+  at: number;
+  ttlSec?: number;
+}): Promise<boolean> {
+  if (!isLinkCodeShape(args.code)) return false;
+  const resolved = await resolveLinkCode(args.code, args.at);
+  if (!resolved) return false;
+  const key = k("relaynf", args.chainId, linkNullifierHash(args.nullifier).toLowerCase());
+  const b: RelayBinding = { partnerId: resolved.partner.id, code: resolved.code.code, flow: args.flow, at: args.at };
+  await kv([
+    ["HSETNX", key, args.proof === "job" ? "job" : proofField(args.proof), JSON.stringify(b)],
+    ["EXPIRE", key, args.ttlSec ?? RELAY_BINDING_TTL_SEC],
+  ]);
+  return true;
+}
+
+/** The spend a relay request sends, from its body: its flow, nullifier and proof. Null for what a link doesn't count. */
+export function relaySpendOf(body: Record<string, unknown>): { flow: LinkFlow; nullifier: Hex; proof: Hex } | null {
+  const flow = relayFlowOf(body);
+  if (!flow) return null;
+  const src = (flow === "swap" ? (body.spend ?? {}) : body) as Record<string, unknown>;
+  return isBytes32(src.nullifier) && typeof src.proof === "string" && /^0x[0-9a-fA-F]+$/.test(src.proof)
+    ? { flow, nullifier: src.nullifier, proof: src.proof as Hex }
+    : null;
+}
+
+/** The spend in a relay transaction's calldata: the vault's transfer or unshield, or a router's swap. */
+function spendInCall(net: GloamNetwork, t: { to: string | null; input: Hex }): { nullifier: Hex; proof: Hex } | null {
+  if (!t.to) return null;
+  try {
+    if (t.to.toLowerCase() === net.pool!.toLowerCase()) {
+      const call = decodeFunctionData({ abi: relayPoolAbi, data: t.input });
+      if (call.functionName === "transfer" || call.functionName === "unshield") {
+        return { proof: call.args[0] as Hex, nullifier: call.args[2] as Hex };
+      }
+      return null;
+    }
+    if (!swapRoutersOn(net.chainId).some((r) => r.address.toLowerCase() === t.to!.toLowerCase())) return null;
+    for (const abi of [vaultSwapAbi, vaultSwapV3Abi]) {
+      try {
+        const call = decodeFunctionData({ abi, data: t.input });
+        if (call.functionName !== "swap") continue;
+        const spend = call.args[0] as { proof: Hex; nullifier: Hex };
+        return { proof: spend.proof, nullifier: spend.nullifier };
+      } catch {
+        /* the other version */
+      }
+    }
+  } catch {
+    /* not a call we know */
+  }
+  return null;
+}
 
 /**
  * Registers a wallet send under a live code, before the wallet is asked. One code
@@ -134,8 +214,10 @@ export type AttributionDeps = {
   receipt: (net: GloamNetwork, hash: Hex) => Promise<AttributionReceipt | null>;
   /** The block's time, seconds. */
   blockTime: (net: GloamNetwork, block: bigint) => Promise<number>;
-  /** The transaction's target and calldata, for a wallet cash out's proof; null when not read. */
-  tx: (net: GloamNetwork, hash: Hex) => Promise<{ to: string | null; input: Hex } | null>;
+  /** The transaction's sender, target and calldata; null when not read. */
+  tx: (net: GloamNetwork, hash: Hex) => Promise<{ from: string; to: string | null; input: Hex } | null>;
+  /** The relay's signing accounts, lowercase. */
+  relaySigners: () => string[];
   record: typeof recordActivity;
   now: () => number;
 };
@@ -152,8 +234,9 @@ export const attributionDeps: AttributionDeps = {
     const t = await relayPublicClient(net)
       .getTransaction({ hash })
       .catch(() => null);
-    return t ? { to: t.to ?? null, input: t.input } : null;
+    return t ? { from: t.from, to: t.to ?? null, input: t.input } : null;
   },
+  relaySigners,
   record: recordActivity,
   now: () => Date.now(),
 };
@@ -215,11 +298,10 @@ export function classify(net: GloamNetwork, logs: readonly ReceiptLog[]): VaultT
  * the call, made straight to the vault). null when it can't be read: then a wallet
  * registration can't match.
  */
-async function bindOf(net: GloamNetwork, hash: Hex, facts: Extract<VaultTxFacts, { ok: true }>, deps: AttributionDeps): Promise<Hex | null> {
+function bindOf(net: GloamNetwork, t: { to: string | null; input: Hex }, facts: Extract<VaultTxFacts, { ok: true }>): Hex | null {
   if (facts.kind === "private_payment") return linkBindHash(facts.paymentCommitment);
   if (facts.kind !== "cash_out") return null;
-  const t = await deps.tx(net, hash);
-  if (!t || !t.to || t.to.toLowerCase() !== net.pool!.toLowerCase()) return null;
+  if (!t.to || t.to.toLowerCase() !== net.pool!.toLowerCase()) return null;
   try {
     const call = decodeFunctionData({ abi: relayPoolAbi, data: t.input });
     // the call must be this very spend: its nullifier is the one the vault logged
@@ -254,14 +336,30 @@ export async function settleLinkTx(
     throw new ApiError(422, "too_old", "Link payments can be counted for seven days after they land.");
   }
 
-  // 1. The relay's own binding of this very transaction: authoritative.
+  const t = await deps.tx(net, input.txHash);
+  if (!t) throw new ApiError(502, "rpc", "Could not read the transaction. Try again.");
   let bound: { partnerId: string; code: string; flow: LinkFlow; by: "relay" | "wallet" } | null = null;
-  const relay = await relayBindingOf(net.chainId, input.txHash);
-  if (relay) bound = { ...relay, by: "relay" };
-  else if (!PUBLIC_MEMPOOL_CHAINS.includes(net.chainId)) {
-    // 2. Wallet registrations of this spend that name the value only its spender had, no later than its block.
-    const want = await bindOf(net, input.txHash, facts, deps);
-    const regs = want ? (await registrationsOf(net.chainId, facts.nullifier)).filter((r) => r.bind === want && Math.floor(r.at / 1000) <= ts) : [];
+  if (deps.relaySigners().includes(t.from.toLowerCase())) {
+    // 1. Sent by the relay: its own bindings only, never a wallet registration. Bound to this very
+    // transaction after the send, or to the proof in its calldata (or the scheduled job's spend) before it.
+    let relay = await relayBindingOf(net.chainId, input.txHash);
+    if (!relay) {
+      const spend = spendInCall(net, t);
+      if (spend && spend.nullifier.toLowerCase() === facts.nullifier.toLowerCase()) {
+        const key = k("relaynf", net.chainId, linkNullifierHash(spend.nullifier).toLowerCase());
+        const [byProof, byJob] = await kv([
+          ["HGET", key, proofField(spend.proof)],
+          ["HGET", key, "job"],
+        ]);
+        relay = jsonOf<RelayBinding>(byProof) ?? jsonOf<RelayBinding>(byJob);
+      }
+    }
+    if (relay) bound = { ...relay, by: "relay" };
+  } else if (!PUBLIC_MEMPOOL_CHAINS.includes(net.chainId)) {
+    // 2. From a wallet: registrations of this spend that name the value only its spender had, made
+    // before its block's second began. A later one plays no part, in a conflict or otherwise.
+    const want = bindOf(net, t, facts);
+    const regs = want ? (await registrationsOf(net.chainId, facts.nullifier)).filter((r) => r.bind === want && r.at < ts * 1000) : [];
     const codes = new Set(regs.map((r) => r.code));
     if (codes.size > 1) {
       // two links registered the same spend: it counts for nobody, now or later
@@ -322,10 +420,13 @@ export async function afterRelaySend(args: {
   code: unknown;
   flow: LinkFlow | null;
   at: number;
+  /** The binding started before the send (bindRelaySpend), finished here first. */
+  bound?: Promise<unknown>;
   wait?: (net: GloamNetwork, hash: Hex) => Promise<void>;
   deps?: AttributionDeps;
 }): Promise<void> {
   try {
+    await args.bound?.catch(() => undefined);
     if (!args.flow || !isLinkCodeShape(args.code)) return;
     if (!(await bindRelayTx({ chainId: args.net.chainId, txHash: args.hash, code: args.code, flow: args.flow, at: args.at }))) return;
     const wait =
@@ -343,9 +444,11 @@ export async function afterRelaySend(args: {
 }
 
 /** A cash out scheduled for later from a partner's link: its code waits with the job until the relay sends it. */
-export async function bindScheduledJob(args: { jobId: string; code: unknown; at: number }): Promise<void> {
+export async function bindScheduledJob(args: { jobId: string; chainId: number; nullifier: Hex; code: unknown; at: number }): Promise<void> {
   try {
     if (!isLinkCodeShape(args.code) || !(await resolveLinkCode(args.code, args.at))) return;
+    // bound to the job's spend now, before anything is sent; and kept with the job for the run
+    await bindRelaySpend({ chainId: args.chainId, nullifier: args.nullifier, proof: "job", code: args.code, flow: "pay", at: args.at, ttlSec: JOB_CODE_TTL_SEC });
     await kv1(["SET", k("jobcode", args.jobId), JSON.stringify({ code: args.code, at: args.at }), "EX", JOB_CODE_TTL_SEC]);
   } catch (e) {
     console.error("gloam_partner_bind_scheduled", logSafe(e));

@@ -14,11 +14,12 @@
 import { encodePacked, keccak256, type Hex } from "viem";
 
 /**
- * Chains with a public mempool, where a pending transaction's calldata is seen
- * before its block: a wallet send's registration there could be copied from it,
- * so only relay-sent link payments count there.
+ * Chains where a pending transaction's calldata can be read before its block's
+ * timestamp: Ethereum's public mempool, and Base, whose public RPC shows the
+ * pending block about 1.5 s early. A wallet send's registration there could be
+ * copied from it, so only relay-sent link payments count there.
  */
-export const PUBLIC_MEMPOOL_CHAINS: readonly number[] = [1, 11155111];
+export const PUBLIC_MEMPOOL_CHAINS: readonly number[] = [1, 11155111, 8453, 84532];
 
 export const LINK_CODE_LENGTH = 20;
 const CODE_RE = new RegExp(`^[A-Za-z0-9]{${LINK_CODE_LENGTH}}$`);
