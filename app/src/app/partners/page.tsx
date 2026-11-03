@@ -326,7 +326,7 @@ export default function PartnersPage() {
                           zero-knowledge circuits and the vault contract, so the fee
                           is paid by the proof itself and nobody can skip it. The
                           mainnet pools do not have one yet. The only fee on mainnet
-                          today is Gloam&apos;s own 0.25% on cash outs.
+                          today is Gloam&apos;s own 0.5% on cash outs.
                         </p>
                       </div>
                     </>

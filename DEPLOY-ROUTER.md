@@ -260,7 +260,7 @@ Why this shape:
 - **A refund and an exit under the floor aren't refused for that.** They spend from an hourly
   budget instead, below. Each one must show the vault paid its escrow.
 
-The vault's fee is 0.25% until the queued 0.50% executes, and the relay reads it each time.
+The vault's fee went from 0.25% to 0.50% on 3 November 2026, and the relay reads it each time.
 
 **Refunds and exits show the vault's payment.** Everywhere, the app finds the transaction that
 paid a swap's escrow and sends its hash. The relay reads that receipt and needs

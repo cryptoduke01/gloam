@@ -41,7 +41,7 @@ What to know before you use mainnet:
   limited.
 - **Fees.** Gloam takes no fee on deposits or private payments (this x402
   payment and the seller's sweep included); you pay only network gas. Cashing
-  out costs 0.25% (`cashOutFee(amount)`).
+  out costs 0.5% (`cashOutFee(amount)`).
 - **Final keys.** Mainnet proofs use the final keys from the 13-contributor
   trusted setup (release `ceremony-final`), picked with `circuitArtifactFiles` /
   `circuitArtifactUrls`.

@@ -1,6 +1,6 @@
 {
   "name": "@gloamtrade/game-plugin-gloam",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": false,
   "type": "module",
   "description": "Gloam plugin for the GAME framework: private stablecoin payments for Virtuals agents on Base and Robinhood Chain, under per-asset spending limits the agent cannot lift.",
@@ -67,7 +67,7 @@
     "prepack": "npm run typecheck && npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "tsc --noEmit -p tsconfig.test.json && tsx --test test/*.test.mts",
-    "test:fork": "tsx --test --test-concurrency=1 test/fork.test.mts test/fork.money.test.mts test/fork.retry.test.mts",
+    "test:fork": "tsx --test --test-concurrency=1 test/fork.test.mts test/fork.money.test.mts test/fork.retry.test.mts test/fork.feerise.test.mts",
     "example": "tsx src/example.ts"
   },
   "dependencies": {

@@ -77,8 +77,8 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 export const MAX_DATED_DAYS = 90;
 /**
  * Chains that take no dated jobs. A top-up is two relay transactions paid for
- * out of a 0.25% fee, and at Ethereum mainnet's gas that loses money on any
- * amount the vault takes. Its testnet keeps them.
+ * out of the cash-out fee, and Ethereum mainnet's gas costs more than that
+ * brings in. Its testnet keeps them.
  */
 const DATED_OFF_CHAINS: ReadonlySet<number> = new Set([1]);
 export const DATED_OFF_MESSAGE =

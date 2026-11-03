@@ -216,7 +216,7 @@ const exit = await buildUnshieldIntent({
   prove: artifactProver(circuitArtifactUrls("unshield", net.chainId)),
 });
 
-// On mainnet the pool keeps cashOutFee(amount), 0.25%, and pays the rest.
+// On mainnet the pool keeps cashOutFee(amount), 0.5%, and pays the rest.
 const fee = cashOutFee(parseUnits("6", 6));
 
 // The relay can submit it or refuse it. It cannot send it anywhere else.

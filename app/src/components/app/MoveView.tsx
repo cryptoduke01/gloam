@@ -111,6 +111,7 @@ import { surelyNotSent } from "@/lib/walletErrors";
 import {
   cancelCashOut,
   dismissReturnedCashOut,
+  feeMoved,
   reconcileCashOuts,
   releaseGoneCashOut,
   returnedCashOutNotes,
@@ -143,9 +144,9 @@ import {
   HowChoice,
   PieceLeftover,
   PiecesCard,
+  ScheduledCashOuts,
   SpreadOver,
   aboutTime,
-  scheduledLine,
 } from "./PrivateCashOut";
 import { cashOutPrivacyWarnings, cashOutSender, depositWallets, presetAmounts } from "@/lib/cashOutPrivacy";
 import { CashOutAmountChips, CashOutPrivacyLine, CashOutWarnings } from "./CashOutPrivacy";
@@ -873,14 +874,15 @@ export function MoveView() {
   // Cash-out fee (mainnet pools). The proof still spends the whole note; the
   // pool keeps the fee and pays the rest. Older pools fail this read: no fee.
   const demoMode = useDemo();
-  const { data: feeBpsRead } = useReadContract({
+  const { data: feeBpsRead, refetch: refetchFee } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
     functionName: "withdrawFeeBps",
     chainId: network.chainId,
     query: { enabled: Boolean(network.pool) && mode === "cashout" && !demoMode, refetchInterval: 60_000 },
   });
-  const cashOutFeeBps = typeof feeBpsRead === "number" ? feeBpsRead : 0;
+  const liveFeeBps = typeof feeBpsRead === "number" ? feeBpsRead : null;
+  const cashOutFeeBps = liveFeeBps ?? 0;
   // On mainnet the fee must be known before anyone confirms: a failed read must
   // not show the full amount when the pool will keep a fee. Testnet pools have no fee.
   const cashOutFeeUnknown =
@@ -1065,6 +1067,12 @@ export function MoveView() {
       return;
     }
     if (!(await checkCashOutTargets([to], selected.asset, to))) return;
+    const feeNote = await feeMoved(network, liveFeeBps);
+    if (feeNote) {
+      setError(feeNote);
+      void refetchFee();
+      return;
+    }
 
     setBusy(true);
     setPaidPrivately(false);
@@ -1122,7 +1130,7 @@ export function MoveView() {
         // address shown is the one the relay holds, not the one asked for (and when this
         // money already has a cash out waiting, the note shows that one).
         // the relay registers it under the code as it schedules it, and counts it as it sends it
-        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow, fromLink ? { partnerCode: fromLink.code } : {});
+        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow, cashOutFeeBps, fromLink ? { partnerCode: fromLink.code } : {});
         spentNoteId.current = null;
         countPerson("cashout", address, network.testnet);
         if (fromLink) queuePartnerJobs(network.chainId, [job.id]);
@@ -1272,6 +1280,12 @@ export function MoveView() {
     }
     const targets = pieceTargets as Address[];
     if (!(await checkCashOutTargets(targets, selected.asset, cashOutTo))) return;
+    const feeNote = await feeMoved(network, liveFeeBps);
+    if (feeNote) {
+      setError(feeNote);
+      void refetchFee();
+      return;
+    }
 
     const note = selected;
     setBusy(true);
@@ -1294,10 +1308,11 @@ export function MoveView() {
         to: targets,
         window: planWindow,
         owner: address as Address,
+        feeBps: cashOutFeeBps,
         onStatus: setStatus,
         onPiece: (i, patch) => setPlanRun((rows) => rows && rows.map((row, j) => (j === i ? { ...row, ...patch } : row))),
         ...(fromLink
-          ? { deps: { schedule: (n, c, when) => scheduleNoteCashOut(n, c, when, toRequest(c.to) ? { partnerCode: fromLink.code } : {}) } }
+          ? { deps: { schedule: (n, c, when, feeBps) => scheduleNoteCashOut(n, c, when, feeBps, toRequest(c.to) ? { partnerCode: fromLink.code } : {}) } }
           : {}),
       });
       if (fromLink) queuePartnerJobs(network.chainId, r.jobs.filter((j) => toRequest(j.to)).map((j) => j.id));
@@ -1370,7 +1385,7 @@ export function MoveView() {
     setBusy(true);
     setStatus("Proving privately, this takes 10 to 30 seconds…");
     try {
-      const job = await schedulePiece(n);
+      const job = await schedulePiece(n, {}, liveFeeBps ?? undefined);
       setScheduledNotice({ at: job.sendAfter, label: formatAssetLabel(n.amountWei, n.asset) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not schedule this piece.");
@@ -3162,7 +3177,7 @@ export function MoveView() {
                         ? relayAvailable
                           ? "Later sends it at a random time in that window, so it doesn't go out right after a payment."
                           : "Cashing out later needs the Gloam relay, which is off right now."
-                        : "Your proof is made now and the Gloam relay sends it at a random time in that window. It can't change the amount or where it goes. If it can't go out, nothing moves and it comes back to your private balance."}
+                        : "Your proof is made now and the Gloam relay sends it at a random time in that window. It can't change the amount or where it goes. The vault takes its fee when it goes out, at the rate then. If it can't go out, nothing moves and it comes back to your private balance."}
                     </p>
                     {cashOutWhen !== "now" && (
                       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
@@ -3269,30 +3284,18 @@ export function MoveView() {
                     </div>
                   )}
 
-                  {scheduledRows.length > 0 && (
-                    <div className="rounded-[16px] bg-surface px-4 py-3">
-                      <p className="text-[13px] text-mute">Scheduled cash outs</p>
-                      <ul className="mt-1 divide-y divide-line">
-                        {scheduledRows.map((n) => (
-                          <li key={n.id} className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
-                            <span className="min-w-0">
-                              <span className="tnum block text-foreground">{formatAssetLabel(n.amountWei, n.asset)}</span>
-                              <span className="block truncate text-[12px] text-mute">{scheduledLine(n, undefined, gasHigh)}</span>
-                            </span>
-                            {n.cashOut?.state === "scheduled" && (
-                              <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => void cancelScheduled(n)}>
-                                Cancel
-                              </button>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <ScheduledCashOuts rows={scheduledRows} liveFeeBps={liveFeeBps} gasHigh={gasHigh} onCancel={cancelScheduled} />
                 </div>
               )}
             </>
           ) : mode !== "receive" ? (
+            <>
+            {/* The whole balance can be waiting to go out: its rows, and Cancel, still show. */}
+            {mode === "cashout" && scheduledRows.length > 0 && (
+              <div className="mt-6">
+                <ScheduledCashOuts rows={scheduledRows} liveFeeBps={liveFeeBps} gasHigh={gasHigh} onCancel={cancelScheduled} />
+              </div>
+            )}
             <div className="mt-6 rounded-[16px] bg-surface px-5 py-9 text-center">
               <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-panel text-mute shadow-card">
                 <LockIcon />
@@ -3317,6 +3320,7 @@ export function MoveView() {
                 </button>
               </div>
             </div>
+            </>
           ) : null}
 
           {mode === "send" && shieldLive && <SentLinks onTakeBack={takeBackLink} />}

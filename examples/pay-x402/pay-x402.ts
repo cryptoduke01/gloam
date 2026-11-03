@@ -317,7 +317,7 @@ async function main() {
   console.log(`  swept in ${settled.sweep?.hash}; the buyer can no longer spend it back`);
   console.log("\nAccess granted. The public feed shows shielded transfers, never the amount or the parties.");
   if (!net.testnet) {
-    console.log("Deposits and private payments are free. Cashing out costs 0.25% (see cashOutFee in the SDK).");
+    console.log("Direct deposits and private payments are free. Cashing out costs 0.5% (see cashOutFee in the SDK).");
   }
 }
 

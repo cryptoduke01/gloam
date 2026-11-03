@@ -43,6 +43,13 @@
  *
  * A series can name a webhook, for the relay to say when a top-up fails or is
  * held (lib/relay/webhook). Whoever runs that address learns when, and no more.
+ *
+ * What the agent gets: a proof fixes the amount and the agent's wallet, not the
+ * fee. The vault takes its fee as each top-up lands, at the rate that day, and a
+ * series can run for months, so a rise after setup comes out of what the agent
+ * gets. Every top-up still ahead shows that (lib/cashOutLater feeRise), on its
+ * row and on every app page, and each can be cancelled until it goes. The relay
+ * doesn't wait for that: with the app closed, a top-up goes out at the new rate.
  */
 import type { Address } from "viem";
 import { networkOfNote } from "./cashOutSplit";
@@ -98,7 +105,7 @@ export function topUpDays(now: number, every: TopUpEvery, count: number): number
   return Array.from({ length: count }, (_, i) => first + i * TOP_UP_EVERY[every] * DAY_MS);
 }
 
-/** What a series costs, in base units: the whole total is set aside, and the fee comes out of each top-up as it goes. */
+/** What a series costs, in base units, at today's fee: the whole total is set aside, and the fee comes out of each top-up as it goes. */
 export function topUpTotals(amount: bigint, count: number, feeBps: number): { total: bigint; feeEach: bigint; agentGets: bigint } {
   const feeEach = withdrawFeeOf(amount, feeBps);
   return { total: amount * BigInt(count), feeEach, agentGets: amount - feeEach };
@@ -240,6 +247,8 @@ export async function readVaultLeaves(note: Pick<LocalNote, "chainId" | "pool">)
 type RunArgs = {
   note: LocalNote;
   owner: Address;
+  /** The fee the screen showed: kept on each job, to compare with the rate on the day (lib/cashOutLater feeRise). */
+  feeBps?: number;
   onStatus?: (s: string) => void;
   onPiece?: (i: number, p: Partial<PieceProgress>) => void;
   deps?: Partial<PrivateCashOutDeps> & { vault?: typeof readVaultLeaves };

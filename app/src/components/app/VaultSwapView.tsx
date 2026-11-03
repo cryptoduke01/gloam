@@ -24,6 +24,7 @@ import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
 import { relayFor, type RelayNetworkStatus } from "@/lib/relay/client";
 import { hasSwapFloor, swapFloorGas, swapFloorShown, swapGasUnits } from "@/lib/relay/swapFloor";
+import { feeMoved } from "@/lib/cashOutLater";
 import { isUnsecuredClaim } from "@/lib/claimSweep";
 import { freshPath } from "@/lib/cashOutSplit";
 import {
@@ -334,12 +335,12 @@ export function VaultSwapView() {
 
   const held = payAsset ? holdings.get(payAsset.toLowerCase()) : undefined;
   // The vault's cash-out fee: a refund through a router with an exit is sized from it. Until it reads, the most it can be.
-  const { data: feeRead } = useReadContract({
+  const { data: feeRead, refetch: refetchFee } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
     functionName: "withdrawFeeBps",
     chainId: network.chainId,
-    query: { enabled: Boolean(network.pool) },
+    query: { enabled: Boolean(network.pool), refetchInterval: 60_000 },
   });
   const feeBps = typeof feeRead === "number" ? feeRead : null;
   const refundFee = swapRouterFor(network.chainId)?.version === 3 ? (feeBps ?? 100) : undefined;
@@ -545,6 +546,13 @@ export function VaultSwapView() {
     setDone(null);
     setReceipt(null);
     try {
+      // A quote made at the old fee would leave too little to buy what it promised.
+      const feeNote = await feeMoved(network, feeBps);
+      if (feeNote) {
+        setError(feeNote);
+        void refetchFee();
+        return;
+      }
       const { outNote, refunded, hash } = await runVaultSwap({
         network,
         router: router!,

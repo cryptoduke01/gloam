@@ -41,6 +41,7 @@ import {
   syncTree,
   assertTreeMatchesChain,
   cashOutFee,
+  readCashOutFeeBps,
   circuitArtifactFiles,
   circuitArtifactUrls,
   approvalSteps,
@@ -281,7 +282,8 @@ async function main() {
   console.log("  commitment:", send.paymentNote.commitment);
   console.log("  amount:    ", show(paid));
   if (!net.testnet) {
-    console.log(`  cashing it out costs 0.25%: the pool keeps ${show(cashOutFee(paid))}`);
+    const bps = await readCashOutFeeBps(pub, net.pool);
+    console.log(`  cashing it out costs ${bps / 100}%: the pool keeps ${show(cashOutFee(paid, bps))} today`);
   }
   console.log("\nKeep this CHANGE NOTE (stays with you):");
   console.log("  secret:    ", send.changeNote.secret);

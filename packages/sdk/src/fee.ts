@@ -2,9 +2,9 @@
  * The vault's cash-out fee, read live.
  *
  * Every payments vault keeps a fee on whatever leaves it: a cash out, and the
- * note a private swap spends. It was 0.25% (CASH_OUT_FEE_BPS) at launch and the
- * owner can change it through the vault's 3-day timelock, so a number built into
- * this package can go stale. Read it from the vault (withdrawFeeBps) whenever an
+ * note a private swap spends. It was 0.25% at launch and 0.5% (CASH_OUT_FEE_BPS)
+ * from 3 November 2026, and the owner can change it through the vault's 3-day
+ * timelock, so a number built into this package can go stale. Read it from the vault (withdrawFeeBps) whenever an
  * amount depends on it; the swap planner and buildUnshieldIntent (given a client)
  * do. cashOutFee(amount, bps) is the vault's own rounding.
  */
@@ -19,9 +19,10 @@ export const POOL_FEE_ABI = [
 export type FeeReader = Pick<PublicClient, "readContract">;
 
 /**
- * The vault's cash-out fee right now, in basis points. Throws when it can't be
- * read, so a caller never prices with a guess. Anything outside 0 to 10,000 is
- * refused the same way.
+ * The vault's cash-out fee right now, in basis points. It is taken when a cash
+ * out lands, so this is what one sent now pays. Throws when it can't be read
+ * (the Robinhood Chain and Tempo testnet pools have no fee to read), so a caller
+ * never prices with a guess. Anything outside 0 to 10,000 is refused the same way.
  */
 export async function readCashOutFeeBps(client: FeeReader, pool: Address): Promise<number> {
   const raw = await client.readContract({ address: pool, abi: POOL_FEE_ABI, functionName: "withdrawFeeBps" });

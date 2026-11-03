@@ -53,7 +53,7 @@ async function setup(move: "lands" | "refused" | "lost" = "lands") {
       if (functionName === "isSpent") return spent.has(String(args![0]).toLowerCase());
       throw new Error(`fake chain: no ${functionName}`);
     },
-    waitForTransactionReceipt: async () => ({ status: "success" as const, blockNumber: 1_000n }),
+    waitForTransactionReceipt: async () => ({ status: "success" as const, blockNumber: 1_000n, logs: [] }),
     getTransactionReceipt: async () => {
       throw new Error("fake chain: receipt not found");
     },

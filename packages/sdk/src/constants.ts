@@ -180,11 +180,14 @@ export const MAINNET_POSEIDON_T3: Address =
   "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4";
 
 /**
- * Cash-out fee on the mainnet pools at launch: 0.25% (25 basis points) of the
- * amount unshielded, kept by the pool. Deposits and private payments are free.
- * The live value is the pool's withdrawFeeBps(); read it when it matters.
+ * Cash-out fee on the mainnet pools: 0.5% (50 basis points) of the amount
+ * unshielded, kept by the pool. It was 0.25% until 3 November 2026. Base Sepolia
+ * and Ethereum Sepolia still charge 0.25%. Direct deposits and private payments
+ * are free. The pool takes the fee when a cash out lands, at the rate that day,
+ * and the owner can change it through the timelock, so a value that matters
+ * comes from the pool: readCashOutFeeBps (lib fee).
  */
-export const CASH_OUT_FEE_BPS = 25;
+export const CASH_OUT_FEE_BPS = 50;
 
 /**
  * What the pool keeps from a cash out of `amount` base units, rounded down the
@@ -636,7 +639,7 @@ const ETHEREUM_TESTNET: GloamNetwork | null = (() => {
 /**
  * A chain's MAINNET network, or null while its pool is not in
  * this SDK version. Mainnet pools are ShieldPoolPayments: payments only, beta
- * deposit limits, the ceremony's final keys, a 0.25% cash-out fee.
+ * deposit limits, the ceremony's final keys, a 0.5% cash-out fee.
  */
 export function mainnetNetwork(family: GloamChainFamily): GloamNetwork | null {
   return MAINNETS[family] ?? null;

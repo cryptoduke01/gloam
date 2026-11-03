@@ -25,8 +25,8 @@ http://localhost:3000.
 | Robinhood Chain testnet | `NEXT_PUBLIC_GLOAM_NETWORK=robinhood npm run dev` | `46630` | Test ETH from the [Robinhood faucet](https://faucet.testnet.chain.robinhood.com/), test USDG from the [Paxos faucet](https://faucet.paxos.com/) |
 
 On mainnet, Gloam is beta software: at most 50,000 USDG per deposit and 2,500,000 USDG
-across the pool. Deposits and private payments are free; cashing out
-costs 0.25%. Start with small amounts.
+across the pool. Direct deposits and private payments are free; cashing out
+costs 0.5%. Start with small amounts.
 
 ## Where to go next
 

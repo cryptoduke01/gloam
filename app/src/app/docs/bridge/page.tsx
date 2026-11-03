@@ -50,6 +50,12 @@ export default function DocsBridgePage() {
 
       <h2 id="costs">What it costs</h2>
       <p>
+        A deposit made directly from a wallet on the vault&apos;s own chain is
+        free. Bringing money over from another chain isn&apos;t: Relay charges
+        for the route, and Gloam can add a fee of its own, up to 1%, which shows
+        on its own line when it does.
+      </p>
+      <p>
         Gloam doesn&apos;t route anything itself. Relay&apos;s solvers compete
         for each order, and before you send anything you see what you pay, what
         arrives, the least that will arrive, and every fee. If a fill would land

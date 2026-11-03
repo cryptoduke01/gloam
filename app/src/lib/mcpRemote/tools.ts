@@ -176,7 +176,7 @@ const BASE_TESTNET_LINE =
 const STATUS = MAINNET_ENABLED
   ? `Mainnet: ${andList(
       NETWORK_KEYS.filter((k) => !getNetwork(k).testnet).map((k) => `${getNetwork(k).label} (${getNetwork(k).chainId})`)
-    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, and Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues; the swap routers, circuits, app and relay were not part of it. Testnets: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE}${ETHEREUM_LINE} Private swaps are live on ${swapMainnets()} mainnet: who swapped stays private, the tokens and amounts are public. This server quotes them (gloam_swap_quote) and never makes one: swap in the app (Vault > Swap) or with the local server (${LOCAL_SERVER}). The old private trade (sealed swaps) is retired.`
+    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Direct deposits and private payments are free; a cash out costs 0.5%. Beta software: reviewed internally before launch, and Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues; the swap routers, circuits, app and relay were not part of it. Testnets: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE}${ETHEREUM_LINE} Private swaps are live on ${swapMainnets()} mainnet: who swapped stays private, the tokens and amounts are public. This server quotes them (gloam_swap_quote) and never makes one: swap in the app (Vault > Swap) or with the local server (${LOCAL_SERVER}). The old private trade (sealed swaps) is retired.`
   : `Testnet only: Tempo Moderato (42431) and Robinhood Chain testnet (46630). Testnet proofs use development keys; the production ceremony is done (13 contributors) and mainnet deploys its final keys.${BASE_TESTNET_LINE} The old private trade (sealed swaps) is retired.`;
 
 const WHAT_IS_PUBLIC =
@@ -852,7 +852,7 @@ function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): 
             : { import: "ETHEREUM_USDC", line: "      currency: ETHEREUM_USDC, decimals: 6,               // or ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD" }
           : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN, RH_MAINNET_PONS, RH_MAINNET_CASHCAT with decimals: 18" };
   const getter = n.testnet ? "testnetNetwork" : "mainnetNetwork";
-  const sdkVersion = "0.5.0";
+  const sdkVersion = "0.5.1";
   const netLines = `const net = ${getter}("${family}");                   // null until the pool is published
 if (!net) throw new Error("${where} pool not published yet");`;
   const charge = {
@@ -925,7 +925,7 @@ const res = await mppx.fetch("https://api.example.com/answer");`,
     mainnet: n.testnet
       ? `${family === "base" ? `${where} (Base Sepolia)` : where}: a testnet on the mainnet vault, with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
       : `${where}: beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" || family === "ethereum" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
-    install: `npm i mppx @gloamtrade/mppx-gloam@^0.4.0 @gloamtrade/sdk@^${sdkVersion}`,
+    install: `npm i mppx @gloamtrade/mppx-gloam@^0.4.1 @gloamtrade/sdk@^${sdkVersion}`,
     ...(role !== "pay" ? { charge } : {}),
     ...(role !== "charge" ? { pay } : {}),
     ...MPP_TAIL,

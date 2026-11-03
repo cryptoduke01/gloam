@@ -338,7 +338,7 @@ export default function DocsComparePage() {
                 0.5% to deposit, 0.5% to withdraw, private transfers free, plus a network fee (
                 <Src href={NM.docsFees}>fees</Src>)
               </td>
-              <td>Deposits and private payments free; 0.25% to cash out</td>
+              <td>Direct deposits and private payments free; 0.5% to cash out</td>
             </tr>
             <tr>
               <td>Gas</td>

@@ -5,7 +5,7 @@
  * with the key are attributed to the partner, who sets their own fee and sees
  * volume and commissions in the portal. Partner fees are not collected yet, on
  * mainnet or testnet: the portal shows the fees your setting would apply, and
- * responses say charged: false. On mainnet the pool itself keeps Gloam's 0.25%
+ * responses say charged: false. On mainnet the pool itself keeps Gloam's 0.5%
  * cash-out fee (see cashOutFee).
  *
  *   const gloam = new GloamApiClient({ apiKey: process.env.GLOAM_API_KEY! });
