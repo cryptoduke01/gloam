@@ -96,7 +96,7 @@ The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLO
 | `gloam_payment_requirements` | server | Price an agent resource in a private payment; returns the x402 requirements and the MPP challenge (`mpp.wwwAuthenticate`). `payTo` defaults to this server's receive tag |
 | `gloam_pay_x402` | agent | Plan the private payment that satisfies a 402 challenge (x402 or MPP) |
 | `gloam_execute_private_pay` | execute | **Real private payment** from a note handle: sync, prove, broadcast `transfer()`, keep the change. Returns the `X-PAYMENT` header, or for an MPP challenge the `Authorization: Payment` credential |
-| `gloam_fetch_paid` | execute | Fetch a URL; on a Gloam 402 (MPP method `gloam`, or x402), pay privately and retry, all inside the server. Returns the response and, for MPP, the decoded `Payment-Receipt` |
+| `gloam_fetch_paid` | execute | Fetch a URL; on a Gloam 402 (MPP method `gloam`, or x402), pay privately and retry, all inside the server. Returns the response and, for MPP, the decoded `Payment-Receipt`. Also pays x402 `gloam-cashout` (a public payee on Robinhood Chain) with a cash out through the relay; needs `maxAmount` |
 | `gloam_verify_payment` | server | Open a presented payment (x402 or MPP) with this server's receive key, verify it, sweep it into a fresh note, and say whether to grant access |
 | `gloam_get_limits` | read | This agent's spending limits: tools, assets, per payment, per day, recipients, expiry |
 | `gloam_get_spending_report` | read | Spent and left in the last 24 hours per asset, recent payments, refused attempts |
@@ -105,6 +105,8 @@ The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLO
 `gloam_execute_shield` is the private-execution rail: the agent ends up with a shielded balance only this server can spend. The agent sees a note handle such as `n-k3x9p2qw7m`, never the note's secret. When no signer is configured, every execute tool returns a plan instead of acting, and we never return a fake private fill.
 
 The x402 tools are private agent payments (the MCPay pattern, but the settlement is private). `gloam_payment_requirements` prices a resource to the payee's receive tag. The paying agent calls `gloam_execute_private_pay` (or `gloam_fetch_paid` for the whole request), which settles a private send and seals the payment note to that tag, so only the payee can open it. The payee calls `gloam_verify_payment`, which opens the note, checks it binds the required amount and asset, and sweeps it into a fresh note before saying `grantAccess: true`. Unlike a Tempo Zone, no operator sees the transaction: it is private from the public and self-custodial, with an optional per-payment issuer-scoped compliance disclosure. See `TEMPO_EXPANSION.md`.
+
+Scheme `gloam-cashout` is for gateways that pay out to a public address (a creator's splitter) in USDG on Robinhood Chain. `gloam_fetch_paid` pays it with a cash out of exactly the quoted amount from this server's notes to that address, through the Gloam relay, splitting a larger note privately first, and retries with `X-PAYMENT` = base64 JSON `{ scheme, txHash, quoteId }`. The payee and the amount are public; this server's wallet and balance are not. It needs `maxAmount`, and the same quote asked again is presented, never paid twice. With `gloam-private` offered too, `gloam-private` is paid unless `prefer` says `gloam-cashout`.
 
 ## Private swaps
 

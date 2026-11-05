@@ -160,7 +160,7 @@ export const GLOAM_TOOL_DEFINITIONS: readonly GloamToolDefinition[] = [
     title: "Preview: pay an x402 resource privately",
     kind: "preview",
     description:
-      "Request a URL. If it answers 402 with a Gloam private price (x402 scheme gloam-private), plan paying it privately: a shielded transfer sealed to the seller's Gloam address, presented as X-PAYMENT on the retry. A resource that offers only standard x402 (exact) is reported, not paid: pay it with a standard x402 client. A resource that does not answer 402 is returned as is." +
+      "Request a URL. If it answers 402 with a Gloam private price (x402 scheme gloam-private), plan paying it privately: a shielded transfer sealed to the seller's Gloam address, presented as X-PAYMENT on the retry. If it offers scheme gloam-cashout (a gateway that pays out to a public address, on Robinhood Chain), plan a cash out of the quoted amount from the private balance to that address: the payee and the amount are public, the agent's wallet and balance are not. gloam-cashout needs maxAmount. With both offered, gloam-private is used unless prefer says gloam-cashout. A resource that offers only standard x402 (exact) is reported, not paid: pay it with a standard x402 client. A resource that does not answer 402 is returned as is." +
       PREVIEW_TAIL,
     inputSchema: obj(
       {
@@ -168,7 +168,8 @@ export const GLOAM_TOOL_DEFINITIONS: readonly GloamToolDefinition[] = [
         method: { type: "string", description: "HTTP method. Default GET.", enum: ["GET", "POST"] },
         body: { type: "string", description: "Request body, for POST.", maxLength: 65_536 },
         contentType: { type: "string", description: "Content-Type of the body. Default application/json.", maxLength: 100 },
-        maxAmount: amount("Refuse if the price is above this"),
+        maxAmount: amount("Refuse if the price is above this. Required for gloam-cashout, where it caps the amount cashed out (the price plus the vault's fee)"),
+        prefer: { type: "string", description: "Which Gloam scheme to pay when the resource offers both. Default gloam-private.", enum: ["gloam-private", "gloam-cashout"] },
         label,
       },
       ["url"]

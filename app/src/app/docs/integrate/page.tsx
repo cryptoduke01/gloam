@@ -44,7 +44,7 @@ const TOOLS: { name: string; kind: string; does: string; chain: string }[] = [
   { name: "gloam_preview_claim_link", kind: "preview", does: "Pay by claim link, for someone with no Gloam address. The link goes to your code, never to the model.", chain: "A shielded transfer only" },
   { name: "gloam_preview_cash_out", kind: "preview", does: "Private balance to a 0x address, with the vault's live fee and what arrives.", chain: "The cash out: asset, amount, recipient" },
   { name: "gloam_preview_prove_funds", kind: "preview", does: "A proof the agent holds at least an amount, for one named reader, with an expiry.", chain: "Nothing" },
-  { name: "gloam_preview_pay_x402", kind: "preview", does: "Request a URL; if it answers 402 with a Gloam price, plan paying it privately.", chain: "A shielded transfer only" },
+  { name: "gloam_preview_pay_x402", kind: "preview", does: "Request a URL; if it answers 402 with a Gloam price, plan paying it privately. A gloam-cashout price is a cash out to the resource's public address.", chain: "A shielded transfer only, or for gloam-cashout the cash out to the payee" },
   { name: "gloam_execute", kind: "execute", does: "Run a preview by its previewId and digest, once.", chain: "What the preview said" },
   { name: "gloam_verify_proof", kind: "read", does: "Check a gloamfunds1: or gloampay1: proof against the chain.", chain: "Nothing" },
 ];
@@ -57,7 +57,7 @@ export default function DocsIntegratePage() {
       glance={[
         { label: "Tool pack", value: "examples/agent-kit-tools" },
         { label: "Engine", value: "GloamAgent, on @gloamtrade/sdk" },
-        { label: "x402", value: "gloam-private, next to exact" },
+        { label: "x402", value: "gloam-private and gloam-cashout, next to exact" },
         { label: "Networks", value: "Robinhood Chain, Tempo, Base, Ethereum" },
       ]}
       quickLinks={[
@@ -299,6 +299,147 @@ export const GET = protectWithGloam({
         </a>{" "}
         shows the 402 answer with the Gloam price added, an Express version,
         and each check the settle runs.
+      </p>
+
+      <h2 id="gloam-cashout">Private payer, public payee (gloam-cashout)</h2>
+      <p>
+        Some gateways pay out to a public address, such as a creator&apos;s
+        splitter, and settle standard <code>exact</code> payments in USDG on
+        Robinhood Chain. With <code>gloam-cashout</code> the agent pays from its
+        private balance: it cashes out straight to that address. The chain
+        shows USDG leaving the Gloam vault to the splitter. It does not show the
+        agent&apos;s wallet, because the Gloam relay sends the cash out, or which
+        deposit paid for it. The payee side stays public, as it is today.
+      </p>
+      <h3>The 402</h3>
+      <p>Add one entry to <code>accepts</code>, next to <code>exact</code>:</p>
+      <pre>
+        <code>{`{
+  "scheme": "gloam-cashout",
+  "network": "eip155:4663",
+  "asset": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",   // USDG
+  "payTo": "0xYourSplitter",
+  "amount": "1005063",          // G, base units (6 decimals)
+  "quoteId": "q_9f8e7d6c",      // secret, one per 402
+  "maxTimeoutSeconds": 120      // optional; expiresAt (unix seconds) works too
+}`}</code>
+      </pre>
+      <ul>
+        <li>
+          <strong>G is gross.</strong>{" "}
+          <code>G = ceil(price * 10000 / (10000 - bps)) + tag</code>, where{" "}
+          <code>bps</code> is the vault&apos;s live <code>withdrawFeeBps()</code>{" "}
+          (50 today) and <code>tag</code> is 1 to 9999, unique per open quote.
+        </li>
+        <li>
+          <strong>The vault takes its fee.</strong> The vault at{" "}
+          <code>0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194</code> keeps{" "}
+          <code>floor(G * bps / 10000)</code> and sends the rest to{" "}
+          <code>payTo</code>. That is always at least the price.
+        </li>
+        <li>
+          <code>quoteGross(price, tag)</code> in <code>@gloamtrade/sdk</code>{" "}
+          reads the fee and returns G. Read it per quote: the fee can change
+          on a 3-day timelock.
+        </li>
+      </ul>
+      <h3>The payment</h3>
+      <p>
+        The agent cashes out exactly G of USDG to <code>payTo</code>. The vault
+        emits <code>Unshielded(nullifier, asset, to, amount)</code> with{" "}
+        <code>amount = G</code>. The agent then retries with:
+      </p>
+      <pre>
+        <code>{`X-PAYMENT: base64(JSON.stringify({ scheme: "gloam-cashout", txHash, quoteId }))`}</code>
+      </pre>
+      <p>
+        The header holds a public tx hash and your own quote id. It never holds
+        a note, a key or a balance. The tool pack, the Gloam MCP server&apos;s{" "}
+        <code>gloam_fetch_paid</code> and <code>GloamAgent.payX402Cashout</code>{" "}
+        pay it, and all three need a <code>maxAmount</code>. When a 402 offers
+        both <code>gloam-private</code> and <code>gloam-cashout</code>, they pay{" "}
+        <code>gloam-private</code> unless the caller prefers{" "}
+        <code>gloam-cashout</code>.
+      </p>
+      <h3>The gateway check</h3>
+      <p>Serve the resource only when all five pass:</p>
+      <ul>
+        <li>The receipt exists on chain 4663 and succeeded.</li>
+        <li>
+          It has an <code>Unshielded</code> log from the vault, for USDG, to{" "}
+          <code>payTo</code>, with <code>amount == G</code>. The same event from
+          any other contract does not count.
+        </li>
+        <li>
+          It has a USDG <code>Transfer</code> from the vault to{" "}
+          <code>payTo</code> of at least the price.
+        </li>
+        <li>The block time falls inside the quote window.</li>
+        <li>
+          You have not seen the txHash before. Keep that store yourself, and
+          record the hash when you grant access.
+        </li>
+      </ul>
+      <p>
+        <code>verifyGloamCashout</code> in <code>@gloamtrade/sdk</code> runs the
+        first four. This is the same check with viem, to copy:
+      </p>
+      <pre>
+        <code>{`import { createPublicClient, http, parseAbiItem, toEventSelector, pad, type Address, type Hex } from "viem";
+
+const VAULT = "0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194";
+const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
+const UNSHIELDED = toEventSelector(parseAbiItem(
+  "event Unshielded(bytes32 indexed nullifier, address indexed asset, address indexed to, uint256 amount)"));
+const TRANSFER = toEventSelector(parseAbiItem(
+  "event Transfer(address indexed from, address indexed to, uint256 value)"));
+const word = (a: string) => pad(a.toLowerCase() as Hex, { size: 32 });
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+export async function verifyGloamCashout(args: {
+  txHash: Hex;
+  quote: { payTo: Address; gross: bigint; price: bigint; issuedAt: number; windowSec: number };
+  rpcUrl?: string;
+}): Promise<{ ok: boolean; reason: string | null }> {
+  const { txHash, quote } = args;
+  const client = createPublicClient({ transport: http(args.rpcUrl ?? "https://rpc.mainnet.chain.robinhood.com") });
+  if ((await client.getChainId()) !== 4663) return { ok: false, reason: "wrong_chain" };
+  const receipt = await client.getTransactionReceipt({ hash: txHash }).catch(() => null);
+  if (!receipt) return { ok: false, reason: "not_found" };
+  if (receipt.status !== "success") return { ok: false, reason: "reverted" };
+
+  // 1. Unshielded(nullifier, USDG, payTo, G), emitted by the vault itself.
+  const usdgOut = receipt.logs.filter((l) => l.topics[0] === UNSHIELDED && same(l.topics[2] ?? "", word(USDG)));
+  const fromVault = usdgOut.filter((l) => same(l.address, VAULT));
+  if (!fromVault.length) return { ok: false, reason: usdgOut.length ? "not_vault" : "no_unshield" };
+  const toPayee = fromVault.filter((l) => same(l.topics[3] ?? "", word(quote.payTo)));
+  if (!toPayee.length) return { ok: false, reason: "wrong_payee" };
+  if (!toPayee.some((l) => BigInt(l.data) === quote.gross)) return { ok: false, reason: "wrong_amount" };
+
+  // 2. A USDG Transfer from the vault to payTo of at least the price.
+  const paid = receipt.logs.some((l) =>
+    same(l.address, USDG) && l.topics[0] === TRANSFER &&
+    same(l.topics[1] ?? "", word(VAULT)) && same(l.topics[2] ?? "", word(quote.payTo)) &&
+    BigInt(l.data) >= quote.price);
+  if (!paid) return { ok: false, reason: "short_transfer" };
+
+  // 3. Mined inside the quote window.
+  const { timestamp } = await client.getBlock({ blockNumber: receipt.blockNumber });
+  const t = Number(timestamp);
+  if (t < quote.issuedAt || t > quote.issuedAt + quote.windowSec) return { ok: false, reason: "outside_window" };
+
+  // 4. Not checked here: that txHash is unused. Check and record it in your own store.
+  return { ok: true, reason: null };
+}`}</code>
+      </pre>
+      <p>
+        <code>buildGloamCashoutRequirement</code> makes the{" "}
+        <code>accepts</code> entry, and <code>quoteGross</code> prices it. Both
+        are in the{" "}
+        <a href={`${REPO}/packages/sdk#private-payer-public-payee-gloam-cashout`} target="_blank" rel="noreferrer">
+          SDK README
+        </a>
+        .
       </p>
 
       <h2 id="counted">Get your integration counted</h2>

@@ -15,7 +15,7 @@
  * and reserved before anything is signed, sends whose answer was lost kept
  * and never paid twice, and a redactor every result passes through.
  */
-import { createPublicClient, createWalletClient, formatUnits, http, isAddress, isAddressEqual, parseUnits, type Address, type Chain, type PublicClient } from "viem";
+import { createPublicClient, createWalletClient, formatUnits, getAddress, http, isAddress, isAddressEqual, parseUnits, type Address, type Chain, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   GloamAgent,
@@ -31,12 +31,17 @@ import {
   type Outcome,
 } from "@gloamtrade/game-plugin-gloam/engine";
 import {
+  GLOAM_CASHOUT_ASSET,
+  GLOAM_CASHOUT_CHAIN_ID,
+  GLOAM_CASHOUT_SCHEME,
+  GLOAM_CASHOUT_VAULT,
   NATIVE_ASSET,
   assertDepositWithinLiveLimit,
   cashOutFee,
   cashOutTargetProblem,
   cleanPaymentNote,
   encodeRequirements,
+  gloamCashoutProblem,
   gloamReadTransport,
   isReceiveTag,
   normalizeRequestAmount,
@@ -44,13 +49,15 @@ import {
   payMemoBoardFor,
   readCashOutFeeBps,
   type GloamAsset,
+  type GloamCashoutRequirement,
   type GloamPaymentRequirements,
+  type GloamX402SchemeName,
 } from "@gloamtrade/sdk";
 import { GLOAM_TOOL_DEFINITIONS, type GloamToolDefinition, type GloamToolName } from "./definitions.js";
 import { guardedSender, type Expectation, type GuardedSender, type SignHook } from "./guard.js";
 import { PreviewBook, type PreviewRecord, type PreviewView, type SignStep } from "./previews.js";
 import { ToolInputError, validateInput } from "./validate.js";
-import { findGloamPrice, readBody, urlProblem } from "./x402.js";
+import { findGloamOffer, readBody, urlProblem } from "./x402.js";
 
 export type ToolResult = Record<string, unknown> & { status: string };
 
@@ -64,6 +71,8 @@ export interface GloamEngine {
   add(args: { amount: string; asset?: string }): Promise<Outcome>;
   pay(args: { to: string; amount?: string; asset?: string; note?: string; label?: string }): Promise<Outcome>;
   payX402(args: { requirements: GloamPaymentRequirements; label?: string }): Promise<Outcome>;
+  /** Pay an x402 gloam-cashout quote: a cash out of exactly its amount to its payTo. maxAmount in USDG units. */
+  payX402Cashout(args: { requirement: GloamCashoutRequirement; maxAmount: string }): Promise<Outcome>;
   payByClaimLink(args: { amount: string; asset?: string; note?: string; sealTo?: string; label?: string }): Promise<Outcome>;
   cashOut(args: { amount: string; asset?: string; to: string }): Promise<Outcome>;
   proveFunds(args: { atLeast: string; asset?: string; for: string; expiresInHours?: number }): Promise<Outcome>;
@@ -130,6 +139,7 @@ export function engineFor(agent: GloamAgent): GloamEngine {
     add: (a) => agent.add(a),
     pay: (a) => agent.pay(a),
     payX402: (a) => agent.payX402(a),
+    payX402Cashout: (a) => agent.payX402Cashout(a),
     payByClaimLink: (a) => agent.payByClaimLink(a),
     cashOut: (a) => agent.cashOut(a),
     proveFunds: (a) => agent.proveFunds(a),
@@ -480,6 +490,45 @@ export function createGloamToolPack(opts: GloamToolPackOptions = {}): GloamToolP
     return { ...view };
   }
 
+  /** The x402 request a preview made, and how it presents a payment on the retry. */
+  type X402Request = {
+    url: string;
+    method: "GET" | "POST";
+    body: string | undefined;
+    contentType: string | undefined;
+    send: (extra?: Record<string, string>) => Promise<Response>;
+  };
+
+  /**
+   * Present a payment header on the retry and read what comes back. Paid but not served is kept as
+   * paid_not_served, so gloam_execute presents the same payment again and never pays twice.
+   */
+  async function presentPayment(req: X402Request, header: string, paid: Outcome | null, show: { header: boolean }): Promise<ToolResult> {
+    const shown = show.header ? { paymentHeader: header } : {};
+    let second: Response;
+    try {
+      second = await req.send({ "x-payment": header });
+    } catch (e) {
+      return {
+        ...(paid ?? {}),
+        status: "paid_not_served",
+        message: `Paid, but the retry failed (${safeErrorMessage(e)}). Call gloam_execute again with the same previewId: it presents this payment again and never pays twice.`,
+        ...shown,
+      };
+    }
+    const served = await readBody(second);
+    if (!second.ok) {
+      return {
+        ...(paid ?? {}),
+        status: "paid_not_served",
+        message: "Paid, but the seller did not serve the resource yet (it may still be securing the payment). Call gloam_execute again with the same previewId to present it again; it is never paid twice.",
+        ...shown,
+        ...served,
+      };
+    }
+    return { ...(paid ?? {}), status: "ok", paid: true, ...served, paymentResponse: second.headers.get("x-payment-response") ?? second.headers.get("payment-response") };
+  }
+
   async function previewPayX402(i: Record<string, unknown>): Promise<ToolResult> {
     const url = String(i.url);
     const bad = urlProblem(url, Boolean(opts.allowHttp));
@@ -506,8 +555,10 @@ export function createGloamToolPack(opts: GloamToolPackOptions = {}): GloamToolP
       return refused("redirect", `The resource redirects (${first.status}). Nothing was paid: call the URL it redirects to directly, if you trust it.`, { location: first.headers.get("location") });
     }
     if (first.status !== 402) return { status: first.ok ? "not_payment_required" : "http_error", paid: false, ...(await readBody(first)) };
-    const found = findGloamPrice(first.headers, await first.text());
+    const found = findGloamOffer(first.headers, await first.text(), i.prefer as GloamX402SchemeName | undefined);
     if (!found.ok) return refused("no_gloam_price", found.reason, { offered: found.offered });
+    const x402: X402Request = { url, method, body, contentType, send: request };
+    if (found.scheme === GLOAM_CASHOUT_SCHEME) return previewPayX402Cashout(i, found.cashout, found.offered, x402);
     const req = found.requirements;
     if (Number(req.network) !== net.chainId) return refused("wrong_network", `The Gloam price is on chain ${req.network}, and this agent pays on ${where}.`);
     if (!req.poolAddress || !isAddressEqual(req.poolAddress, net.pool)) return refused("wrong_vault", "The Gloam price settles through a different vault.");
@@ -558,28 +609,110 @@ export function createGloamToolPack(opts: GloamToolPackOptions = {}): GloamToolP
           if (typeof paid.paymentHeader === "string") rec.scratch.header = header = paid.paymentHeader;
           if (paid.status !== "done" || !header) return paid;
         }
-        let second: Response;
-        try {
-          second = await request({ "x-payment": header });
-        } catch (e) {
-          return {
-            ...(paid ?? {}),
-            status: "paid_not_served",
-            message: `Paid, but the retry failed (${safeErrorMessage(e)}). Call gloam_execute again with the same previewId: it presents this payment again and never pays twice.`,
-            paymentHeader: header,
-          };
+        return presentPayment(x402, header, paid, { header: true });
+      },
+    });
+    return { ...view };
+  }
+
+  /**
+   * x402 scheme gloam-cashout: the price is a cash out of exactly its amount (G, the price plus the
+   * vault's fee and a per-quote tag) from the private balance to the resource's public payout address.
+   * The payee and the amount are public, as for any payer. The agent's wallet (through the relay) and
+   * its private balance are not. The quote's id is kept out of every result: it travels only in the
+   * X-PAYMENT header, to the resource.
+   */
+  async function previewPayX402Cashout(i: Record<string, unknown>, quote: GloamCashoutRequirement, offered: string[], x402: X402Request): Promise<ToolResult> {
+    if (net.chainId !== GLOAM_CASHOUT_CHAIN_ID || !isAddressEqual(net.pool, GLOAM_CASHOUT_VAULT)) {
+      return refused("wrong_network", `This price is a ${GLOAM_CASHOUT_SCHEME} cash out on Robinhood Chain mainnet, and this agent pays on ${where}.`);
+    }
+    const a = net.assets.find((x) => isAddressEqual(x.address, GLOAM_CASHOUT_ASSET));
+    if (!a) return refused("unlisted_asset", `The ${where} vault does not take USDG.`);
+    if (i.maxAmount === undefined) {
+      return refused("no_max_amount", `This resource asks for a ${GLOAM_CASHOUT_SCHEME} payment of ${/^[0-9]{1,40}$/.test(quote.amount) ? fmt(BigInt(quote.amount), a) : "an unreadable amount"}. Say maxAmount, the most to cash out for it. Nothing was paid.`);
+    }
+    const max = amountOf(i.maxAmount, a, "maxAmount");
+    const problem = gloamCashoutProblem(quote, { maxAmount: max.wei });
+    if (problem) return refused(problem.code, problem.code === "over_max_amount" ? `The resource asks ${fmt(BigInt(quote.amount), a)}, more than your maxAmount of ${max.text} ${a.symbol}. Not paying.` : problem.message);
+    const gross = BigInt(quote.amount);
+    const payTo = getAddress(quote.payTo);
+    const short = coverProblem(a, gross);
+    if (short) return refused("no_note_covers", short);
+    const bps = await engine.cashOutFeeBps();
+    const fee = cashOutFee(gross, bps);
+    const resource = quote.resource ?? x402.url;
+    const expired = () => quote.expiresAt !== undefined && Math.floor(Date.now() / 1000) >= quote.expiresAt;
+    const view = book.add({
+      action: "pay_x402_cashout",
+      binding: {
+        chainId: net.chainId,
+        pool: net.pool,
+        scheme: GLOAM_CASHOUT_SCHEME,
+        asset: a.address,
+        amountWei: gross,
+        payTo: payTo.toLowerCase(),
+        quoteId: quote.quoteId,
+        maxAmountWei: max.wei,
+        feeBps: bps,
+        url: x402.url,
+        method: x402.method,
+        body: x402.body ?? null,
+        contentType: x402.contentType ?? null,
+      },
+      view: {
+        summary: `Pay ${fmt(gross, a)} for ${resource} by a cash out to its public payout address ${payTo} on ${where}: ${fmt(gross - fee, a)} arrives after the vault's ${bps / 100}% fee. Then fetch it.`,
+        network: networkView,
+        details: {
+          scheme: GLOAM_CASHOUT_SCHEME,
+          to: payTo,
+          toIs: "the resource's public payout address (its splitter). It is public, as it is for every payer.",
+          amount: fmt(gross, a),
+          amountBaseUnits: gross.toString(),
+          asset: assetView(a),
+          fee: { bps, percent: `${bps / 100}%`, amount: fmt(fee, a), note: "Kept by the vault when the cash out lands." },
+          payeeReceives: fmt(gross - fee, a),
+          maxAmount: fmt(max.wei, a),
+          resource,
+          url: x402.url,
+          method: x402.method,
+          ...(quote.expiresAt !== undefined ? { quoteExpires: new Date(quote.expiresAt * 1000).toISOString() } : {}),
+          steps: "If no single note holds exactly this amount, a private split to this agent goes first (free), then the cash out.",
+          delivery: "The retry carries X-PAYMENT: the cash out's tx hash and the resource's own quote id. Nothing private.",
+          staysPrivate: relay
+            ? "This agent's wallet and its private balance. The Gloam relay sends the cash out, and nothing on chain links it to the agent's deposits or other payments."
+            : "This agent's private balance. Submit is set to wallet, so the agent's wallet signs the cash out and shows as its sender.",
+          ...(offered.length ? { alsoOffered: offered } : {}),
+        },
+        walletSigns: spendSigns([
+          { contract: net.pool, call: "transfer(<proof>, <root>, <nullifier>, [<exact note>, <change note>])", when: "only when a split is needed" },
+          { contract: net.pool, call: `unshield(<proof>, <root>, <nullifier>, ${a.address}, ${payTo}, ${gross})` },
+        ]),
+        submittedBy,
+        public: `The cash out itself is public: the chain shows ${fmt(gross, a)} of USDG leaving the Gloam vault to ${payTo}, and its transaction.`,
+      },
+      recheck: async () => {
+        if (expired()) return "The quote expired since the preview. Make a new preview.";
+        const now = await engine.cashOutFeeBps();
+        return now === bps ? null : `The vault's cash-out fee changed from ${bps / 100}% to ${now / 100}% since the preview. Make a new preview.`;
+      },
+      scratch: {},
+      rerun: (last) => last.status === "paid_not_served" || last.status === "unconfirmed",
+      run: async (rec) => {
+        let header = rec.scratch.header as string | undefined;
+        let paid: Outcome | null = null;
+        if (!header) {
+          const out = await within(
+            { kind: "private", pool: net.pool, board, cashOut: { asset: a.address, to: payTo, amountWei: gross } },
+            { previewId: rec.view.previewId, action: "pay_x402_cashout" },
+            () => engine.payX402Cashout({ requirement: quote, maxAmount: max.text })
+          );
+          // The header carries the resource's quote id: it goes to the resource, never back to the model.
+          const { paymentHeader, ...rest } = out;
+          paid = rest as Outcome;
+          if (typeof paymentHeader === "string") rec.scratch.header = header = paymentHeader;
+          if (paid.status !== "done" || !header) return paid;
         }
-        const served = await readBody(second);
-        if (!second.ok) {
-          return {
-            ...(paid ?? {}),
-            status: "paid_not_served",
-            message: "Paid, but the seller did not serve the resource yet (it may still be securing the payment). Call gloam_execute again with the same previewId to present it again; it is never paid twice.",
-            paymentHeader: header,
-            ...served,
-          };
-        }
-        return { ...(paid ?? {}), status: "ok", paid: true, ...served, paymentResponse: second.headers.get("x-payment-response") ?? second.headers.get("payment-response") };
+        return presentPayment(x402, header, paid, { header: false });
       },
     });
     return { ...view };

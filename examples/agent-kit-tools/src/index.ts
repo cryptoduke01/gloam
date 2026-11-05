@@ -7,7 +7,7 @@ export { GLOAM_TOOL_DEFINITIONS, type GloamToolDefinition, type GloamToolKind, t
 export { createGloamToolPack, engineFor, type GloamEngine, type GloamTool, type GloamToolPack, type GloamToolPackOptions, type ToolResult } from "./pack.js";
 export { guardedSender, callsProblem, type DecodedCall, type Expectation, type GuardedSender, type SignHook } from "./guard.js";
 export { digestOf, type PreviewAction, type PreviewView, type SignStep } from "./previews.js";
-export { findGloamPrice } from "./x402.js";
+export { findGloamOffer, findGloamPrice, type FoundOffer } from "./x402.js";
 export {
   createGloamSeller,
   protectWithGloam,

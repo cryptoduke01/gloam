@@ -907,7 +907,7 @@ const POOL_READS = [
   { type: "function", name: "isSpent", stateMutability: "view", inputs: [{ type: "bytes32" }], outputs: [{ type: "bool" }] },
 ] as const;
 
-type SelfSendResult = { ok: true; note: StoredNote; hash: Hex } | { ok: false; maybeSent: boolean; result: Record<string, unknown> };
+export type SelfSendResult = { ok: true; note: StoredNote; hash: Hex } | { ok: false; maybeSent: boolean; result: Record<string, unknown> };
 
 /**
  * A private send through the relay from `note` to this server's own notes, waited for: a note of
@@ -916,14 +916,14 @@ type SelfSendResult = { ok: true; note: StoredNote; hash: Hex } | { ok: false; m
  * send, the way a payment's are. A held note that isn't moved stays held: every way back to
  * unspent keeps its moveFirst.
  */
-async function sendToSelf(
+export async function sendToSelf(
   ctx: SwapToolContext,
   store: NoteStore,
   net: McpNetwork,
   note: StoredNote,
   amount: bigint,
   url: string,
-  opts: { what: string; label: string; move?: boolean }
+  opts: { what: string; label: string; move?: boolean; exact?: Partial<StoredNote> }
 ): Promise<SelfSendResult> {
   const { tryStore, errMsg } = ctx;
   const { what, move = false } = opts;
@@ -959,8 +959,9 @@ async function sendToSelf(
       chainId: net.chainId,
       poolAddress: net.pool,
     });
-    const keep = (n: { secret: Hex; commitment: Hex; nullifier: Hex; amountWei: string }, label: string) =>
+    const keep = (n: { secret: Hex; commitment: Hex; nullifier: Hex; amountWei: string }, label: string, extra: Partial<StoredNote> = {}) =>
       store.add({
+        ...extra,
         network: net.key,
         chainId: net.chainId,
         pool: net.pool,
@@ -977,7 +978,7 @@ async function sendToSelf(
         createdTx: null,
         label,
       });
-    exact = keep(intent.paymentNote, opts.label);
+    exact = keep(intent.paymentNote, opts.label, opts.exact);
     if (BigInt(intent.changeNote.amountWei) > 0n) change = keep(intent.changeNote, `change from setting aside a swap`);
     sending = true;
     hash = await ctx.relay(intent, { url });
