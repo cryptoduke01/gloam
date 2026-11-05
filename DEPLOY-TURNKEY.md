@@ -148,7 +148,11 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
     offers Connect wallet only, and the console names the origin to add.
 11. With the flag on, open `/app` pages, sign in, add privately (which makes a proof) and
     connect a browser wallet and WalletConnect: the console shows no "Refused to load" or
-    "Refused to connect" line. If one does, add that host in `csp.config.mjs`.
+    "Refused to connect" line. If one does, add that host in `csp.config.mjs`. One line is
+    expected and harmless on /app/move, /app/payroll and /app/settings: "Evaluating a
+    string as JavaScript violates the following Content Security Policy directive". A
+    bundled library (is-generator-function) tests for eval inside a try, falls back, and
+    nothing breaks.
 12. If the wallet doesn't open after sign-in, the header offers Try again and Sign out.
 
 ## Rolling back
