@@ -77,7 +77,7 @@ export const VOTES: VoteConfig[] = [
     options: ["Stay on Orynth", "Migrate to a new pool"],
     details: [
       "Nothing changes: same token, same contract, same locked pool.",
-      "Holders swap old $GLOAM for new during a set window. Supply stays fixed, the new liquidity is locked forever, and anyone who misses the window can lose out, so it would be announced well ahead.",
+      "Swap old $GLOAM for new, one for one, in a set window. Fixed supply, liquidity locked forever. Miss the window and you can lose out.",
     ],
     snapshotBlock: 0,
     weighting: "close",
