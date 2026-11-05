@@ -97,8 +97,8 @@ assert.equal(embeddedWalletsBuild(env({ NEXT_PUBLIC_TURNKEY_ENABLED: "true", ...
 assert.equal(embeddedWalletsBuild(env({ NEXT_PUBLIC_TURNKEY_ENABLED: "1", ...ids })), false);
 assert.equal(embeddedWalletsBuild(env({ NEXT_PUBLIC_TURNKEY_ENABLED: "true" })), false);
 assert.ok(
-  /process\.env\.NODE_ENV === "production" && embeddedWalletsBuild\(\)\s*\? \[\{ source: "\/app\/:path\*", headers: \[\{ key: "Content-Security-Policy", value: CSP_APP_ENFORCED \}\] \}\]/.test(config),
-  "enforced on /app in production builds with Gloam wallets on, and nowhere else",
+  /process\.env\.NODE_ENV === "production" && embeddedWalletsBuild\(\)\s*\?\s*\[\s*\{ source: "\/app\/:path\*", headers: \[\{ key: "Content-Security-Policy", value: CSP_APP_ENFORCED \}\] \},\s*\{ source: "\/partners\/dashboard\/:path\*", headers: \[\{ key: "Content-Security-Policy", value: CSP_APP_ENFORCED \}\] \},\s*\]/.test(config),
+  "enforced on /app and the partner portal in production builds with Gloam wallets on, and nowhere else",
 );
 assert.ok(config.indexOf("CSP_APP_ENFORCED }") > config.indexOf("frame-ancestors 'none'; base-uri"), "after the framing policy, so it replaces it on /app");
 n += 5;

@@ -1,11 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Logo } from "@/components/Logo";
 import { useMainnetLive } from "@/components/MainnetCountdown";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SealedField } from "@/components/ui/SealedField";
+import { EMBEDDED_WALLETS } from "@/lib/embeddedWallet";
+import { getActiveTurnkeyAccount, signOutEmbedded } from "@/lib/turnkeyBridge";
 import {
   discoverWallets,
   portal,
@@ -23,6 +26,9 @@ import { Overview } from "./Overview";
 import { QuickstartPanel } from "./QuickstartPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Field, Notice, shortAddr } from "./ui";
+
+// Email sign-in goes through a Gloam wallet (Turnkey): the kit only loads when Gloam wallets are on.
+const PartnerEmailSignIn = dynamic(() => import("./PartnerEmailSignIn"), { ssr: false });
 
 /** `removed`: Gloam removed this wallet's last account; it can make a new one. */
 type Session = { wallet: string; partner: PartnerAccount | null; removed?: { name: string; removedAt: number } | null };
@@ -65,6 +71,8 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
   const [wallets, setWallets] = useState<WalletChoice[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(initialError);
+  /** Came from the landing page's Sign in with email (?with=email). */
+  const [emailFirst, setEmailFirst] = useState(false);
   const mainnetLive = useMainnetLive();
 
   useEffect(() => {
@@ -72,8 +80,12 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
     void discoverWallets().then((w) => {
       if (live) setWallets(w);
     });
+    const t = window.setTimeout(() => {
+      if (live) setEmailFirst(new URLSearchParams(window.location.search).get("with") === "email");
+    }, 0);
     return () => {
       live = false;
+      window.clearTimeout(t);
     };
   }, []);
 
@@ -95,18 +107,20 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
       <div className="gl-glass p-2 shadow-pop">
         <div className="rounded-[12px] bg-panel p-6 sm:p-7">
           <p className="t-label">Partner portal</p>
-          <h1 className="t-display-m mt-3 text-foreground">Sign in with your wallet</h1>
+          <h1 className="t-display-m mt-3 text-foreground">{EMBEDDED_WALLETS ? "Sign in" : "Sign in with your wallet"}</h1>
           <p className="mt-2 text-[14px] leading-relaxed text-mute">
-            Use the wallet that will own your partner account. You sign a short message to prove it is yours. It costs nothing and
-            moves no money.
+            {EMBEDDED_WALLETS
+              ? "Use a wallet or your email. Either way you sign a short message. It costs nothing and moves no money."
+              : "Use the wallet that will own your partner account. You sign a short message to prove it is yours. It costs nothing and moves no money."}
           </p>
           <div className="mt-7 space-y-2">
             {wallets === null ? (
               <div className="h-12 rounded-full bg-surface motion-safe:animate-pulse" aria-busy="true" />
             ) : wallets.length === 0 ? (
               <Notice>
-                No browser wallet found. Install one, such as MetaMask or Rabby, or open this page in your wallet&apos;s own
-                browser.
+                {EMBEDDED_WALLETS
+                  ? "No browser wallet found. Sign in with email instead."
+                  : "No browser wallet found. Install one, such as MetaMask or Rabby, or open this page in your wallet's own browser."}
               </Notice>
             ) : (
               wallets.map((w) => (
@@ -121,9 +135,12 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={w.icon} alt="" width={20} height={20} className="h-5 w-5 rounded-[6px]" />
                   )}
-                  {busy === w.id ? "Check your wallet…" : wallets.length > 1 ? `Sign in with ${w.name}` : "Connect and sign in"}
+                  {busy === w.id ? "Check your wallet…" : wallets.length > 1 ? `Sign in with ${w.name}` : "Connect wallet"}
                 </button>
               ))
+            )}
+            {EMBEDDED_WALLETS && (
+              <PartnerEmailSignIn onSignedIn={onSignedIn} onError={setErr} disabled={busy !== null} autoStart={emailFirst} />
             )}
           </div>
           {err && (
@@ -446,8 +463,13 @@ export function PartnerDashboard() {
 
   const signOut = useCallback(async () => {
     await portal("/session", { method: "DELETE" }).catch(() => null);
+    // signed in with email: end the Gloam wallet's session too, so the next person starts fresh
+    const embedded = getActiveTurnkeyAccount();
+    if (embedded && session && embedded.address.toLowerCase() === session.wallet.toLowerCase()) {
+      await signOutEmbedded().catch(() => undefined);
+    }
     setSession(null);
-  }, []);
+  }, [session]);
 
   if (session === undefined) {
     return (
