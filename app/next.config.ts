@@ -61,11 +61,15 @@ const nextConfig: NextConfig = {
           ...(process.env.NODE_ENV === "production" ? [{ key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY }] : []),
         ],
       },
-      // Gloam wallets sign with no prompt: with them on, /app enforces where scripts,
-      // frames, workers and connections may come from (csp.config.mjs). Last, so it
-      // replaces the framing-only policy above on these pages.
+      // Gloam wallets sign with no prompt: with them on, /app and the partner portal
+      // (email sign-in) enforce where scripts, frames, workers and connections may
+      // come from (csp.config.mjs). Last, so it replaces the framing-only policy above
+      // on these pages.
       ...(process.env.NODE_ENV === "production" && embeddedWalletsBuild()
-        ? [{ source: "/app/:path*", headers: [{ key: "Content-Security-Policy", value: CSP_APP_ENFORCED }] }]
+        ? [
+            { source: "/app/:path*", headers: [{ key: "Content-Security-Policy", value: CSP_APP_ENFORCED }] },
+            { source: "/partners/dashboard/:path*", headers: [{ key: "Content-Security-Policy", value: CSP_APP_ENFORCED }] },
+          ]
         : []),
     ];
   },

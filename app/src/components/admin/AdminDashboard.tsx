@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Logo } from "@/components/Logo";
 import { SealedField } from "@/components/ui/SealedField";
+import { HowItWorks } from "@/components/ui/HowItWorks";
 import { shortAddress } from "@/lib/chain";
 import { MAINNET_ENABLED, NETWORK_KEYS, getNetwork, isNetworkKey, networkName, type GloamNetwork } from "@/lib/networks";
 import type { CreatorFees } from "@/lib/creatorFees";
@@ -1504,7 +1505,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
                   disabled={saving === p.id}
                   onClick={() => setConfirmRemove(p.id)}
                   className="rounded-full border border-line px-3 py-1 text-[13px] text-mute transition-colors hover:border-danger hover:text-danger disabled:opacity-50"
-                  title="Remove the account. Its keys and link codes stop working at once, its addresses and approvals go, and it leaves this list and the totals."
+                  title="Ends the account. Keys and links stop at once."
                 >
                   Remove
                 </button>
@@ -1579,19 +1580,25 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
             {removedNote}
           </p>
         )}
-        <p className="mt-4 text-[13px] leading-relaxed text-mute">
-          Hide name takes the name out of links and keeps the account. Remove ends the account: its keys and link codes stop
-          working at once, its receiving addresses and approvals go, and it leaves this list and the totals. Its past activity is
-          kept on record, counted nowhere. The owner&apos;s wallet can start a new account from nothing. Messages: payment messages from an approved account&apos;s keys use the relay&apos;s larger budget. Every other
-          account&apos;s keys share a small one. Fee setting is per private payment, cash outs, deposits. Via API key: payments
-          relayed with a partner key and deposits partners reported (checked on chain). Via link: payments, cash outs and swaps
-          opened from a link with the partner&apos;s code, checked on chain. Matched on chain: past cash outs to the partner&apos;s own
-          receiving addresses, proven by signature. {tier === "testnet" ? "Testnet: counted, never valued. " : "Mainnet only; testnet is counted apart. "}Name in links: an
-          account&apos;s name shows as &quot;From name · Gloam partner&quot; only once approved here, and a rename needs approving again.
-          Only public transaction facts are kept, never a payer&apos;s wallet or IP.
-          {data.partners.some((p) => p.migration) ? " Some older activity could not be split into mainnet and testnet: see the partner's details." : ""}{" "}
-          Store: {data.backend}.
+        <p className="mt-4 text-[13px] text-mute">
+          Remove ends the account: keys and links stop, history is kept but not counted. Hide name keeps the account.
         </p>
+        {data.partners.some((p) => p.migration) && (
+          <p className="mt-1 text-[13px] text-warn">Some older activity could not be split into mainnet and testnet. See the details.</p>
+        )}
+        <HowItWorks
+          items={[
+            "Via API key: payments relayed with a partner key, and deposits partners reported. Checked on chain.",
+            "Via link: payments, cash outs and swaps opened from a partner's link. Checked on chain.",
+            "Matched on chain: past cash outs to the partner's proven addresses.",
+            "Name in links: shows only once approved. A rename needs approving again.",
+            "Messages: approved keys get the relay's larger message budget.",
+            "Fee setting: per private payment, cash out, deposit.",
+            tier === "testnet" ? "Testnet: counted, never valued." : "Mainnet only. Testnet is counted apart.",
+            "Only public transaction facts are kept. Never a payer's wallet or IP.",
+            `Store: ${data.backend}.`,
+          ]}
+        />
       </Panel>
       {openPartner && (
         <Panel title={openPartner.name} action={<span className="tnum text-[12.5px] text-mute">{openPartner.id}</span>}>

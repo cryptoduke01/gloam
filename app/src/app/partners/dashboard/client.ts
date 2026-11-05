@@ -1,6 +1,7 @@
 /**
  * Browser side of the partner portal: finding a wallet, signing in with it
- * (EIP-4361), and calling the portal's own endpoints.
+ * (EIP-4361), and calling the portal's own endpoints. A Gloam wallet made with
+ * an email (Turnkey) signs the same message through signInWithSigner.
  */
 import { getAddress, toHex, type Address } from "viem";
 import { createSiweMessage } from "viem/siwe";
@@ -84,6 +85,35 @@ function walletError(e: unknown): PortalError {
   return new PortalError("Your wallet did not answer. Unlock it and try again.", "wallet", 0);
 }
 
+/** Builds the sign-in message for this site, has `sign` sign it, and opens a session. */
+export async function signInWithSigner(
+  address: Address,
+  chainId: number,
+  sign: (message: string) => Promise<string>,
+  fail: (e: unknown) => PortalError = walletError
+): Promise<{ wallet: Address }> {
+  const n = await portal<{ nonce: string; statement: string; maxLifetimeSec: number }>("/nonce");
+  const now = new Date();
+  const message = createSiweMessage({
+    domain: window.location.host,
+    address,
+    statement: n.statement,
+    uri: window.location.origin,
+    version: "1",
+    chainId,
+    nonce: n.nonce,
+    issuedAt: now,
+    expirationTime: new Date(now.getTime() + Math.min(n.maxLifetimeSec, 600) * 1000),
+  });
+  let signature: string;
+  try {
+    signature = await sign(message);
+  } catch (e) {
+    throw fail(e);
+  }
+  return portal<{ wallet: Address }>("/session", { method: "POST", body: { message, signature } });
+}
+
 /** Connect, build the sign-in message, have the wallet sign it, and open a session. */
 export async function signInWith(provider: Eip1193): Promise<{ wallet: Address }> {
   let address: Address;
@@ -98,28 +128,9 @@ export async function signInWith(provider: Eip1193): Promise<{ wallet: Address }
   } catch (e) {
     throw walletError(e);
   }
-
-  const n = await portal<{ nonce: string; statement: string; maxLifetimeSec: number }>("/nonce");
-  const now = new Date();
-  const message = createSiweMessage({
-    domain: window.location.host,
-    address,
-    statement: n.statement,
-    uri: window.location.origin,
-    version: "1",
-    chainId,
-    nonce: n.nonce,
-    issuedAt: now,
-    expirationTime: new Date(now.getTime() + Math.min(n.maxLifetimeSec, 600) * 1000),
-  });
-
-  let signature: string;
-  try {
-    signature = (await provider.request({ method: "personal_sign", params: [toHex(message), address] })) as string;
-  } catch (e) {
-    throw walletError(e);
-  }
-  return portal<{ wallet: Address }>("/session", { method: "POST", body: { message, signature } });
+  return signInWithSigner(address, chainId, async (message) =>
+    (await provider.request({ method: "personal_sign", params: [toHex(message), address] })) as string
+  );
 }
 
 export type FeeSetting = { privatePaymentCents: number; cashoutBps: number; depositBps: number };

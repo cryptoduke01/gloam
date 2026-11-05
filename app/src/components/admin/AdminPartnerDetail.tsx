@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ChangeEvent, type ReactNode } from "react";
+import { HowItWorks } from "@/components/ui/HowItWorks";
 import { PartnerBreakdown, type BreakdownStats } from "@/components/partners/PartnerBreakdown";
 import type { BackfillResult } from "@/lib/partnerBackfill";
 
@@ -300,11 +301,16 @@ function Addresses({
 
   return (
     <Box title={`Receiving addresses (${count.verified.toLocaleString("en-US")} proven of ${count.total.toLocaleString("en-US")})`}>
-      <p className="text-[13px] leading-relaxed text-mute">
-        The partner&apos;s own addresses only, per mainnet. An address counts in the on-chain match only once it signs its message
-        (EIP-191, naming the partner, the chain and the date). Send the partner the messages to sign, then paste what comes back as
-        chain,address,signature. Nothing about who sent the money is kept.
-      </p>
+      <p className="text-[13px] text-mute">The partner&apos;s own addresses. Each counts once it signs its message.</p>
+      <HowItWorks
+        title="How proving works"
+        items={[
+          "One list per mainnet.",
+          "The message names the partner, the chain and the date (EIP-191).",
+          "Send the partner the messages, then paste back chain,address,signature.",
+          "Nothing about who sent the money is kept.",
+        ]}
+      />
       {count.total > 0 && (
         <div className="mt-3 rounded-xl bg-surface px-3.5 py-2.5 text-[12.5px] text-soft">
           {[...new Set(addresses.map((a) => a.chainId))].map((c) => (
@@ -447,16 +453,18 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
         </span>
       }
     >
-      <p className="text-[13px] leading-relaxed text-mute">
-        Reads every mainnet vault&apos;s cash outs (Unshielded) and counts the ones that paid a partner&apos;s proven receiving
-        address, as &quot;matched on chain&quot;; one a link counted to someone else moves to the address&apos;s partner. It also counts
-        link cash outs nobody counted yet whose tie is still kept (a wallet registration for an hour, the relay&apos;s tie to the
-        transaction for a week, its tie to that exact payment for an hour if the relay stopped before tying the transaction;
-        that last one only on Robinhood Chain and Tempo). Read-only on chain. A transaction is never counted
-        twice. Past private payments can&apos;t be matched: inside the vault the payee and the amount are hidden. Swaps can&apos;t either:
-        a swap&apos;s output goes back into the vault, not to an address. A dry run counts nothing and shows what it found per
-        address; counting needs a dry run of the same addresses first.
-      </p>
+      <p className="text-[13px] text-mute">Counts past cash outs to partners&apos; proven addresses. Read-only. Run a dry run first.</p>
+      <HowItWorks
+        title="How the match works"
+        items={[
+          "Reads every mainnet vault's cash outs.",
+          "A cash out to a proven address counts as matched on chain. One a link counted elsewhere moves to that partner.",
+          "Also counts link cash outs whose tie is still kept: a wallet registration for an hour, the relay's tie for a week.",
+          "A transaction is never counted twice.",
+          "Private payments and swaps can't be matched. Neither pays a public address.",
+          "A dry run counts nothing. Counting needs a dry run of the same addresses first.",
+        ]}
+      />
       <ErrorLine text={err} />
       {r && (
         <div className="mt-3 space-y-2 text-[12.5px] text-soft" role="status">

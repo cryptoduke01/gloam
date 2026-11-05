@@ -17,7 +17,8 @@ import {
  * sits (sidebar block, top-bar pill, or inline form button).
  *
  * - Signed out: Sign in, which opens Turnkey's email and passkey sheet.
- * - Signed in with no wallet yet: Create wallet, which opens the create sheet.
+ * - Signed in with no wallet yet: Create wallet, which opens the create sheet,
+ *   with Sign out beside it.
  * - Signed in with a wallet: a moment while the wallet connects, with Sign out
  *   beside it; if the wallet's signer didn't start, Try again. Then the wallet
  *   menu shows the address and this is gone.
@@ -43,13 +44,6 @@ export function TurnkeyHeaderSignIn({
   if (clientState === ClientState.Error) return <>{fallback}</>;
 
   if (authState === AuthState.Authenticated) {
-    if (needsWallet) {
-      return (
-        <button type="button" onClick={() => openEmbeddedSheet("create")} className={className}>
-          Create wallet
-        </button>
-      );
-    }
     const signOut = (
       <button
         type="button"
@@ -67,6 +61,17 @@ export function TurnkeyHeaderSignIn({
         {leaving ? "Signing out…" : "Sign out"}
       </button>
     );
+    // Signed in with no wallet yet: Create wallet, and Sign out to use another email or passkey.
+    if (needsWallet) {
+      return (
+        <>
+          <button type="button" onClick={() => openEmbeddedSheet("create")} className={className}>
+            Create wallet
+          </button>
+          {signOut}
+        </>
+      );
+    }
     return signer === "failed" ? (
       <>
         <button type="button" onClick={retryEmbeddedSigner} className={className}>

@@ -35,7 +35,7 @@ export function TurnkeyLoginButton() {
             Signed in with passkey
           </p>
           <p className="mt-0.5 text-[12px] text-mute">
-            {wallets.length} embedded wallet{wallets.length === 1 ? "" : "s"} ready
+            {wallets.filter((w) => w.source === "embedded").length} embedded wallet{wallets.filter((w) => w.source === "embedded").length === 1 ? "" : "s"} ready
           </p>
         </div>
       </div>

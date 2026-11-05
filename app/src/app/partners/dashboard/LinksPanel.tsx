@@ -172,7 +172,21 @@ export function LinksPanel({
         ) : (
           <p className="text-[14px] leading-relaxed text-soft">
             Links show no partner name yet. Gloam checks a name before it shows next to the Gloam partner mark, so nobody can pass
-            as Gloam or another brand. Your links still count to you meanwhile. Ask us to approve <span className="text-foreground">{name}</span>.
+            as Gloam or another brand. Your links still count to you meanwhile.
+          </p>
+        )}
+        {approvedName !== name && (
+          <p className="mt-3 text-[13.5px] text-mute">
+            To show your name on links, message{" "}
+            <a
+              href="https://x.com/gloamtrade"
+              target="_blank"
+              rel="noreferrer"
+              className="text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
+            >
+              @gloamtrade on X
+            </a>{" "}
+            from your project&apos;s account. We&apos;ll approve it.
           </p>
         )}
       </Card>

@@ -154,6 +154,9 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
     bundled library (is-generator-function) tests for eval inside a try, falls back, and
     nothing breaks.
 12. If the wallet doesn't open after sign-in, the header offers Try again and Sign out.
+13. Partner portal: on `/partners`, Sign in with email opens the portal and the email
+    sheet. A new email gets Create Gloam wallet, then lands signed in. Sign out, sign in
+    again: the same partner account. With the flag off, only Connect wallet shows.
 
 ## Rolling back
 
