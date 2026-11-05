@@ -66,12 +66,14 @@ export async function POST(req: Request) {
     const partnerCode = body.partnerCode;
     const net = networkForChain(body.chainId);
     const requester = clientIp(req);
+    await checkRateLimit(requester);
     // a partner's fee: checked before anything is sent, counted once it lands
     let partnerFee: { partner: NonNullable<Awaited<ReturnType<typeof resolveLinkCode>>>["partner"]; fee: NonNullable<ReturnType<typeof readPartnerFee>> } | null = null;
     if (body.partnerFee !== undefined) {
       if (body.action !== "transfer" || partnerCode !== undefined) throw new RelayError("A partner fee is a transfer of its own, sent without a link code.", 400, "bad_partner_fee");
       try {
-        const fee = readPartnerFee(body.partnerFee)!;
+        const fee = readPartnerFee(body.partnerFee);
+        if (!fee) throw new FeeReportError("partnerFee must be { code, kind, asset, amount }.", "bad_partner_fee");
         const code = (body.partnerFee as { code?: unknown }).code;
         const r = await resolveLinkCode(code);
         if (!r || !r.partner.approvedName) throw new FeeReportError("That link's partner can't take a fee.", "fee_not_set");
@@ -80,10 +82,11 @@ export async function POST(req: Request) {
         partnerFee = { partner: r.partner, fee };
       } catch (e) {
         if (e instanceof FeeReportError) throw new RelayError(`${e.message} Nothing was sent.`, 400, e.code);
-        throw e;
+        // a storage error while checking: surely not sent, so never the "internal" the app reads as maybe sent
+        console.error("gloam_relay_fee_check", logSafe(e));
+        throw new RelayError("Could not check this partner fee right now. Nothing was sent. Try again shortly.", 503, "fee_check_failed");
       }
     }
-    await checkRateLimit(requester);
     // payment messages have budgets of their own (lib/relay/server holdMemoSlot)
     if (body.action !== "memo") await checkChainRateLimit(net, requester);
     // bound only once the relay's checks, dry run and holds passed (beforeBroadcast), never waited on
