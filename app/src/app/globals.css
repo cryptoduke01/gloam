@@ -1467,3 +1467,10 @@ html[data-theme="dark"],
     -webkit-print-color-adjust: exact;
   }
 }
+
+/* Turnkey's sign-in sheet sets its width inline to its content's width and pads
+   the box; under our border-box reset that padding sat inside the width, so the
+   email field and buttons ran into the sheet's edges. */
+.tk-modal > div.relative[class*="bg-modal-background"] {
+  box-sizing: content-box;
+}

@@ -73,7 +73,8 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
   const [err, setErr] = useState<string | null>(initialError);
   /** Came from the landing page's Sign in with email (?with=email). */
   const [emailFirst, setEmailFirst] = useState(false);
-  const mainnetLive = useMainnetLive();
+  /** One "Use a browser wallet" button; with more than one wallet it opens this list. */
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -122,22 +123,38 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
                   ? "No browser wallet found. Sign in with email instead."
                   : "No browser wallet found. Install one, such as MetaMask or Rabby, or open this page in your wallet's own browser."}
               </Notice>
+            ) : !picking ? (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => (wallets.length === 1 ? void go(wallets[0]!) : setPicking(true))}
+                className="btn btn-ink btn-lg btn-block"
+              >
+                {busy !== null ? "Check your wallet…" : "Use a browser wallet"}
+              </button>
             ) : (
-              wallets.map((w) => (
-                <button
-                  key={w.id}
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void go(w)}
-                  className="btn btn-ink btn-lg btn-block"
-                >
-                  {w.icon && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={w.icon} alt="" width={20} height={20} className="h-5 w-5 rounded-[6px]" />
-                  )}
-                  {busy === w.id ? "Check your wallet…" : wallets.length > 1 ? `Sign in with ${w.name}` : "Connect wallet"}
-                </button>
-              ))
+              <div className="overflow-hidden rounded-[14px] border border-line" role="group" aria-label="Pick a wallet">
+                {wallets.map((w, i) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void go(w)}
+                    className={`flex h-12 w-full items-center gap-3 px-4 text-left text-[14.5px] text-foreground transition-colors hover:bg-surface focus-visible:bg-surface focus-visible:outline-none disabled:opacity-60 ${
+                      i > 0 ? "border-t border-line" : ""
+                    }`}
+                  >
+                    {w.icon ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={w.icon} alt="" width={20} height={20} className="h-5 w-5 rounded-[6px]" />
+                    ) : (
+                      <span className="h-5 w-5 rounded-[6px] bg-surface" aria-hidden />
+                    )}
+                    <span className="flex-1">{w.name}</span>
+                    {busy === w.id && <span className="text-[12.5px] text-mute">Check your wallet…</span>}
+                  </button>
+                ))}
+              </div>
             )}
             {EMBEDDED_WALLETS && (
               <PartnerEmailSignIn onSignedIn={onSignedIn} onError={setErr} disabled={busy !== null} autoStart={emailFirst} />
@@ -151,9 +168,8 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
         </div>
       </div>
       <p className="mt-5 text-center text-[12.5px] leading-relaxed text-mute">
-        {mainnetLive ? "Partner fees are not charged yet, on mainnet or testnet." : "Testnet program. Nothing is charged."}{" "}
         <Link href="/docs/partners" className="text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
-          How it works
+          How partners work
         </Link>
       </p>
     </Centered>
