@@ -2,7 +2,7 @@ import Image from "next/image";
 
 /**
  * Partners already live on Gloam: a plain logo row on the landing page and /partners.
- * Raeto, Agent Wormhole, Motion and Killfloor are drawn inline so they follow the theme: Raeto's
+ * Raeto, Agent Wormhole, Motion, Killfloor and Autonomo are drawn inline so they follow the theme: Raeto's
  * ring takes the text colour, the others keep their own dark grounds.
  * Zedkr's mark and VEYA's wordmark are rendered files, so each ships as a light and a
  * dark PNG and the theme picks one. Static copies of the first five live in public/brand/partners.
@@ -95,6 +95,21 @@ export function KillfloorMark({ size = 40 }: { size?: number }) {
   );
 }
 
+/** Autonomo's mark: their own icon from autonomo.fun (black peak and bar on their yellow tile), edged in the text colour so it holds on dark grounds. */
+export function AutonomoMark({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+      <rect width="64" height="64" rx="10" fill="#FFCE00" />
+      <rect x="0.8" y="0.8" width="62.4" height="62.4" rx="9.2" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="1.6" />
+      <g fill="#111111">
+        <path d="M32 9 49 41h-10L32 27.5 25 41H15Z" />
+        <rect x="27.5" y="33" width="9" height="8" rx="1.5" />
+        <rect x="11" y="46" width="42" height="7" rx="1.5" />
+      </g>
+    </svg>
+  );
+}
+
 type Partner = {
   name: string;
   href: string;
@@ -112,6 +127,7 @@ export const LIVE_PARTNERS: Partner[] = [
   { name: "Motion", href: "https://motion.gift", line: "Fund a trading wallet privately", Mark: MotionMark },
   { name: "VEYA", href: "https://www.veyanet.tech", line: "Budget checks before an agent pays", Mark: VeyaWordmark, wordmark: true },
   { name: "Killfloor", href: "https://killfloor.org", line: "AI agents pay each other privately", Mark: KillfloorMark },
+  { name: "Autonomo", href: "https://autonomo.fun", line: "Agents pay for APIs privately", Mark: AutonomoMark },
 ];
 
 function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?: boolean; size?: number }) {
