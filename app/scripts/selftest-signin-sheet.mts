@@ -37,6 +37,7 @@ import {
   type SignInState,
 } from "../src/lib/signInSheet";
 import { googleClientIdFrom, oauthRedirectFor } from "../src/lib/embeddedWallet";
+import { SIGN_IN_PENDING_MS, onSignInSheetRequest, openSignInSheet } from "../src/lib/turnkeyBridge";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -305,6 +306,27 @@ test("every failure reads in plain words, never the SDK's own text", () => {
     assert.match(text, want, text);
     assert.ok(!/Turnkey|OTP|—|error \d/i.test(text), `no internals or em dashes: ${text}`);
   }
+});
+
+test("a Sign in tapped before the sheet is listening is never dropped: the sheet opens with it once it mounts", () => {
+  const seen: string[] = [];
+  // tapped while the kit's code is still loading: nothing is listening yet
+  assert.equal(openSignInSheet({ walletLabel: "early" }, 1_000), false);
+  const off = onSignInSheetRequest((o) => seen.push(o.walletLabel ?? ""), 1_500);
+  assert.deepEqual(seen, ["early"], "handed over as the sheet mounts");
+  // once listening, a tap opens it straight away, and nothing is replayed
+  assert.equal(openSignInSheet({ walletLabel: "now" }, 2_000), true);
+  assert.deepEqual(seen, ["early", "now"]);
+  off();
+  // a tap long before the sheet ever mounts is not opened out of nowhere later
+  openSignInSheet({ walletLabel: "stale" }, 10_000);
+  const off2 = onSignInSheetRequest((o) => seen.push(o.walletLabel ?? ""), 10_000 + SIGN_IN_PENDING_MS + 1);
+  assert.deepEqual(seen, ["early", "now"]);
+  // and it is used up: a second listener doesn't get it either
+  const off3 = onSignInSheetRequest((o) => seen.push(o.walletLabel ?? ""), 10_001);
+  assert.deepEqual(seen, ["early", "now"]);
+  off2();
+  off3();
 });
 
 console.log(`selftest-signin-sheet: ${passed} passed`);
