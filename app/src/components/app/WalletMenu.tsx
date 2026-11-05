@@ -238,7 +238,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
               }`}
               fallback={plainConnect}
               onUseWallet={canUseWallet ? openWallet : undefined}
-              walletLabel={wc ? "Use a wallet app instead" : "Use a browser wallet instead"}
+              walletLabel={wc ? "Use a wallet app" : "Use a browser wallet"}
             />
           </ClientOnly>
           <button

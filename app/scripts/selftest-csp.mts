@@ -103,4 +103,10 @@ assert.ok(
 assert.ok(config.indexOf("CSP_APP_ENFORCED }") > config.indexOf("frame-ancestors 'none'; base-uri"), "after the framing policy, so it replaces it on /app");
 n += 5;
 
+// Continue with Google: the token goes to Turnkey's authproxy (allowed); Google itself is
+// only ever a popup window, so the enforced policy names no Google host.
+assert.ok(allowed("https://authproxy.turnkey.com/v1/oauth_login"), "Google's token reaches Turnkey");
+assert.ok(!/google/i.test(CSP_APP_ENFORCED), "no Google host to load scripts or frames from");
+n += 2;
+
 console.log(`csp: ${n} passed`);

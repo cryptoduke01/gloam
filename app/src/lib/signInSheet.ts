@@ -82,10 +82,13 @@ export type SignInErrorKind =
   | "cancelled"
   | "no-account"
   | "not-ready"
+  | "popup-blocked"
+  | "unavailable"
+  | "timeout"
   | "network"
   | "unknown";
 
-export type SignInDuring = "send" | "verify" | "passkey-login" | "passkey-signup";
+export type SignInDuring = "send" | "verify" | "passkey-login" | "passkey-signup" | "google";
 
 /** `during`: what was being tried, so the sheet shows the words next to that control. */
 export type SignInError = { kind: SignInErrorKind; text: string; during: SignInDuring };
@@ -128,6 +131,15 @@ export function signInErrorKind(e: unknown, during: SignInDuring): SignInErrorKi
     /\b429\b|rate.?limit|too many requests|resource.?exhausted|max(imum)? number of otps/i.test(text)
   )
     return "rate-limit";
+  if (during === "google") {
+    // the kit's own words for its Google window (react-wallet-kit 2.2.0, handleGoogleOauth)
+    if (/window was closed|popup.*closed|closed.*popup/i.test(text)) return "cancelled";
+    if (/failed to open|popup.*blocked|blocked.*popup/i.test(text)) return "popup-blocked";
+    if (/client id is not configured|redirect uri is not configured/i.test(text) || has("AUTH_METHOD_NOT_ENABLED", "FEATURE_NOT_ENABLED"))
+      return "unavailable";
+    if (/timed? ?out/i.test(text) && !has("NETWORK_ERROR")) return "timeout";
+    if (/access_denied|consent/i.test(text)) return "cancelled";
+  }
   if (has("SELECT_PASSKEY_CANCELLED", "USER_CANCELED") || /NotAllowedError|AbortError|not allowed|cancel/i.test(text)) return "cancelled";
   if (during === "passkey-login" && /not found|no (sub-?)?organi[sz]ation|no user|could not find|unknown credential/i.test(text)) return "no-account";
   if (has("CLIENT_NOT_INITIALIZED", "CONFIG_NOT_INITIALIZED", "INVALID_CONFIGURATION")) return "not-ready";
@@ -159,9 +171,17 @@ export function signInErrorText(kind: SignInErrorKind, during: SignInDuring): st
         ? "Too many codes sent to this email. Wait a few minutes, then try again."
         : "Too many tries. Wait a few minutes, then try again.";
     case "cancelled":
-      return during === "passkey-signup"
-        ? "The passkey prompt closed. Nothing was made."
-        : "The passkey prompt closed. Try again when you're ready.";
+      return during === "google"
+        ? "The Google window closed. Try again when you're ready."
+        : during === "passkey-signup"
+          ? "The passkey prompt closed. Nothing was made."
+          : "The passkey prompt closed. Try again when you're ready.";
+    case "popup-blocked":
+      return "Your browser blocked the Google window. Allow pop-ups for this site, then try again.";
+    case "unavailable":
+      return "Google sign-in isn't set up here yet. Use your email or a passkey.";
+    case "timeout":
+      return "Google sign-in took too long. Try again.";
     case "no-account":
       return "No Gloam account uses that passkey. Create one, or continue with your email.";
     case "not-ready":
@@ -173,9 +193,11 @@ export function signInErrorText(kind: SignInErrorKind, during: SignInDuring): st
         ? "Couldn't send a code. Try again."
         : during === "verify"
           ? "Couldn't sign you in. Try again."
-          : during === "passkey-login"
-            ? "Couldn't sign in with that passkey. Try again."
-            : "Couldn't create a passkey. Try again.";
+          : during === "google"
+            ? "Couldn't sign you in with Google. Try again."
+            : during === "passkey-login"
+              ? "Couldn't sign in with that passkey. Try again."
+              : "Couldn't create a passkey. Try again.";
   }
 }
 
@@ -187,14 +209,21 @@ export function needsNewCode(kind: SignInErrorKind | undefined): boolean {
 /* ---------------------------------------------------------------- steps */
 
 /**
- * - start: the email field and the passkey buttons. `busy` while a code is on its
- *   way or a passkey prompt is open.
+ * - start: the email field, then Google and Passkey. `busy` while a code is on
+ *   its way, the passkey prompt is open, or the Google window is.
+ * - passkey: a passkey sign-in that found nothing (closed, or no account for it).
+ *   It offers to create a passkey, or to try again. `busy` while a prompt is open.
  * - code: the code sent to `email`. `busy` while it is checked or a new one is sent.
  */
 export type SignInState =
   | {
       kind: "start";
-      busy: null | "send" | "passkey-login" | "passkey-signup";
+      busy: null | "send" | "passkey-login" | "google";
+      error: SignInError | null;
+    }
+  | {
+      kind: "passkey";
+      busy: null | "passkey-login" | "passkey-signup";
       error: SignInError | null;
     }
   | {
@@ -218,9 +247,20 @@ export type SignInAction =
   | { type: "verifyFailed"; error: SignInError }
   | { type: "passkey"; mode: "login" | "signup" }
   | { type: "passkeyFailed"; error: SignInError }
+  | { type: "google" }
+  | { type: "googleFailed"; error: SignInError }
   | { type: "back" };
 
 export const SIGN_IN_START: SignInState = { kind: "start", busy: null, error: null };
+
+/**
+ * A passkey sign-in that ends on the passkey step's offer to create one: the prompt
+ * closed (which is also what a browser with no passkey for this site gives) or the
+ * passkey belongs to no account. Anything else (network, rate limit) says so where it was.
+ */
+export function offersPasskeyCreate(kind: SignInErrorKind): boolean {
+  return kind === "cancelled" || kind === "no-account" || kind === "unknown";
+}
 
 export function signInReducer(s: SignInState, a: SignInAction): SignInState {
   switch (a.type) {
@@ -246,14 +286,22 @@ export function signInReducer(s: SignInState, a: SignInAction): SignInState {
     case "verifyFailed":
       return s.kind === "code" ? { ...s, busy: null, error: a.error } : s;
     case "passkey":
-      return s.kind === "start" && !s.busy
-        ? { kind: "start", busy: a.mode === "login" ? "passkey-login" : "passkey-signup", error: null }
-        : s;
+      // the first step only signs in; making a passkey is offered on the passkey step
+      if (s.kind === "start" && !s.busy && a.mode === "login") return { kind: "start", busy: "passkey-login", error: null };
+      if (s.kind === "passkey" && !s.busy) return { kind: "passkey", busy: a.mode === "login" ? "passkey-login" : "passkey-signup", error: null };
+      return s;
     case "passkeyFailed":
-      return s.kind === "start" ? { kind: "start", busy: null, error: a.error } : s;
+      if (s.kind === "start" && s.busy === "passkey-login")
+        return offersPasskeyCreate(a.error.kind) ? { kind: "passkey", busy: null, error: a.error } : { kind: "start", busy: null, error: a.error };
+      if (s.kind === "passkey" && s.busy) return { kind: "passkey", busy: null, error: a.error };
+      return s;
+    case "google":
+      return s.kind === "start" && !s.busy ? { kind: "start", busy: "google", error: null } : s;
+    case "googleFailed":
+      return s.kind === "start" && s.busy === "google" ? { kind: "start", busy: null, error: a.error } : s;
     case "back":
-      // a code being checked can't be walked away from mid-way
-      if (s.kind === "code" && s.busy === "verify") return s;
+      // a code being checked, or a passkey prompt that is open, can't be walked away from mid-way
+      if (!canClose(s)) return s;
       return SIGN_IN_START;
   }
 }
@@ -264,7 +312,10 @@ export function canResend(s: SignInState, now: number): boolean {
   return needsNewCode(s.error?.kind) || resendSecondsLeft(s.sentAt, now) === 0;
 }
 
-/** The sheet can be closed: not while a code is checked or a passkey prompt is open. */
+/**
+ * The sheet can be closed: not while a code is checked or a passkey prompt is open.
+ * The Google window can be left open: if it finishes, the sign-in still lands.
+ */
 export function canClose(s: SignInState): boolean {
   if (s.kind === "code") return s.busy !== "verify";
   return s.busy !== "passkey-login" && s.busy !== "passkey-signup";

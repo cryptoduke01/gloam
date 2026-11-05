@@ -17,6 +17,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { AuthState, ClientState, OtpType, useTurnkey } from "@turnkey/react-wallet-kit";
 import { Mark } from "@/components/Logo";
 import { useModalFocus } from "@/hooks/useModalFocus";
+import { TURNKEY_GOOGLE_CLIENT_ID } from "@/lib/embeddedWallet";
 import { onSignInSheetRequest, type SignInSheetOptions } from "@/lib/turnkeyBridge";
 import {
   SIGN_IN_START,
@@ -26,6 +27,7 @@ import {
   cleanOtp,
   emailProblem,
   needsNewCode,
+  offersPasskeyCreate,
   otpAfterPaste,
   otpComplete,
   otpFormat,
@@ -47,7 +49,9 @@ const noopSubscribe = () => () => {};
  * Every call goes through the kit's auth-proxy methods, so sign-up needs no
  * backend: initOtp and completeOtp for the email code (completeOtp signs in an
  * email that has an account and makes one for an email that doesn't),
- * loginWithPasskey and signUpWithPasskey for a passkey. Once one succeeds the kit
+ * loginWithPasskey and signUpWithPasskey for a passkey, handleGoogleOauth for
+ * Google (shown only with NEXT_PUBLIC_TURNKEY_GOOGLE_CLIENT_ID set and Google on in
+ * the auth proxy config; always a popup window, DEPLOY-TURNKEY.md). Once one succeeds the kit
  * holds the session and the sheet closes; what follows (the wallet list, the
  * Create wallet sheet, the wagmi connector) is unchanged.
  */
@@ -107,8 +111,15 @@ function LiveSheet({
   onUseWallet?: () => void;
   walletLabel?: string;
 }) {
-  const { clientState, config, initOtp, completeOtp, loginWithPasskey, signUpWithPasskey } = useTurnkey();
+  const { clientState, config, initOtp, completeOtp, loginWithPasskey, signUpWithPasskey, handleGoogleOauth } = useTurnkey();
   const format = otpFormat(config?.auth);
+  // Google: its client ID is set for this build, and the auth proxy config hasn't turned it off
+  const googleOff = config?.ui?.authModal?.methods?.googleOauthEnabled === false;
+  const google = Boolean(TURNKEY_GOOGLE_CLIENT_ID) && !googleOff;
+  useEffect(() => {
+    if (TURNKEY_GOOGLE_CLIENT_ID && googleOff)
+      console.warn("[Gloam] Google sign-in is hidden: turn Google on in the Turnkey auth proxy config (DEPLOY-TURNKEY.md).");
+  }, [googleOff]);
   const [state, dispatch] = useReducer(signInReducer, SIGN_IN_START);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -170,8 +181,23 @@ function LiveSheet({
     }
   }
 
+  async function continueWithGoogle() {
+    if (state.kind !== "start" || state.busy || !google) return;
+    dispatch({ type: "google" });
+    try {
+      // Always a window, phones included: Google returns it to this origin's root, which
+      // doesn't run the kit, so the whole-page flow (the kit's default on phones) could
+      // never finish there. The page that opened the window reads the token and closes it.
+      await handleGoogleOauth({ openInPage: false });
+      if (live.current) onClose();
+    } catch (e) {
+      if (!live.current) return;
+      dispatch({ type: "googleFailed", error: signInError(e, "google") });
+    }
+  }
+
   async function passkey(mode: "login" | "signup") {
-    if (state.kind !== "start" || state.busy) return;
+    if ((state.kind !== "start" && state.kind !== "passkey") || state.busy) return;
     dispatch({ type: "passkey", mode });
     try {
       if (mode === "login") await loginWithPasskey();
@@ -208,6 +234,8 @@ function LiveSheet({
         dispatch({ type: "back" });
       }}
       onPasskey={(mode) => void passkey(mode)}
+      google={google}
+      onGoogle={() => void continueWithGoogle()}
       onUseWallet={onUseWallet}
       walletLabel={walletLabel}
       onClose={close}
@@ -234,8 +262,10 @@ export function SignInSheetView({
   onResend,
   onBack,
   onPasskey,
+  google,
+  onGoogle,
   onUseWallet,
-  walletLabel = "Use a browser wallet instead",
+  walletLabel = "Use a browser wallet",
   onClose,
 }: {
   state: SignInState;
@@ -252,7 +282,10 @@ export function SignInSheetView({
   onResend: () => void;
   onBack: () => void;
   onPasskey: (mode: "login" | "signup") => void;
-  /** The opener's own wallet connect: shown as a link on the first step. */
+  /** Continue with Google is set up here. */
+  google: boolean;
+  onGoogle: () => void;
+  /** The opener's own wallet connect: a quiet link in the footer. */
   onUseWallet?: () => void;
   walletLabel?: string;
   onClose: () => void;
@@ -308,7 +341,7 @@ export function SignInSheetView({
         transition={{ duration: 0.2 }}
       />
       <motion.div
-        className="relative z-[1] max-h-[92dvh] w-full max-w-[420px] overflow-y-auto rounded-t-[24px] bg-panel px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-6 shadow-pop sm:rounded-[24px] sm:px-8 sm:pb-6 sm:pt-8"
+        className="relative z-[1] max-h-[92dvh] w-full max-w-[420px] overflow-y-auto rounded-t-[24px] bg-panel px-6 pb-[max(18px,env(safe-area-inset-bottom))] pt-6 shadow-pop sm:rounded-[24px] sm:px-7 sm:pb-5 sm:pt-7"
         initial={reduce ? false : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 420, damping: 36 }}
@@ -335,9 +368,11 @@ export function SignInSheetView({
             emailField={emailField}
             onSubmitEmail={onSubmitEmail}
             onPasskey={onPasskey}
-            onUseWallet={onUseWallet}
-            walletLabel={walletLabel}
+            google={google}
+            onGoogle={onGoogle}
           />
+        ) : state.kind === "passkey" ? (
+          <PasskeyStep state={state} onPasskey={onPasskey} onBack={onBack} />
         ) : (
           <CodeStep
             state={state}
@@ -352,24 +387,41 @@ export function SignInSheetView({
           />
         )}
 
-        <p className="mt-7 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-line pt-4 text-[12px] text-faint">
-          <span className="inline-flex items-center gap-1.5">
+        <p className="mt-6 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[11.5px] text-faint">
+          <span className="inline-flex items-center gap-1">
             <ShieldGlyph />
             Secured by Turnkey
           </span>
-          <span aria-hidden>·</span>
-          <Link href="/terms" target="_blank" rel="noopener" className="underline-offset-2 transition-colors hover:text-foreground hover:underline">
+          <Dot />
+          <Link href="/terms" target="_blank" rel="noopener" className={FOOT_LINK}>
             Terms
           </Link>
-          <span aria-hidden>·</span>
-          <Link href="/privacy" target="_blank" rel="noopener" className="underline-offset-2 transition-colors hover:text-foreground hover:underline">
+          <Dot />
+          <Link href="/privacy" target="_blank" rel="noopener" className={FOOT_LINK}>
             Privacy
           </Link>
+          {onUseWallet && (
+            <>
+              {/* on a phone the link takes its own line, with no dot left hanging */}
+              <span aria-hidden className="hidden sm:inline">
+                ·
+              </span>
+              <button type="button" onClick={onUseWallet} disabled={!closable} className={`${FOOT_LINK} w-full disabled:opacity-50 sm:w-auto`}>
+                {walletLabel}
+              </button>
+            </>
+          )}
         </p>
       </motion.div>
     </div>,
     document.body
   );
+}
+
+const FOOT_LINK = "rounded underline-offset-2 transition-colors hover:text-foreground hover:underline";
+
+function Dot() {
+  return <span aria-hidden>·</span>;
 }
 
 function StartStep({
@@ -381,8 +433,8 @@ function StartStep({
   emailField,
   onSubmitEmail,
   onPasskey,
-  onUseWallet,
-  walletLabel,
+  google,
+  onGoogle,
 }: {
   state: Extract<SignInState, { kind: "start" }>;
   clientState: "starting" | "ready" | "error";
@@ -392,40 +444,40 @@ function StartStep({
   emailField: RefObject<HTMLInputElement | null>;
   onSubmitEmail: () => void;
   onPasskey: (mode: "login" | "signup") => void;
-  onUseWallet?: () => void;
-  walletLabel: string;
+  google: boolean;
+  onGoogle: () => void;
 }) {
   const ready = clientState === "ready";
   const busy = state.busy;
-  const passkeyBusy = busy === "passkey-login" || busy === "passkey-signup";
   const sendError = state.error?.during === "send" ? state.error : null;
-  const passkeyError = state.error && state.error.during !== "send" ? state.error : null;
+  const otherError = state.error && !sendError ? state.error : null;
+  const fieldError = emailError ?? sendError?.text ?? null;
 
   return (
     <div>
-      <Mark size={40} />
-      <h2 id="gs-title" className="mt-5 text-[22px] font-medium tracking-[-0.015em] text-foreground">
+      <Mark size={32} />
+      <h2 id="gs-title" className="mt-4 text-[21px] font-medium tracking-[-0.015em] text-foreground">
         Sign in to Gloam
       </h2>
-      <p id="gs-sub" className="mt-1 text-[14px] leading-relaxed text-mute">
+      <p id="gs-sub" className="mt-0.5 text-[14px] text-mute">
         Email or passkey. No seed phrase.
       </p>
 
       {clientState === "error" ? (
-        <p role="alert" className="mt-6 text-[13.5px] leading-relaxed text-danger">
+        <p role="alert" className="mt-5 text-[13.5px] leading-relaxed text-danger">
           Email and passkey sign-in isn&apos;t available here right now. Close this and connect a wallet instead.
         </p>
       ) : (
         <>
           <form
-            className="mt-6"
+            className="mt-5"
             noValidate
             onSubmit={(e: FormEvent) => {
               e.preventDefault();
               if (ready && !busy) onSubmitEmail();
             }}
           >
-            <label htmlFor="gs-email" className="block text-[13px] text-mute">
+            <label htmlFor="gs-email" className="sr-only">
               Email
             </label>
             <input
@@ -438,75 +490,122 @@ function StartStep({
               autoCorrect="off"
               spellCheck={false}
               placeholder="you@example.com"
-              className="gl-input mt-2"
+              className="gl-input"
               value={email}
               disabled={busy === "send"}
               onChange={(e) => onEmail(e.target.value)}
-              aria-invalid={Boolean(emailError || sendError)}
-              aria-describedby={emailError || sendError ? "gs-email-error" : undefined}
+              aria-invalid={Boolean(fieldError)}
+              aria-describedby={fieldError ? "gs-email-error" : undefined}
             />
-            {(emailError || sendError) && (
-              <p id="gs-email-error" role="alert" className="mt-2 text-[12.5px] leading-relaxed text-danger">
-                {emailError ?? sendError?.text}
+            {fieldError && (
+              <p id="gs-email-error" role="alert" className="mt-1.5 text-[12.5px] leading-snug text-danger">
+                {fieldError}
               </p>
             )}
-            <button type="submit" disabled={!ready || busy !== null} className="btn btn-ink btn-lg btn-block mt-4">
+            <button type="submit" disabled={!ready || busy !== null} className="btn btn-ink btn-lg btn-block mt-2.5">
               {busy === "send" ? "Sending code…" : "Continue"}
             </button>
           </form>
 
-          <div className="my-5 flex items-center gap-3 text-[12px] text-faint" aria-hidden>
+          <div className="my-4 flex items-center gap-3 text-[12px] text-faint" aria-hidden>
             <span className="h-px flex-1 bg-line" />
             or
             <span className="h-px flex-1 bg-line" />
           </div>
 
-          <button
-            type="button"
-            onClick={() => onPasskey("login")}
-            disabled={!ready || busy !== null}
-            className="btn btn-ghost btn-lg btn-block"
-          >
-            <KeyGlyph />
-            {passkeyBusy ? "Check your passkey…" : "Use a passkey"}
-          </button>
-          <p className="mt-3 text-center text-[13px] text-mute">
-            New here?{" "}
+          <div className={`grid gap-2 ${google ? "grid-cols-2" : "grid-cols-1"}`}>
+            {google && (
+              <button
+                type="button"
+                onClick={onGoogle}
+                disabled={!ready || busy !== null}
+                aria-label="Continue with Google"
+                className="btn btn-ghost btn-lg btn-block px-3"
+              >
+                <GoogleGlyph />
+                {busy === "google" ? "Opening…" : "Google"}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => onPasskey("signup")}
+              onClick={() => onPasskey("login")}
               disabled={!ready || busy !== null}
-              className="rounded text-foreground underline underline-offset-2 transition-opacity hover:opacity-80 disabled:opacity-50"
+              aria-label="Sign in with a passkey"
+              className="btn btn-ghost btn-lg btn-block px-3"
             >
-              Create a passkey
+              <KeyGlyph />
+              {busy === "passkey-login" ? "Waiting…" : "Passkey"}
             </button>
-          </p>
-          {passkeyError && (
-            <p role="alert" className="mt-3 text-center text-[12.5px] leading-relaxed text-danger">
-              {passkeyError.text}
+          </div>
+          {otherError && (
+            <p role="alert" className="mt-2.5 text-center text-[12.5px] leading-snug text-danger">
+              {otherError.text}
             </p>
           )}
           {!ready && (
-            <p role="status" className="mt-3 text-center text-[12.5px] text-mute">
+            <p role="status" className="mt-2.5 text-center text-[12.5px] text-mute">
               Getting sign-in ready…
             </p>
           )}
         </>
       )}
-      {onUseWallet && (
-        <div className="mt-5 text-center">
-          <button
-            type="button"
-            onClick={onUseWallet}
-            disabled={busy !== null && busy !== "send"}
-            className="gl-arrowlink disabled:opacity-50"
-          >
-            {walletLabel}
-            <ArrowGlyph />
-          </button>
-        </div>
-      )}
     </div>
+  );
+}
+
+/**
+ * A passkey sign-in that found nothing: most often there is no Gloam passkey on
+ * this device yet (the browser's prompt looks the same as a closed one), so the
+ * way on is to create one. Trying again stays here.
+ */
+function PasskeyStep({
+  state,
+  onPasskey,
+  onBack,
+}: {
+  state: Extract<SignInState, { kind: "passkey" }>;
+  onPasskey: (mode: "login" | "signup") => void;
+  onBack: () => void;
+}) {
+  const busy = state.busy;
+  // the words above already say what a closed prompt or an unknown passkey means
+  const error = state.error && !(state.error.during === "passkey-login" && offersPasskeyCreate(state.error.kind)) ? state.error : null;
+
+  return (
+    <div>
+      <BackButton onBack={onBack} disabled={busy !== null} />
+      <h2 id="gs-title" className="mt-3 text-[21px] font-medium tracking-[-0.015em] text-foreground">
+        No passkey found
+      </h2>
+      <p id="gs-sub" className="mt-0.5 text-[14px] leading-relaxed text-mute">
+        New to Gloam? Create a passkey. It stays on this device or in your password manager.
+      </p>
+      {error && (
+        <p role="alert" className="mt-3 text-[12.5px] leading-snug text-danger">
+          {error.text}
+        </p>
+      )}
+      <button type="button" onClick={() => onPasskey("signup")} disabled={busy !== null} className="btn btn-ink btn-lg btn-block mt-5">
+        {busy === "passkey-signup" ? "Waiting for your passkey…" : "Create a passkey"}
+      </button>
+      <button type="button" onClick={() => onPasskey("login")} disabled={busy !== null} className="btn btn-quiet btn-block mt-1.5">
+        {busy === "passkey-login" ? "Waiting…" : "I have one. Try again"}
+      </button>
+    </div>
+  );
+}
+
+function BackButton({ onBack, disabled }: { onBack: () => void; disabled: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      disabled={disabled}
+      className="-ml-2 -mt-1 inline-flex h-10 items-center gap-1 rounded-full pl-1.5 pr-3 text-[13.5px] text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-50"
+    >
+      <BackGlyph />
+      Back
+    </button>
   );
 }
 
@@ -540,24 +639,16 @@ function CodeStep({
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={onBack}
-        disabled={verifying}
-        className="-ml-2 -mt-1 inline-flex h-10 items-center gap-1 rounded-full pl-1.5 pr-3 text-[13.5px] text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-50"
-      >
-        <BackGlyph />
-        Back
-      </button>
-      <h2 id="gs-title" className="mt-4 text-[22px] font-medium tracking-[-0.015em] text-foreground">
+      <BackButton onBack={onBack} disabled={verifying} />
+      <h2 id="gs-title" className="mt-3 text-[21px] font-medium tracking-[-0.015em] text-foreground">
         Check your email
       </h2>
-      <p id="gs-sub" className="mt-1 text-[14px] leading-relaxed text-mute [overflow-wrap:anywhere]">
+      <p id="gs-sub" className="mt-0.5 text-[14px] leading-relaxed text-mute [overflow-wrap:anywhere]">
         Enter the {format.length}-{unit} code sent to <span className="text-foreground">{state.email}</span>
       </p>
 
       <form
-        className="mt-6"
+        className="mt-5"
         noValidate
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
@@ -613,26 +704,26 @@ function CodeStep({
         </div>
 
         {state.error ? (
-          <p id="gs-code-error" role="alert" className="mt-3 text-[12.5px] leading-relaxed text-danger">
+          <p id="gs-code-error" role="alert" className="mt-2 min-h-[1lh] text-[12.5px] leading-snug text-danger">
             {state.error.text}
           </p>
         ) : (
-          <p role="status" aria-live="polite" className="mt-3 min-h-[1lh] text-[12.5px] leading-relaxed text-mute">
+          <p role="status" aria-live="polite" className="mt-2 min-h-[1lh] text-[12.5px] leading-snug text-mute">
             {verifying ? "Signing you in…" : state.resent && state.busy === null ? "A new code is on its way." : ""}
           </p>
         )}
 
-        <button type="submit" disabled={verifying || !otpComplete(code, format) || spent} className="btn btn-ink btn-lg btn-block mt-4">
+        <button type="submit" disabled={verifying || !otpComplete(code, format) || spent} className="btn btn-ink btn-lg btn-block mt-2.5">
           {verifying ? "Signing in…" : "Continue"}
         </button>
       </form>
 
-      <div className="mt-3 flex flex-col items-stretch gap-1">
-        <button type="button" onClick={onResend} disabled={!resendOpen} className="btn btn-quiet btn-block">
-          {state.busy === "resend" ? "Sending…" : resendOpen ? (spent ? "Send a new code" : "Resend code") : `Resend code in ${wait}s`}
+      <div className="mt-1.5 grid grid-cols-2 gap-1">
+        <button type="button" onClick={onResend} disabled={!resendOpen} className="btn btn-quiet btn-sm">
+          {state.busy === "resend" ? "Sending…" : resendOpen ? (spent ? "Send a new code" : "Resend code") : `Resend in ${wait}s`}
         </button>
-        <button type="button" onClick={onBack} disabled={verifying} className="btn btn-quiet btn-block text-mute">
-          Use a different email
+        <button type="button" onClick={onBack} disabled={verifying} className="btn btn-quiet btn-sm text-mute">
+          Different email
         </button>
       </div>
     </div>
@@ -647,14 +738,6 @@ function BackGlyph() {
   );
 }
 
-function ArrowGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden >
-      <path d="M5 12h14m-5-6 6 6-6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function KeyGlyph() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -664,9 +747,21 @@ function KeyGlyph() {
   );
 }
 
+/** Google's "G", in its own colours, as Google's sign-in branding asks. */
+function GoogleGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+    </svg>
+  );
+}
+
 function ShieldGlyph() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M12 3.5 5 6.2v5.3c0 4.3 2.9 7.7 7 9 4.1-1.3 7-4.7 7-9V6.2L12 3.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   );

@@ -8,6 +8,9 @@
  *    full-width digits read, cut to length, the length from the auth proxy config
  *  - the email check, and the email kept as typed (trimmed, never lowercased)
  *  - resend: a 30 second wait, open at once for a spent code, restarted by a rate limit
+ *  - Passkey signs in first and offers to create one when it finds none
+ *  - Google: one window at a time, plain words for a closed or blocked window, the
+ *    client ID switch, and the origin Google returns its window to
  *  - failures read in plain words, never the SDK's own text
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-signin-sheet.mts
@@ -23,6 +26,7 @@ import {
   cleanOtp,
   emailProblem,
   needsNewCode,
+  offersPasskeyCreate,
   otpAfterPaste,
   otpComplete,
   otpFormat,
@@ -32,6 +36,7 @@ import {
   signInReducer,
   type SignInState,
 } from "../src/lib/signInSheet";
+import { googleClientIdFrom, oauthRedirectFor } from "../src/lib/embeddedWallet";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -97,15 +102,85 @@ test("checking a code: busy, then a wrong code says so and lets them retype", ()
   assert.equal(signInReducer(s, { type: "verify" }).error, null);
 });
 
-test("a passkey prompt holds the sheet open until it ends", () => {
-  const s = signInReducer(SIGN_IN_START, { type: "passkey", mode: "signup" });
-  assert.equal(s.kind === "start" && s.busy, "passkey-signup");
-  assert.equal(canClose(s), false);
-  const f = signInReducer(s, { type: "passkeyFailed", error: signInError(new DOMException("The operation either timed out or was not allowed.", "NotAllowedError"), "passkey-signup") });
-  assert.equal(f.error?.kind, "cancelled");
-  assert.equal(f.error?.text, "The passkey prompt closed. Nothing was made.");
-  assert.equal(canClose(f), true);
-  assert.equal(canClose(SIGN_IN_START), true);
+test("Passkey signs in first; finding nothing offers to create one", () => {
+  const cancelled = () => signInError(new DOMException("The operation either timed out or was not allowed.", "NotAllowedError"), "passkey-login");
+  // the first step never makes a passkey by itself
+  assert.equal(signInReducer(SIGN_IN_START, { type: "passkey", mode: "signup" }), SIGN_IN_START);
+  const trying = signInReducer(SIGN_IN_START, { type: "passkey", mode: "login" });
+  assert.ok(trying.kind === "start" && trying.busy === "passkey-login");
+  assert.equal(canClose(trying), false, "no closing while the prompt is open");
+  assert.equal(signInReducer(trying, { type: "back" }), trying);
+  // closed, or no passkey on this device (the same to the page): the passkey step
+  const offer = signInReducer(trying, { type: "passkeyFailed", error: cancelled() });
+  assert.ok(offer.kind === "passkey" && offer.busy === null && offer.error?.kind === "cancelled");
+  assert.equal(canClose(offer), true);
+  const noAccount = signInReducer(trying, { type: "passkeyFailed", error: signInError(new Error("organization not found"), "passkey-login") });
+  assert.equal(noAccount.kind, "passkey");
+  // a network failure says so on the first step instead
+  const offline = signInReducer(trying, { type: "passkeyFailed", error: signInError(new TypeError("Failed to fetch"), "passkey-login") });
+  assert.ok(offline.kind === "start" && offline.error?.kind === "network");
+  assert.ok(offersPasskeyCreate("cancelled") && offersPasskeyCreate("no-account") && !offersPasskeyCreate("network") && !offersPasskeyCreate("rate-limit"));
+  // on the passkey step: create, or try again
+  const creating = signInReducer(offer, { type: "passkey", mode: "signup" });
+  assert.ok(creating.kind === "passkey" && creating.busy === "passkey-signup");
+  assert.equal(canClose(creating), false);
+  const closed = signInReducer(creating, {
+    type: "passkeyFailed",
+    error: signInError(Object.assign(new Error("Passkey creation was cancelled by the user."), { code: "SELECT_PASSKEY_CANCELLED" }), "passkey-signup"),
+  });
+  assert.ok(closed.kind === "passkey" && closed.error?.text === "The passkey prompt closed. Nothing was made.");
+  const again = signInReducer(closed, { type: "passkey", mode: "login" });
+  assert.ok(again.kind === "passkey" && again.busy === "passkey-login");
+  assert.deepEqual(signInReducer(closed, { type: "back" }), SIGN_IN_START);
+});
+
+test("Google: one window at a time, and a failure says why on the first step", () => {
+  const g = signInReducer(SIGN_IN_START, { type: "google" });
+  assert.ok(g.kind === "start" && g.busy === "google");
+  assert.equal(signInReducer(g, { type: "google" }), g);
+  assert.equal(signInReducer(g, { type: "send" }), g, "no email code while Google is open");
+  assert.equal(canClose(g), true, "the sheet can close: a finished Google window still signs in");
+  const closed = signInReducer(g, { type: "googleFailed", error: signInError(new Error("Authentication window was closed."), "google") });
+  assert.ok(closed.kind === "start" && closed.busy === null && closed.error?.kind === "cancelled");
+  assert.equal(closed.error?.text, "The Google window closed. Try again when you're ready.");
+  // a stray answer after Back changes nothing
+  assert.deepEqual(signInReducer(SIGN_IN_START, { type: "googleFailed", error: closed.error! }), SIGN_IN_START);
+});
+
+test("Google failures read in plain words", () => {
+  const k = (e: unknown) => signInErrorKind(e, "google");
+  const wrap = (cause: unknown) => Object.assign(new Error("Failed to complete OAuth"), { name: "TurnkeyError", code: "OAUTH_LOGIN_ERROR", cause });
+  assert.equal(k(new Error("Authentication window was closed.")), "cancelled");
+  assert.equal(k(wrap(new Error("Authentication window was closed."))), "cancelled");
+  assert.equal(k(new Error("Failed to open Google login window.")), "popup-blocked");
+  assert.match(signInError(new Error("Failed to open Google login window."), "google").text, /blocked the Google window/);
+  assert.equal(k(Object.assign(new Error("Google Client ID is not configured."), { code: "INVALID_CONFIGURATION" })), "unavailable");
+  assert.equal(k(new Error("OAuth Redirect URI is not configured.")), "unavailable");
+  assert.equal(k(new Error("Authentication timed out.")), "timeout");
+  assert.equal(k(new TypeError("Failed to fetch")), "network");
+  assert.equal(k(new Error("boom")), "unknown");
+  assert.equal(signInError(new Error("boom"), "google").text, "Couldn't sign you in with Google. Try again.");
+  // the same words outside Google stay what they were
+  assert.equal(signInErrorKind(new Error("Failed to open Google login window."), "send"), "unknown");
+});
+
+test("Google's client ID turns the button on, and Google returns its window to this origin", () => {
+  assert.equal(googleClientIdFrom({}), "");
+  assert.equal(googleClientIdFrom({ googleClientId: "  " }), "");
+  assert.equal(googleClientIdFrom({ googleClientId: "not-a-client-id" }), "");
+  assert.equal(googleClientIdFrom({ googleClientId: "GOCSPX-secret" }), "", "a client secret is never taken for the ID");
+  const id = "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com";
+  assert.equal(googleClientIdFrom({ googleClientId: ` ${id} ` }), id);
+  const live = "311220231992-4k897gu7d074ls84vrh2i1q47t26u5a8.apps.googleusercontent.com";
+  assert.equal(googleClientIdFrom({ googleClientId: live }), live, "the production client ID");
+  // each origin sends Google's window back to itself, exactly as registered: no path, no trailing slash
+  assert.equal(oauthRedirectFor("https://www.gloam.trade"), "https://www.gloam.trade");
+  assert.equal(oauthRedirectFor("https://gloam.trade/"), "https://gloam.trade");
+  assert.equal(oauthRedirectFor("http://localhost:3000"), "http://localhost:3000");
+  assert.equal(
+    oauthRedirectFor("https://gloam-trade-git-feat-gloam-signin-sheet-duke-s-team.vercel.app"),
+    "https://gloam-trade-git-feat-gloam-signin-sheet-duke-s-team.vercel.app",
+  );
 });
 
 test("the code field keeps digits only, and a paste replaces the code", () => {
