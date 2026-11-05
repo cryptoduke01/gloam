@@ -8,6 +8,7 @@ import {
   onEmbeddedNeedsWallet,
   onEmbeddedSignerState,
   openEmbeddedSheet,
+  openSignInSheet,
   retryEmbeddedSigner,
   signOutEmbedded,
 } from "@/lib/turnkeyBridge";
@@ -16,7 +17,9 @@ import {
  * Email or passkey sign-in for a Gloam wallet, sized by `className` for where it
  * sits (sidebar block, top-bar pill, or inline form button).
  *
- * - Signed out: Sign in, which opens Turnkey's email and passkey sheet.
+ * - Signed out: Sign in, which opens Gloam's email and passkey sheet
+ *   (GloamSignInSheet). `onUseWallet` is the browser-wallet connect beside it,
+ *   offered from inside the sheet too.
  * - Signed in with no wallet yet: Create wallet, which opens the create sheet,
  *   with Sign out beside it.
  * - Signed in with a wallet: a moment while the wallet connects, with Sign out
@@ -29,16 +32,20 @@ export function TurnkeyHeaderSignIn({
   className = "btn btn-ink btn-sm",
   quietClassName = "text-[13px] text-mute transition-colors hover:text-foreground",
   fallback = null,
+  onUseWallet,
+  walletLabel,
 }: {
   className?: string;
   /** The look of the small Sign out next to a wallet that is still opening. */
   quietClassName?: string;
   fallback?: ReactNode;
+  /** The browser-wallet connect next to this button, offered inside the sheet as well. */
+  onUseWallet?: () => void;
+  walletLabel?: string;
 } = {}) {
-  const { authState, clientState, handleLogin } = useTurnkey();
+  const { authState, clientState } = useTurnkey();
   const needsWallet = useSyncExternalStore(onEmbeddedNeedsWallet, embeddedNeedsWallet, () => false);
   const signer = useSyncExternalStore(onEmbeddedSignerState, embeddedSignerState, () => "idle" as const);
-  const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
   if (clientState === ClientState.Error) return <>{fallback}</>;
@@ -92,23 +99,15 @@ export function TurnkeyHeaderSignIn({
   return (
     <button
       type="button"
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
+      onClick={() => {
         void import("@/lib/track").then(({ track }) => {
           track("wallet_connect_click", { method: "gloam_wallet" });
         });
-        try {
-          await handleLogin();
-        } catch (e) {
-          console.warn("[Gloam] Sign-in sheet didn't open:", e);
-        } finally {
-          setBusy(false);
-        }
+        if (!openSignInSheet({ onUseWallet, walletLabel })) console.warn("[Gloam] The sign-in sheet isn't mounted here.");
       }}
       className={className}
     >
-      {busy ? "Opening…" : "Sign in"}
+      Sign in
     </button>
   );
 }

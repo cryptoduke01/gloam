@@ -237,6 +237,8 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
                 compact ? "h-9 px-1" : "h-9 w-full rounded-full hover:bg-surface"
               }`}
               fallback={plainConnect}
+              onUseWallet={canUseWallet ? openWallet : undefined}
+              walletLabel={wc ? "Use a wallet app" : "Use a browser wallet"}
             />
           </ClientOnly>
           <button
