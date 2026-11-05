@@ -44,6 +44,7 @@ import { RecoverySettingsCard } from "./RecoveryPanel";
 import { restoreMessage } from "@/lib/restoreMessage";
 import { embeddedSignInEmail, onEmbeddedSignInEmail } from "@/lib/turnkeyBridge";
 import { subscribeToUpdates, unsubscribeFromUpdates } from "@/lib/updatesClient";
+import { BusyLabel } from "@/components/ui/Spinner";
 
 /* ------------------------------------------------------------ primitives */
 
@@ -244,16 +245,17 @@ function UpdatesCard() {
           value={email}
           onChange={(e) => setTyped(e.target.value)}
         />
-        <button type="submit" disabled={busy !== null || !email.trim()} className="btn btn-ink btn-sm h-10">
-          {busy === "in" ? "Saving…" : "Subscribe"}
+        <button type="submit" disabled={busy !== null || !email.trim()} aria-busy={busy === "in"} className="btn btn-ink btn-sm h-10">
+          <BusyLabel busy={busy === "in"}>Subscribe</BusyLabel>
         </button>
         <button
           type="button"
           disabled={busy !== null || !email.trim()}
           onClick={() => void run("out")}
+          aria-busy={busy === "out"}
           className="btn btn-quiet btn-sm h-10 text-mute"
         >
-          {busy === "out" ? "Removing…" : "Unsubscribe"}
+          <BusyLabel busy={busy === "out"}>Unsubscribe</BusyLabel>
         </button>
       </form>
       {msg && <Status>{msg}</Status>}

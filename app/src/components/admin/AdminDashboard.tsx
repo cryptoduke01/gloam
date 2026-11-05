@@ -12,6 +12,7 @@ import {
 import { Logo } from "@/components/Logo";
 import { SealedField } from "@/components/ui/SealedField";
 import { HowItWorks } from "@/components/ui/HowItWorks";
+import { BusyLabel } from "@/components/ui/Spinner";
 import { shortAddress } from "@/lib/chain";
 import { MAINNET_ENABLED, NETWORK_KEYS, getNetwork, isNetworkKey, networkName, type GloamNetwork } from "@/lib/networks";
 import type { CreatorFees } from "@/lib/creatorFees";
@@ -1301,6 +1302,8 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
   const [data, setData] = useState<PartnersPayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  /** Which button of that row is saving, for its spinner. */
+  const [savingWhat, setSavingWhat] = useState<"relay" | "name" | "remove" | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -1311,6 +1314,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
   /** Removes an account for good (lib/partnerRemove), after the inline confirm. */
   const remove = async (p: AdminPartner) => {
     setSaving(p.id);
+    setSavingWhat("remove");
     setSaveErr(null);
     setRemovedNote(null);
     try {
@@ -1348,6 +1352,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
   /** Approves an account for the relay's larger message budget, or its name to show in links, or takes either back. */
   const save = async (id: string, change: { relayApproved: boolean } | { approveName: boolean }) => {
     setSaving(id);
+    setSavingWhat("relayApproved" in change ? "relay" : "name");
     setSaveErr(null);
     try {
       const res = await fetch("/api/partners/admin", {
@@ -1421,10 +1426,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
   }
   if (!data) {
     return (
-      <p className="flex items-center gap-2.5 rounded-xl bg-surface px-4 py-3 text-[14px] text-mute" role="status">
-        <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
-        Loading partners
-      </p>
+      <PanelSkeleton label="Loading partners" />
     );
   }
   const openPartner = data.partners.find((p) => p.id === open) ?? null;
@@ -1488,7 +1490,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
                     onClick={() => void remove(p)}
                     className="rounded-full bg-danger px-3 py-1 text-[13px] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
-                    {saving === p.id ? "Removing" : "Remove for good"}
+                    <BusyLabel busy={saving === p.id && savingWhat === "remove"}>Remove for good</BusyLabel>
                   </button>
                   <button
                     type="button"
@@ -1523,7 +1525,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
                   className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong disabled:opacity-50"
                   title={`Show "${p.name}" in links as a Gloam partner. Check it is the partner's real name, not Gloam or another brand.`}
                 >
-                  Approve {p.name}
+                  <BusyLabel busy={saving === p.id && savingWhat === "name"}>Approve {p.name}</BusyLabel>
                 </button>
               ) : p.approvedName ? (
                 <button
@@ -1533,7 +1535,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
                   className="rounded-full border border-line px-3 py-1 text-[13px] text-mute transition-colors hover:border-line-strong disabled:opacity-50"
                   title="Stop showing this name in links. The account and its keys stay."
                 >
-                  Hide name
+                  <BusyLabel busy={saving === p.id && savingWhat === "name"}>Hide name</BusyLabel>
                 </button>
               ) : null}
             </span>,
@@ -1551,7 +1553,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
               className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong disabled:opacity-50"
               title={p.relayApproved ? "Their keys use the larger message budget. Click to take it back." : "Their keys share the small message budget. Click to approve."}
             >
-              {saving === p.id ? "Saving" : p.relayApproved ? "Approved" : "Approve"}
+              <BusyLabel busy={saving === p.id && savingWhat === "relay"}>{p.relayApproved ? "Approved" : "Approve"}</BusyLabel>
             </button>,
             n(p.totals?.privatePayments),
             n(p.totals?.cashOuts),
@@ -2025,10 +2027,7 @@ function UpdatesPanel() {
   }
   if (!data) {
     return (
-      <p className="flex items-center gap-2.5 rounded-xl bg-surface px-4 py-3 text-[14px] text-mute" role="status">
-        <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
-        Loading the updates list
-      </p>
+      <PanelSkeleton label="Loading the updates list" />
     );
   }
   return (
@@ -2342,6 +2341,21 @@ function RelayPanel({
         </>
       )}
     </>
+  );
+}
+
+/** Four figures and a panel, held in place while a tab's data loads. */
+function PanelSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status" aria-busy="true" className="space-y-3">
+      <span className="sr-only">{label}</span>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="gl-skeleton h-[104px] rounded-[16px] sm:h-[120px]" aria-hidden />
+        ))}
+      </div>
+      <div className="gl-skeleton h-[220px] rounded-[16px]" aria-hidden />
+    </div>
   );
 }
 

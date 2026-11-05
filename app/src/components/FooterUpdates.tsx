@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { subscribeToUpdates } from "@/lib/updatesClient";
+import { BusyLabel } from "./ui/Spinner";
 
 /**
  * "Get Gloam updates" in the site footer: one email field. Sends the email
@@ -53,8 +54,8 @@ export function FooterUpdates() {
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "footer-updates-err" : undefined}
         />
-        <button type="submit" disabled={sending} className="btn btn-ink btn-sm h-10 shrink-0">
-          {sending ? "Saving…" : "Subscribe"}
+        <button type="submit" disabled={sending} aria-busy={sending} className="btn btn-ink btn-sm h-10 shrink-0">
+          <BusyLabel busy={sending}>Subscribe</BusyLabel>
         </button>
       </div>
       {/* people never see this field; bots fill it */}
