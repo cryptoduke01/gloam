@@ -66,6 +66,25 @@ const FIRST_BLOCK = 101_022_464;
 
 export const VOTES: VoteConfig[] = [
   {
+    // DRAFT: not published. Publish only after MigrateFun's Robinhood Chain terms are confirmed
+    // (their fee, where the new pool lives, a permanent liquidity lock, what happens to unclaimed
+    // tokens, support for holders on fomo and in the Gloam vault) and Orynth has been told.
+    id: "gloam-migration",
+    published: false,
+    question: "Should $GLOAM move to a new pool?",
+    description:
+      "$GLOAM trades on its Orynth pool, where every trade pays a 2% fee and the liquidity is locked forever. A migration would swap every $GLOAM one for one into a new token on a new pool. The team will only migrate if holders vote yes.",
+    options: ["Stay on Orynth", "Migrate to a new pool"],
+    details: [
+      "Nothing changes: same token, same contract, same locked pool.",
+      "Holders swap old $GLOAM for new during a set window. Supply stays fixed, the new liquidity is locked forever, and anyone who misses the window can lose out, so it would be announced well ahead.",
+    ],
+    snapshotBlock: 0,
+    weighting: "close",
+    start: "2026-11-09T16:00:00Z",
+    end: "2026-11-12T23:00:00Z",
+  },
+  {
     id: "private-swaps-next",
     published: true,
     outcome: "Stablecoin swaps on Base and Ethereum are next. They run on the new swap router, which gets an outside review first.",
