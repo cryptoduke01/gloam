@@ -15,6 +15,7 @@ import {
 } from "@/lib/turnkeyBridge";
 import { PortalError, signInWithSigner } from "./client";
 import { shortAddr } from "./ui";
+import { Spinner } from "@/components/ui/Spinner";
 
 /** How many times the wallet list is read before saying it couldn't (as EmbeddedWalletFlow does). */
 const LIST_TRIES = 3;
@@ -200,7 +201,8 @@ export default function PartnerEmailSignIn({
 
   if (!signedIn) {
     return (
-      <button type="button" disabled={disabled || busy !== null || clientState !== ClientState.Ready} onClick={open} className={main}>
+      // Not held back while the kit starts: the sheet opens at once and says "Getting sign-in ready…".
+      <button type="button" disabled={disabled || busy !== null} onClick={open} className={main}>
         Sign in with email
       </button>
     );
@@ -209,7 +211,8 @@ export default function PartnerEmailSignIn({
   let body: React.ReactNode;
   if (step === "checking" || (step === "hidden" && signer !== "ready" && signer !== "failed")) {
     body = (
-      <button type="button" disabled className={main}>
+      <button type="button" disabled aria-busy="true" className={main}>
+        <Spinner />
         Opening your Gloam wallet…
       </button>
     );
@@ -226,7 +229,8 @@ export default function PartnerEmailSignIn({
     body = (
       <>
         <p className="text-[13px] text-mute">Signed in. Create your Gloam wallet to own the account. There is no seed phrase.</p>
-        <button type="button" disabled={creating || disabled} onClick={() => void create()} className="btn btn-ink btn-lg btn-block">
+        <button type="button" disabled={creating || disabled} onClick={() => void create()} aria-busy={creating} className="btn btn-ink btn-lg btn-block">
+          {creating && <Spinner />}
           {creating ? "Creating…" : step === "failed" ? "Try again" : "Create Gloam wallet"}
         </button>
         {createError && <p className="text-[13px] text-danger">{createError}</p>}
@@ -240,7 +244,8 @@ export default function PartnerEmailSignIn({
     );
   } else {
     body = (
-      <button type="button" disabled={disabled || busy !== null} onClick={() => void signIn()} className="btn btn-ink btn-lg btn-block">
+      <button type="button" disabled={disabled || busy !== null} onClick={() => void signIn()} aria-busy={busy === "sign"} className="btn btn-ink btn-lg btn-block">
+        {busy === "sign" && <Spinner />}
         {busy === "sign" ? "Signing in…" : `Continue as ${shortAddr(account!.address)}`}
       </button>
     );
@@ -250,6 +255,7 @@ export default function PartnerEmailSignIn({
     <div className="space-y-2">
       {body}
       <button type="button" disabled={busy !== null || creating} onClick={() => void signOut()} className={quiet}>
+        {busy === "out" && <Spinner />}
         {busy === "out" ? "Signing out…" : "Use another email"}
       </button>
     </div>

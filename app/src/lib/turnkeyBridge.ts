@@ -106,18 +106,34 @@ export type SignInSheetOptions = {
 type SignInListener = (opts: SignInSheetOptions) => void;
 const signInListeners = new Set<SignInListener>();
 
+/** How long a Sign in tapped before the sheet was there waits for it. */
+export const SIGN_IN_PENDING_MS = 30_000;
+/** A Sign in tapped while no sheet was listening yet (the kit's code still loading): the sheet opens with it. */
+let pendingSignIn: { opts: SignInSheetOptions; at: number } | null = null;
+
 /**
  * Opens Gloam's sign-in sheet (email code or passkey), drawn by
- * components/app/GloamSignInSheet inside the Turnkey provider. Says whether a
- * sheet was there to open: none is when Gloam wallets are off on this page.
+ * components/app/GloamSignInSheet inside the Turnkey provider. A tap is never
+ * dropped: when no sheet is listening yet, the request waits (up to
+ * SIGN_IN_PENDING_MS) and the sheet opens with it as soon as it mounts, showing
+ * "Getting sign-in ready…" until the kit is up. Says whether a sheet was there.
  */
-export function openSignInSheet(opts: SignInSheetOptions = {}): boolean {
+export function openSignInSheet(opts: SignInSheetOptions = {}, now = Date.now()): boolean {
+  if (signInListeners.size === 0) {
+    pendingSignIn = { opts, at: now };
+    return false;
+  }
+  pendingSignIn = null;
   signInListeners.forEach((fn) => fn(opts));
-  return signInListeners.size > 0;
+  return true;
 }
 
-export function onSignInSheetRequest(fn: SignInListener): () => void {
+/** Listen for sign-in requests; one made just before (openSignInSheet with no listener) is handed over at once. */
+export function onSignInSheetRequest(fn: SignInListener, now = Date.now()): () => void {
   signInListeners.add(fn);
+  const waiting = pendingSignIn;
+  pendingSignIn = null;
+  if (waiting && now - waiting.at <= SIGN_IN_PENDING_MS) fn(waiting.opts);
   return () => signInListeners.delete(fn);
 }
 

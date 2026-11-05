@@ -12,6 +12,7 @@ import {
   retryEmbeddedSigner,
   signOutEmbedded,
 } from "@/lib/turnkeyBridge";
+import { Spinner } from "@/components/ui/Spinner";
 
 /**
  * Email or passkey sign-in for a Gloam wallet, sized by `className` for where it
@@ -63,8 +64,9 @@ export function TurnkeyHeaderSignIn({
             setLeaving(false);
           }
         }}
-        className={quietClassName}
+        className={`${quietClassName} inline-flex items-center justify-center gap-1.5`}
       >
+        {leaving && <Spinner className="h-3 w-3" />}
         {leaving ? "Signing out…" : "Sign out"}
       </button>
     );
@@ -88,7 +90,8 @@ export function TurnkeyHeaderSignIn({
       </>
     ) : (
       <>
-        <button type="button" disabled className={className}>
+        <button type="button" disabled aria-busy="true" className={className}>
+          <Spinner />
           Opening your wallet…
         </button>
         {signOut}
@@ -103,7 +106,8 @@ export function TurnkeyHeaderSignIn({
         void import("@/lib/track").then(({ track }) => {
           track("wallet_connect_click", { method: "gloam_wallet" });
         });
-        if (!openSignInSheet({ onUseWallet, walletLabel })) console.warn("[Gloam] The sign-in sheet isn't mounted here.");
+        // never dropped: before the sheet is there, the tap waits and the sheet opens with it
+        openSignInSheet({ onUseWallet, walletLabel });
       }}
       className={className}
     >

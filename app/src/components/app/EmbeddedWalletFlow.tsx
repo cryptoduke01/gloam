@@ -37,6 +37,7 @@ import { networkName } from "@/lib/networks";
 import { getActiveTurnkeyAccount, onEmbeddedSheetRequest, setEmbeddedNeedsWallet } from "@/lib/turnkeyBridge";
 import { subscribeToUpdates } from "@/lib/updatesClient";
 import { useNetwork } from "./NetworkProvider";
+import { Spinner } from "@/components/ui/Spinner";
 
 const noopSubscribe = () => () => {};
 
@@ -512,7 +513,8 @@ export function WalletSheet({
                 {error}
               </p>
             )}
-            <button type="submit" disabled={creating || Boolean(nameProblem)} className="btn btn-ink btn-lg btn-block mt-6">
+            <button type="submit" disabled={creating || Boolean(nameProblem)} aria-busy={creating} className="btn btn-ink btn-lg btn-block mt-6">
+              {creating && <Spinner />}
               {creating ? "Creating…" : step === "failed" ? "Try again" : "Create wallet"}
             </button>
           </form>
@@ -580,7 +582,8 @@ function BackupPart({
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {signature ? (
-          <button type="button" onClick={() => onBackup("signature")} disabled={busy} className="btn btn-ghost btn-sm">
+          <button type="button" onClick={() => onBackup("signature")} disabled={busy} aria-busy={busy} className="btn btn-ghost btn-sm">
+            {busy && <Spinner />}
             {busy ? "Backing up…" : "Back up with this wallet's signature"}
           </button>
         ) : (
@@ -589,8 +592,10 @@ function BackupPart({
               type="button"
               onClick={() => onBackup("passkey-create")}
               disabled={busy}
+              aria-busy={busy}
               className={standalone ? "btn btn-ink btn-sm" : "btn btn-ghost btn-sm"}
             >
+              {busy && <Spinner />}
               {busy ? "Check your passkey…" : "Back up with a passkey"}
             </button>
             {returning && (

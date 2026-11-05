@@ -7,6 +7,7 @@ import { Logo } from "@/components/Logo";
 import { useMainnetLive } from "@/components/MainnetCountdown";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SealedField } from "@/components/ui/SealedField";
+import { Spinner } from "@/components/ui/Spinner";
 import { EMBEDDED_WALLETS } from "@/lib/embeddedWallet";
 import { getActiveTurnkeyAccount, signOutEmbedded } from "@/lib/turnkeyBridge";
 import {
@@ -139,8 +140,10 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
                 type="button"
                 disabled={busy !== null}
                 onClick={() => (wallets.length === 1 ? void go(wallets[0]!) : setPicking(true))}
+                aria-busy={busy !== null}
                 className="btn btn-ink btn-lg btn-block"
               >
+                {busy !== null && <Spinner />}
                 {busy !== null ? "Check your wallet…" : "Use a browser wallet"}
               </button>
             ) : (
@@ -162,7 +165,12 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
                       <span className="h-5 w-5 rounded-[6px] bg-surface" aria-hidden />
                     )}
                     <span className="flex-1">{w.name}</span>
-                    {busy === w.id && <span className="text-[12.5px] text-mute">Check your wallet…</span>}
+                    {busy === w.id && (
+                      <span className="inline-flex items-center gap-2 text-[12.5px] text-mute">
+                        <Spinner className="h-3 w-3" />
+                        Check your wallet…
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -262,7 +270,8 @@ function Onboard({
               <Notice tone="danger">{err}</Notice>
             </div>
           )}
-          <button type="submit" disabled={busy || name.trim().length < 2} className="btn btn-ink btn-lg btn-block mt-6">
+          <button type="submit" disabled={busy || name.trim().length < 2} aria-busy={busy} className="btn btn-ink btn-lg btn-block mt-6">
+            {busy && <Spinner />}
             {busy ? "Creating…" : "Create partner account"}
           </button>
           {!busy && name.trim().length < 2 && (

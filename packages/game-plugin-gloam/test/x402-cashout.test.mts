@@ -138,3 +138,19 @@ test("refused before any note is touched: no maxAmount, over it, wrong network o
   const onBase = await setup("base");
   await assert.rejects(onBase.agent.payX402Cashout({ requirement: quote(), maxAmount: "2" }), /Robinhood Chain mainnet/);
 });
+
+test("the same quote asked again after it was paid presents that cash out and pays nothing new", { timeout: 60_000 }, async () => {
+  const { agent, sent, addNote } = await setup();
+  await addNote(10_000_000n);
+  const first = await agent.payX402Cashout({ requirement: quote(), maxAmount: "1.1" });
+  assert.equal(first.status, "done", JSON.stringify(first));
+  assert.equal(sent.length, 2);
+  const again = await agent.payX402Cashout({ requirement: quote(), maxAmount: "1.1" });
+  assert.equal(again.status, "done", JSON.stringify(again));
+  assert.equal(sent.length, 2, "nothing was sent the second time");
+  assert.equal(again.paymentHeader, first.paymentHeader, "the first cash out is presented again");
+  // a new quote for the same amount and payee is a new purchase
+  const other = await agent.payX402Cashout({ requirement: quote({ quoteId: "qt_other" }), maxAmount: "1.1" });
+  assert.equal(other.status, "done", JSON.stringify(other));
+  assert.ok(sent.length > 2, "a different quote is paid");
+});
