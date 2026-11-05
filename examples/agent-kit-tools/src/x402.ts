@@ -13,8 +13,23 @@
  *
  * What the seller lists for standard clients (scheme exact) is reported back,
  * never paid here.
+ *
+ * A gateway that pays out to a public address can offer scheme gloam-cashout
+ * in `accepts` (PAYMENT-REQUIRED or the body): the agent cashes out of its
+ * private balance to that address. findGloamOffer picks between the two
+ * (chooseGloamX402Scheme): gloam-private when both are offered unless the
+ * caller prefers gloam-cashout, and gloam-cashout when it is the only Gloam one.
  */
-import { GLOAM_X402_SCHEME, decodeRequirements, type GloamPaymentRequirements } from "@gloamtrade/sdk";
+import {
+  GLOAM_CASHOUT_SCHEME,
+  GLOAM_X402_SCHEME,
+  chooseGloamX402Scheme,
+  decodeRequirements,
+  findGloamCashoutRequirement,
+  type GloamCashoutRequirement,
+  type GloamPaymentRequirements,
+  type GloamX402SchemeName,
+} from "@gloamtrade/sdk";
 
 const REQ_PREFIX = "gloamx402req1:";
 
@@ -83,6 +98,24 @@ export function findGloamPrice(headers: Headers, body: string): FoundPrice {
       : "The 402 answer carries no payment requirements this pack can read.",
     offered,
   };
+}
+
+export type FoundOffer =
+  | { ok: true; scheme: typeof GLOAM_X402_SCHEME; requirements: GloamPaymentRequirements; offered: string[] }
+  | { ok: true; scheme: typeof GLOAM_CASHOUT_SCHEME; cashout: GloamCashoutRequirement; offered: string[] }
+  | { ok: false; reason: string; offered: string[] };
+
+/** The Gloam price to pay in a 402 answer, of either scheme, and what it offers standard clients. */
+export function findGloamOffer(headers: Headers, body: string, prefer?: GloamX402SchemeName): FoundOffer {
+  const priv = findGloamPrice(headers, body);
+  const cashout = findGloamCashoutRequirement(headers, body);
+  const choice = chooseGloamX402Scheme({ gloamPrivate: priv.ok, gloamCashout: cashout !== null }, prefer);
+  if (choice === GLOAM_CASHOUT_SCHEME && cashout) {
+    const offered = priv.offered.filter((o) => !o.startsWith(`${GLOAM_CASHOUT_SCHEME} `) && o !== GLOAM_CASHOUT_SCHEME);
+    return { ok: true, scheme: GLOAM_CASHOUT_SCHEME, cashout, offered };
+  }
+  if (priv.ok) return { ok: true, scheme: GLOAM_X402_SCHEME, requirements: priv.requirements, offered: priv.offered };
+  return priv;
 }
 
 const BODY_LIMIT = 20_000;

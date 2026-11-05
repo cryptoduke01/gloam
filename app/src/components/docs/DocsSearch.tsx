@@ -169,7 +169,7 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/integrate": {
     description: "Add private payments to an agent kit or MCP add-on with a preview-then-execute tool pack, or let x402 marketplace sellers take private payments next to standard ones.",
-    keywords: ["agent kit", "kit", "tool pack", "tools", "mcp add-on", "marketplace", "x402", "x402 marketplace", "seller", "middleware", "gloam-private", "exact", "payment-required", "x-payment", "preview", "execute", "approval", "claim link", "cash out", "proof of funds", "partner", "dashboard", "integrate", "integration", "usdg", "robinhood"],
+    keywords: ["agent kit", "kit", "tool pack", "tools", "mcp add-on", "marketplace", "x402", "x402 marketplace", "seller", "middleware", "gloam-private", "gloam-cashout", "splitter", "public payee", "verifyGloamCashout", "exact", "payment-required", "x-payment", "preview", "execute", "approval", "claim link", "cash out", "proof of funds", "partner", "dashboard", "integrate", "integration", "usdg", "robinhood"],
     headings: [
       "Pick a path",
       "The tool pack",

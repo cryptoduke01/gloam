@@ -35,6 +35,7 @@ import type { PoseidonMerklePath } from "./merkle.js";
 import type { Prover } from "./prove.js";
 import type { NoteExport } from "./witness.js";
 import { noteCommitmentPoseidon } from "./note.js";
+import { fromB64, toB64 } from "./b64.js";
 import { fieldToHex } from "./poseidon.js";
 import { NATIVE_ASSET, RH_TESTNET_CHAIN_ID, poolForChainId } from "./constants.js";
 import {
@@ -606,14 +607,4 @@ function jsonStringify(obj: unknown): string {
   return JSON.stringify(obj, (_k, v) =>
     typeof v === "bigint" ? v.toString() : v
   );
-}
-
-// Base64 helpers that work in Node and the browser without a Buffer dependency.
-function toB64(s: string): string {
-  if (typeof btoa === "function") return btoa(unescape(encodeURIComponent(s)));
-  return Buffer.from(s, "utf-8").toString("base64");
-}
-function fromB64(s: string): string {
-  if (typeof atob === "function") return decodeURIComponent(escape(atob(s)));
-  return Buffer.from(s, "base64").toString("utf-8");
 }

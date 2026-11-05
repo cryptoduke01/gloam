@@ -30,6 +30,8 @@
  *             hides who swapped, not the tokens or the amounts
  *   fee       the vault's cash-out fee, read live
  *   x402      private agent payments over HTTP 402 (settle-then-prove)
+ *   x402Cashout scheme gloam-cashout: a private payer cashes out to a public
+ *             payee (a gateway's splitter), and the gateway's verifier
  *   receive   receive tags: seal a payment so only its payee can open it
  *   sweep     payee side: move a received payment to a fresh note (final)
  *   requests  payment request links (pay my Gloam address, with a private note)
@@ -51,7 +53,7 @@
  * sealedSwap) is retired: its on-chain path reverts on every live pool.
  */
 
-export const SDK_VERSION = "0.5.1";
+export const SDK_VERSION = "0.6.0";
 
 export * from "./intents.js";
 export * from "./rates.js";
@@ -72,6 +74,7 @@ export * from "./swap.js";
 export * from "./swapIntent.js";
 export * from "./sync.js";
 export * from "./x402.js";
+export * from "./x402Cashout.js";
 export * from "./receiveTag.js";
 export * from "./sweep.js";
 export * from "./requests.js";
