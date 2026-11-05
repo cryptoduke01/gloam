@@ -115,8 +115,9 @@ export default function PartnerEmailSignIn({
   function open() {
     onError(null);
     setStarted(true);
-    // read when tapped, so the card's latest wallet list is the one used
-    openSignInSheet({ onUseWallet: () => walletRef.current?.() });
+    // read when tapped, so the card's latest wallet list is the one used; with no
+    // browser wallet found the card passes none, and the sheet offers none
+    openSignInSheet(walletRef.current ? { onUseWallet: () => walletRef.current?.() } : {});
   }
 
   async function create() {

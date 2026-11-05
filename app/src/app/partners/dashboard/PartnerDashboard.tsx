@@ -92,7 +92,8 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
 
   /**
    * The card's wallet button, from inside the email sheet: one wallet signs in, more
-   * open the list, none leaves the card saying so.
+   * open the list. Offered only once a browser wallet was found, so the sheet never
+   * shows a wallet button that does nothing.
    */
   function pickBrowserWallet() {
     if (!wallets?.length || busy !== null) return;
@@ -172,7 +173,7 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
                 onError={setErr}
                 disabled={busy !== null}
                 autoStart={emailFirst}
-                onUseWallet={pickBrowserWallet}
+                onUseWallet={wallets?.length ? pickBrowserWallet : undefined}
               />
             )}
           </div>

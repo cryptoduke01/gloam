@@ -285,7 +285,7 @@ export function SignInSheetView({
   /** Continue with Google is set up here. */
   google: boolean;
   onGoogle: () => void;
-  /** The opener's own wallet connect: a quiet link in the footer. */
+  /** The opener's own wallet connect, as a full button under the other ways in. Unset: none is offered. */
   onUseWallet?: () => void;
   walletLabel?: string;
   onClose: () => void;
@@ -471,9 +471,11 @@ function StartStep({
       {clientState === "error" ? (
         <>
           <p role="alert" className="mt-5 text-[13.5px] leading-relaxed text-danger">
-            Email and passkey sign-in isn&apos;t available here right now. Use a browser wallet instead.
+            {walletButton
+              ? "Email and passkey sign-in isn't available here right now. Use a browser wallet instead."
+              : "Email and passkey sign-in isn't available here right now. Try again in a little while."}
           </p>
-          <div className="mt-3">{walletButton}</div>
+          {walletButton && <div className="mt-3">{walletButton}</div>}
         </>
       ) : (
         <>
