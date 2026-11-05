@@ -295,19 +295,22 @@ export function SignInSheetView({
   const dialog = useRef<HTMLDivElement>(null);
   const emailField = useRef<HTMLInputElement>(null);
   const codeField = useRef<HTMLInputElement>(null);
+  const passkeyCreate = useRef<HTMLButtonElement>(null);
   const closable = canClose(state);
   useModalFocus(dialog, onClose, { initial: emailField });
 
   // The field for the step: the code field when a code goes out (and again after a
-  // wrong one), the email field on the way back.
+  // wrong one), the email field on the way back, and Create a passkey on the passkey
+  // step (the Passkey button that led there is gone, so focus would sit on the page).
   const step = state.kind;
-  const codeError = state.kind === "code" ? state.error : null;
+  // a failed try on the code or passkey step comes back here too: the buttons it disabled dropped focus
+  const stepError = state.kind === "start" ? null : state.error;
   useEffect(() => {
-    const el = step === "code" ? codeField.current : emailField.current;
+    const el = step === "code" ? codeField.current : step === "passkey" ? passkeyCreate.current : emailField.current;
     // only when focus is in the sheet, or was dropped to the page by a button that went busy
     const at = document.activeElement;
     if (el && (!at || at === document.body || dialog.current?.contains(at))) el.focus({ preventScroll: true });
-  }, [step, codeError]);
+  }, [step, stepError]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -375,7 +378,7 @@ export function SignInSheetView({
             walletDisabled={!closable}
           />
         ) : state.kind === "passkey" ? (
-          <PasskeyStep state={state} onPasskey={onPasskey} onBack={onBack} />
+          <PasskeyStep state={state} onPasskey={onPasskey} onBack={onBack} createButton={passkeyCreate} />
         ) : (
           <CodeStep
             state={state}
@@ -573,10 +576,12 @@ function PasskeyStep({
   state,
   onPasskey,
   onBack,
+  createButton,
 }: {
   state: Extract<SignInState, { kind: "passkey" }>;
   onPasskey: (mode: "login" | "signup") => void;
   onBack: () => void;
+  createButton: RefObject<HTMLButtonElement | null>;
 }) {
   const busy = state.busy;
   // the words above already say what a closed prompt or an unknown passkey means
@@ -596,7 +601,13 @@ function PasskeyStep({
           {error.text}
         </p>
       )}
-      <button type="button" onClick={() => onPasskey("signup")} disabled={busy !== null} className="btn btn-ink btn-lg btn-block mt-5">
+      <button
+        ref={createButton}
+        type="button"
+        onClick={() => onPasskey("signup")}
+        disabled={busy !== null}
+        className="btn btn-ink btn-lg btn-block mt-5"
+      >
         {busy === "passkey-signup" ? "Waiting for your passkey…" : "Create a passkey"}
       </button>
       <button type="button" onClick={() => onPasskey("login")} disabled={busy !== null} className="btn btn-quiet btn-block mt-1.5">
