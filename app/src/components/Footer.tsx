@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { AppLink } from "./AppLink";
+import { FooterUpdates } from "./FooterUpdates";
 import { Mark } from "./Logo";
 import { MainnetCopy } from "./MainnetCountdown";
 import { ThemeSegmented } from "./ThemeToggle";
@@ -104,6 +105,7 @@ export function Footer() {
               >
                 hello@gloam.trade
               </a>
+              <FooterUpdates />
               <div className="-ml-3 mt-8 flex items-center gap-1">
                 <a
                   href="https://x.com/gloamtrade"
