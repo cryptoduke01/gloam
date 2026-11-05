@@ -223,7 +223,9 @@ GLOAM_LIMITS_FILE=./limits.json
         <code>payByClaimLink</code>, <code>requestPayment</code>,{" "}
         <code>checkIncoming</code>, <code>claim</code>, <code>cashOut</code>,{" "}
         <code>proveFunds</code>, <code>provePayment</code> and{" "}
-        <code>verifyProof</code>. The ACP provider below uses it directly.
+        <code>verifyProof</code>. The ACP provider below uses it directly, and
+        the <Link href="/docs/integrate">tool pack for agent kits</Link> is
+        built on it.
       </p>
 
       <h2 id="limits">Limits</h2>
