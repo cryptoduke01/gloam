@@ -191,3 +191,29 @@ export function embeddedSignerRetries(): number {
 }
 
 export const onEmbeddedSignerRetry = onEmbeddedSignerState;
+
+/* ---------------------------------------------------------------- sign-in email */
+
+/**
+ * The email a Gloam wallet signed in with, as the kit reports it, so Settings can
+ * fill in the updates field. Held in memory only: never saved, never sent with
+ * anything. Null when signed out, or signed in with a passkey alone.
+ */
+let signInEmail: string | null = null;
+const emailListeners = new Set<() => void>();
+
+export function setEmbeddedSignInEmail(email: string | null) {
+  const next = email?.trim() || null;
+  if (next === signInEmail) return;
+  signInEmail = next;
+  emailListeners.forEach((fn) => fn());
+}
+
+export function embeddedSignInEmail(): string | null {
+  return signInEmail;
+}
+
+export function onEmbeddedSignInEmail(fn: () => void): () => void {
+  emailListeners.add(fn);
+  return () => emailListeners.delete(fn);
+}
