@@ -33,6 +33,10 @@ export function fakeEngine(over: Partial<GloamEngine> & { largest?: bigint; feeB
       calls.push({ fn: "payX402", args });
       return { status: "done", action: "pay_x402", hash: hashOf(77), paymentHeader: "gloamx402pay1:e30" };
     },
+    payX402Cashout: async (args: unknown) => {
+      calls.push({ fn: "payX402Cashout", args });
+      return { status: "done", action: "pay_x402_cashout", hash: hashOf(78) };
+    },
     payByClaimLink: rec("payByClaimLink"),
     cashOut: rec("cashOut"),
     proveFunds: rec("proveFunds"),

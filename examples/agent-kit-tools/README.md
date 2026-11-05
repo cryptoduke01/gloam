@@ -96,7 +96,7 @@ then, run it from this repo.
 | `gloam_preview_claim_link` | preview | Pay by claim link, for someone with no Gloam address | A shielded transfer only |
 | `gloam_preview_cash_out` | preview | Private balance to a 0x address. The preview shows the vault's live fee (0.5% on mainnet) and what arrives | The cash out: asset, amount, recipient |
 | `gloam_preview_prove_funds` | preview | A `gloamfunds1:` proof that the agent holds at least an amount, for one named reader, with an expiry | Nothing |
-| `gloam_preview_pay_x402` | preview | Request a URL; if it answers 402 with a Gloam price, plan paying it privately | A shielded transfer only |
+| `gloam_preview_pay_x402` | preview | Request a URL; if it answers 402 with a Gloam price, plan paying it privately. For scheme `gloam-cashout`, plan a cash out of the quoted amount to the resource's public address (needs `maxAmount`) | A shielded transfer only; for `gloam-cashout`, the cash out to the public payee |
 | `gloam_execute` | execute | Run a preview by its `previewId` (and `digest`) | What the preview said |
 | `gloam_verify_proof` | read | Check a `gloamfunds1:` or `gloampay1:` proof against the chain | Nothing |
 

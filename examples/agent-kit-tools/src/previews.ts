@@ -10,7 +10,7 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 
-export type PreviewAction = "shield" | "pay" | "claim_link" | "cash_out" | "prove_funds" | "pay_x402";
+export type PreviewAction = "shield" | "pay" | "claim_link" | "cash_out" | "prove_funds" | "pay_x402" | "pay_x402_cashout";
 
 /** One step the agent's wallet signs, in words and with the exact target. */
 export interface SignStep {
