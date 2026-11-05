@@ -23,6 +23,12 @@
  *             mainnet and 0.25% on Base Sepolia. A note behind a proof of
  *             funds is moved to a fresh note first, so the proof does not
  *             lead to it.
+ *   x402      a pay to the 402 price's receive tag, handed back as the
+ *             X-PAYMENT value instead of posted to the payment board.
+ *
+ * With a partner API key, private payments, cash outs and payment messages go
+ * through the partner relay and deposits are attributed, so the partner's
+ * dashboard counts them.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -47,6 +53,10 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
+  GLOAM_X402_SCHEME,
+  GLOAM_X402_VERSION,
+  GloamApiClient,
+  GloamApiError,
   GloamRelayError,
   NATIVE_ASSET,
   POOL_STATE_ABI,
@@ -59,7 +69,9 @@ import {
   buildUnshieldIntent,
   cashOutTargetProblem,
   cleanPaymentNote,
+  decodePaymentHeader,
   encodeNotePackage,
+  encodePaymentHeader,
   generateReceiveKey,
   isReceiveTag,
   networkName,
@@ -75,7 +87,10 @@ import {
   sweepReceivedNote,
   type GloamAsset,
   type GloamIntent,
+  type GloamPaymentPayload,
+  type GloamPaymentRequirements,
   type NoteExport,
+  type PrivateSendIntent,
   type Prover,
   type ReceiveKey,
   type SweepChain,
@@ -96,7 +111,18 @@ import {
   type Spend,
 } from "./limits.js";
 import { describeNetwork, findAsset, defaultAsset, resolveNetwork, type PluginNetwork } from "./networks.js";
-import { agentId as envAgentId, balances, noteStorePath, noteStoreKey, NoteStore, noteView, type NewNote, type NoteOrigin, type StoredNote } from "./noteStore.js";
+import {
+  agentId as envAgentId,
+  balances,
+  noteStorePath,
+  noteStoreKey,
+  NoteStore,
+  noteView,
+  type NewNote,
+  type NoteOrigin,
+  type NoteStoreBackend,
+  type StoredNote,
+} from "./noteStore.js";
 import { holdsSecret, redact, registerSecret, registerUrlSecret, safeErrorMessage } from "./redact.js";
 import { isNotSent, walletCallSender, type Call, type CallSender } from "./sender.js";
 import { SpendLog, counted, type SpendEntry } from "./spendLog.js";
@@ -139,6 +165,17 @@ export interface GloamAgentOptions {
   artifacts?: ArtifactSource;
   /** Where claim links go when the agent pays by claim link. Without it they stay in the encrypted store. */
   onClaimLink?: (out: ClaimLinkOut) => void | Promise<void>;
+  /**
+   * Where the encrypted note store is kept. Default: a local file (GLOAM_NOTE_STORE,
+   * or ~/.gloam/game-notes.<agent>.json). The backend only ever holds ciphertext.
+   */
+  noteBackend?: NoteStoreBackend;
+  /**
+   * A Gloam partner API key (gloam_live_... or gloam_test_...). Default GLOAM_API_KEY.
+   * Private payments, cash outs and payment messages then go through the partner
+   * relay, and deposits are attributed, so gloam.trade/partners/dashboard counts them.
+   */
+  apiKey?: string;
   /** A client to read the chain with (tests). Default: one over `rpc`. */
   publicClient?: PublicClient;
   /** First getLogs range to try when reading the vault. */
@@ -219,6 +256,16 @@ export function feeKept(logs: Log[], pool: Address, nullifier: Hex): bigint {
   return hit?.args.fee ?? 0n;
 }
 
+/** A resource as a label: no query or fragment, which can carry a token. */
+function resourceLabel(resource: string): string {
+  try {
+    const u = new URL(resource);
+    return `${u.origin}${u.pathname}`.slice(0, 120);
+  } catch {
+    return String(resource).split(/[?#]/)[0]!.slice(0, 120);
+  }
+}
+
 function toHexBytes(text: string): Hex {
   return `0x${Buffer.from(text, "utf8").toString("hex")}`;
 }
@@ -237,6 +284,7 @@ export class GloamAgent {
   private readonly artifacts: Artifacts;
   private readonly limits?: LimitsConfig;
   private readonly onClaimLink?: GloamAgentOptions["onClaimLink"];
+  private readonly api: GloamApiClient | null;
   private readonly provers = new Map<string, Promise<Prover>>();
 
   constructor(opts: GloamAgentOptions = {}) {
@@ -271,9 +319,12 @@ export class GloamAgent {
     if (submit !== "relay" && submit !== "wallet") throw new Error(`GLOAM_SUBMIT must be "relay" or "wallet", got "${submit}".`);
     this.submitMode = submit;
     this.relayUrl = opts.relayUrl || env.GLOAM_RELAY_URL?.trim() || undefined;
+    const apiKey = opts.apiKey?.trim() || env.GLOAM_API_KEY?.trim() || "";
+    registerSecret(apiKey || undefined);
+    this.api = apiKey ? new GloamApiClient({ apiKey }) : null;
 
     const { key, source } = noteStoreKey(env);
-    this.store = new NoteStore(noteStorePath(this.agentId, env), this.agentId, key, source);
+    this.store = new NoteStore(opts.noteBackend ?? noteStorePath(this.agentId, env), this.agentId, key, source);
     for (const n of this.store.list()) registerSecret(n.secret);
     const rk = this.store.receiveKey();
     if (rk) registerSecret(rk.privateJwk.d);
@@ -435,7 +486,7 @@ export class GloamAgent {
 
   /** Send a proven private send or cash out: through the relay, or the agent's wallet. */
   private async submitIntent(intent: GloamIntent): Promise<Hex> {
-    if (this.submitMode === "relay") return relayIntent(intent, { url: this.relayUrl });
+    if (this.submitMode === "relay") return this.api ? (await this.api.relay(intent)).hash : relayIntent(intent, { url: this.relayUrl });
     const exec = intent.exec!;
     let data: Hex;
     if (exec.fn === "transfer") {
@@ -452,7 +503,9 @@ export class GloamAgent {
   private mayHaveSent(err: unknown): boolean {
     if (isNotSent(err)) return false;
     if (this.submitMode !== "relay") return true;
-    return !(err instanceof GloamRelayError) || RELAY_MAYBE_SENT.includes(err.code);
+    // A clear refusal from the relay (or the partner relay) says nothing went out; anything else may have.
+    if (err instanceof GloamRelayError || err instanceof GloamApiError) return RELAY_MAYBE_SENT.includes(err.code);
+    return true;
   }
 
   /**
@@ -557,9 +610,9 @@ export class GloamAgent {
     requestKey?: string;
     /** The spending-log entry this send is counted under, kept on the new payment note. */
     spendId?: string;
-    prepare?: (payment: StoredNote, paymentNote: NoteExport) => Promise<Partial<StoredNote> | void>;
+    prepare?: (payment: StoredNote, paymentNote: NoteExport, exec: PrivateSendIntent["exec"]) => Promise<Partial<StoredNote> | void>;
   }): Promise<
-    | { ok: true; hash: Hex; payment: StoredNote; change: StoredNote | null; paymentNote: NoteExport }
+    | { ok: true; hash: Hex; payment: StoredNote; change: StoredNote | null; paymentNote: NoteExport; exec: PrivateSendIntent["exec"] }
     | { ok: false; maybeSent: boolean; hash: Hex | null; error: string; payment: StoredNote | null; change: StoredNote | null }
   > {
     const { input, asset } = args;
@@ -595,7 +648,7 @@ export class GloamAgent {
         })
       );
       if (args.prepare) {
-        const patch = await args.prepare(payment, intent.paymentNote);
+        const patch = await args.prepare(payment, intent.paymentNote, intent.exec);
         if (patch) payment = this.store.update(payment.handle, patch) ?? payment;
       }
       sending = true;
@@ -616,7 +669,7 @@ export class GloamAgent {
       // A payment note is the payee's money once it lands; a claim note stays open until someone claims it.
       const payStatus = args.payOrigin === "payment" ? "spent" : "unspent";
       const paymentDone = this.store.update(payment.handle, { status: payStatus, createdTx: sent }) ?? payment;
-      return { ok: true, hash: sent, payment: paymentDone, change: changeDone, paymentNote: intent.paymentNote };
+      return { ok: true, hash: sent, payment: paymentDone, change: changeDone, paymentNote: intent.paymentNote, exec: intent.exec };
     } catch (e) {
       const reverted = Boolean((e as { reverted?: boolean }).reverted);
       const maybeSent = !reverted && (Boolean(hash) || (sending && this.mayHaveSent(e)));
@@ -665,7 +718,9 @@ export class GloamAgent {
     try {
       const hash =
         this.submitMode === "relay"
-          ? await relayMemo({ chainId: this.network.chainId, paymentCommitment: commitment, memo }, { url: this.relayUrl })
+          ? this.api
+            ? (await this.api.relayMemo({ chainId: this.network.chainId, paymentCommitment: commitment, memo })).hash
+            : await relayMemo({ chainId: this.network.chainId, paymentCommitment: commitment, memo }, { url: this.relayUrl })
           : await this.requireSender("Posting the payment message").sendCalls([
               { to: board.address, data: encodeFunctionData({ abi: MEMO_ABI, functionName: "postMemo", args: [commitment, memo] }) },
             ]);
@@ -942,6 +997,7 @@ export class GloamAgent {
       }
       this.settle(gate.id, "sent", { hash });
       const stored = this.store.update(held.handle, { status: "unspent", createdTx: hash }) ?? held;
+      const counted = await this.attributeDeposit(hash);
       return {
         status: "done",
         action: "add",
@@ -950,6 +1006,7 @@ export class GloamAgent {
         note: noteView(stored),
         hash,
         explorer: this.explorer(hash),
+        ...(counted ? { partner: counted } : {}),
         public: "The deposit shows the wallet, the asset and the amount. Who can spend the note does not.",
       };
     } catch (e) {
@@ -966,6 +1023,17 @@ export class GloamAgent {
         ...(kept ? { note: noteView(kept) } : {}),
         check: "Refresh the balance before adding again: the note is kept, and refresh() makes it spendable once the deposit is on chain.",
       };
+    }
+  }
+
+  /** With a partner key, count a deposit that landed to the partner. Best effort: the deposit stands either way. */
+  private async attributeDeposit(txHash: Hex): Promise<string | null> {
+    if (!this.api) return null;
+    try {
+      await this.api.attributeDeposit({ chainId: this.network.chainId, txHash });
+      return "Counted to your partner key.";
+    } catch (e) {
+      return `Not counted to your partner key (${errMsg(e)}). The deposit itself landed.`;
     }
   }
 
@@ -1015,18 +1083,47 @@ export class GloamAgent {
     } else {
       throw new Error("Pay to a Gloam address (gloamr1.…) or a payment request link. For someone without one, pay by claim link.");
     }
+    return this.payTag({ payTo, asset, amountWei, memo: memo || undefined, label: args.label });
+  }
 
+  /**
+   * Pay a 402 price privately (x402, scheme gloam-private): a private send of
+   * exactly the price to its payTo, sealed to that receive tag. The X-PAYMENT
+   * value comes back as `paymentHeader` and is kept with the payment, so a call
+   * whose answer was lost gets the same header again, never a second payment.
+   * Nothing is posted to the payment board: the header carries the payment.
+   */
+  async payX402(args: { requirements: GloamPaymentRequirements; label?: string }): Promise<Outcome> {
+    const req = args.requirements;
+    if (!req || req.scheme !== GLOAM_X402_SCHEME) throw new Error(`Only Gloam's x402 scheme (${GLOAM_X402_SCHEME}) is paid here.`);
+    if (Number(req.network) !== this.network.chainId) {
+      throw new Error(`That price is on ${networkName(Number(req.network))}, and this agent pays on ${this.where()}.`);
+    }
+    if (!req.poolAddress || req.poolAddress.toLowerCase() !== this.network.pool.toLowerCase()) throw new Error("That price settles through a different vault.");
+    if (!isReceiveTag(String(req.payTo ?? ""))) throw new Error("That price's payTo is not a Gloam address (gloamr1.…), so it cannot be paid privately.");
+    const asset = this.network.assets.find((a) => a.address.toLowerCase() === String(req.asset).toLowerCase());
+    if (!asset) throw new Error(`The ${this.where()} vault does not take ${req.asset}.`);
+    if (!/^[0-9]+$/.test(String(req.maxAmountRequired)) || BigInt(req.maxAmountRequired) <= 0n) throw new Error("That price is not a whole, positive number of base units.");
+    return this.payTag({ payTo: req.payTo, asset, amountWei: BigInt(req.maxAmountRequired), label: args.label ?? `x402: ${resourceLabel(req.resource)}`, x402: true });
+  }
+
+  /** The private send behind pay() and payX402(): limits, one note, sealed to `payTo`, never paid twice. */
+  private async payTag(p: { payTo: string; asset: GloamAsset; amountWei: bigint; memo?: string; label?: string; x402?: boolean }): Promise<Outcome> {
+    const { payTo, asset, amountWei, memo } = p;
+    const args = { label: p.label };
+    const action = p.x402 ? "pay_x402" : "pay";
     // A payment like this one whose answer was lost may still land: never pay it twice.
     const requestKey = this.requestKeyOf(payTo, asset, amountWei, args.label);
     const plan = await this.retryPlan(requestKey, amountWei, memo || undefined, (n) => ({
       status: "done",
-      action: "pay",
+      action,
       alreadyPaid: true,
       network: this.network.key,
       paid: this.fmt(amountWei, asset),
       to: shortTag(payTo),
       payment: n.handle,
       ...(n.createdTx ? { hash: n.createdTx, explorer: this.explorer(n.createdTx) } : {}),
+      ...(p.x402 && n.x402 ? { paymentHeader: this.withTxHash(n.x402, n.createdTx ?? null) } : {}),
       message: "This payment already landed after its answer was lost. It was not sent again.",
     }));
     if (plan.kind === "answer") return plan.outcome;
@@ -1052,6 +1149,7 @@ export class GloamAgent {
       }
     }
     let sealed = "";
+    let header = "";
     const sent = await this.privateSend({
       input,
       asset,
@@ -1062,7 +1160,7 @@ export class GloamAgent {
       requestKey,
       spendId: gate.id,
       // Sealed before anything is sent: a payee key that cannot be sealed to stops the payment here.
-      prepare: async (_payment, note) => {
+      prepare: async (_payment, note, exec) => {
         const pack = encodeNotePackage({
           pool: this.network.pool,
           chainId: this.network.chainId,
@@ -1073,12 +1171,27 @@ export class GloamAgent {
           note: memo || undefined,
         });
         sealed = await sealToReceiveTag(pack, payTo);
-        return { deliver: sealed };
+        if (!p.x402) return { deliver: sealed };
+        // x402: the header is the delivery. Kept with the payment (it holds the note sealed, never in the clear).
+        const payload: GloamPaymentPayload = {
+          x402Version: GLOAM_X402_VERSION,
+          scheme: GLOAM_X402_SCHEME,
+          network: this.network.chainId,
+          payload: { paymentNote: sealed, txHash: null, exec },
+        };
+        header = encodePaymentHeader(payload);
+        return { x402: header };
       },
     });
     if (!sent.ok) {
       settle(sent.maybeSent ? "unconfirmed" : "failed", { hash: sent.hash ?? undefined, reason: sent.error });
       if (sent.maybeSent) {
+        if (p.x402) {
+          return this.unconfirmed("The payment", sent, {
+            ...(header ? { paymentHeader: this.withTxHash(header, sent.hash) } : {}),
+            delivered: "Not presented yet. Once refresh() shows the payment landed, present paymentHeader to the resource; asking for the same payment again returns it.",
+          });
+        }
         return this.unconfirmed("The payment", sent, {
           sealedCode: sealed || undefined,
           delivered: "Not posted yet: refresh() posts the sealed payment message once the payment is on chain. The sealed code opens only with the payee's key.",
@@ -1087,6 +1200,25 @@ export class GloamAgent {
       return { status: "error", message: sent.error };
     }
     settle("sent", { hash: sent.hash });
+    if (p.x402) {
+      const paymentHeader = this.withTxHash(header, sent.hash);
+      this.store.update(sent.payment.handle, { x402: paymentHeader });
+      return {
+        status: "done",
+        action,
+        network: this.network.key,
+        paid: this.fmt(amountWei, asset),
+        to: shortTag(payTo),
+        payment: sent.payment.handle,
+        hash: sent.hash,
+        explorer: this.explorer(sent.hash),
+        submittedBy: this.submitMode === "relay" ? "the Gloam relay (this agent's wallet does not appear)" : "this agent's wallet",
+        paymentHeader,
+        delivered: "Present paymentHeader as the X-PAYMENT header. It carries the payment sealed to the payee: only their key opens it.",
+        change: sent.change ? noteView(sent.change) : null,
+        public: "The chain shows a shielded transfer. Not the amount, the sender or the payee.",
+      };
+    }
     const memoPost = await this.postMemo(sent.paymentNote.commitment, sealed);
     if (memoPost.posted) this.store.update(sent.payment.handle, { deliver: undefined });
     return {
@@ -1106,6 +1238,14 @@ export class GloamAgent {
       change: sent.change ? noteView(sent.change) : null,
       public: "The chain shows a shielded transfer. Not the amount, the sender or the payee.",
     };
+  }
+
+  /** An X-PAYMENT value with the settlement transaction filled in (it is made before the send goes out). */
+  private withTxHash(header: string, hash: Hex | null): string {
+    if (!hash) return header;
+    const payload = decodePaymentHeader(header);
+    payload.payload.txHash = hash;
+    return encodePaymentHeader(payload);
   }
 
   /**

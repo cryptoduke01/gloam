@@ -15,6 +15,11 @@ settlement made private and self-custodial. It is **not** a Tempo Zone: no
 operator sees the payment; only the payer and the payee learn the amount, and
 compliance visibility is opt-in per payment through an issuer-scoped disclosure.
 
+Selling an API that already takes standard x402? The seller guide in
+[`examples/agent-kit-tools`](../agent-kit-tools/README.md#sell-with-private-x402)
+adds a Gloam price next to your `exact` one, with middleware that settles and
+sweeps before it serves, and says what standard clients can and cannot do.
+
 ## Run on mainnet
 
 ```bash

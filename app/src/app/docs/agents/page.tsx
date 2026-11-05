@@ -24,7 +24,7 @@ export default function DocsAgentsPage() {
         { href: "/docs/sdk", label: "SDK" },
         { href: "/docs/sdk/disclosure", label: "Selective disclosure" },
         { href: "/docs/virtuals", label: "Virtuals agents" },
-        { href: "/docs/privacy-model", label: "Privacy model" },
+        { href: "/docs/integrate", label: "Agent kits and marketplaces" },
       ]}
     >
       <h2>Why agents need this most</h2>
@@ -71,6 +71,15 @@ export default function DocsAgentsPage() {
         <Link href="/docs/virtuals">Gloam for Virtuals agents</Link> covers
         setup, every function, the limits, exactly what stays public, and the
         networks.
+      </p>
+
+      <h2 id="kits">For agent kits and marketplaces</h2>
+      <p>
+        Building a kit other people&apos;s agents run on, or an x402 marketplace?{" "}
+        <Link href="/docs/integrate">Add Gloam to your agent kit or marketplace</Link>{" "}
+        covers a drop-in tool pack that previews every payment before your
+        wallet signs it, bundling this MCP server next to yours, and taking
+        private x402 payments next to standard ones.
       </p>
 
       <h2 id="connect-by-url">Connect by URL</h2>
