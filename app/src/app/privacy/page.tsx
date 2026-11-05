@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Privacy Policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="November 2, 2026">
+    <LegalLayout title="Privacy Policy" updated="November 5, 2026">
       <p>
         This Privacy Policy describes what information Gloam (&ldquo;we,&rdquo;
         &ldquo;us&rdquo;) handles when you use gloam.trade, the Gloam app, the
@@ -396,10 +396,16 @@ export default function PrivacyPage() {
         (npx @gloamtrade/mcp) runs on your own machine. Its keys, spending limits
         and encrypted notes stay there, and we never receive them.
       </p>
-      <h2>13. Messages you send us</h2>
+      <h2>13. Messages you send us and email updates</h2>
       <p>
         If you write to us by email, on X or on Telegram, we keep your message
         and your contact details so we can reply.
+      </p>
+      <p>
+        If you ask for Gloam updates by email, we keep only that email, the day
+        you asked and where (sign-in, Settings or the site), and use it only to
+        send updates. It is stored on its own, apart from any wallet, and you
+        can unsubscribe with the link in any update or in the app under Settings.
       </p>
       <h2>14. How we use information</h2>
       <p>

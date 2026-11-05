@@ -12,6 +12,7 @@ import {
   onEmbeddedSignerRetry,
   setActiveTurnkeySigner,
   setEmbeddedAvailability,
+  setEmbeddedSignInEmail,
   setEmbeddedSignOut,
   setEmbeddedSignerState,
   type EmbeddedSigner,
@@ -22,14 +23,15 @@ import {
  * Once a sign-in completes and the Gloam wallet exists, builds the viem signer
  * for it and publishes it for the wagmi connector (lib/turnkeyBridge). Also
  * reports whether the kit started and whether the signer did (so the header can
- * offer a way out), and wires sign-out. Renders nothing.
+ * offer a way out), wires sign-out, and holds the sign-in email in memory for
+ * the updates field in Settings. Renders nothing.
  *
  * The private-balance backup is never turned on from here: a Gloam wallet's
  * signatures are made and kept by Turnkey, so its backup goes through a passkey
  * the person chooses (EmbeddedWalletFlow, lib/embeddedRecovery).
  */
 export function TurnkeyWagmiSync() {
-  const { authState, clientState, wallets, httpClient, session, logout } = useTurnkey();
+  const { authState, clientState, wallets, httpClient, session, logout, user } = useTurnkey();
   const organizationId = session?.organizationId;
   const address = pickEmbeddedWallet(wallets)?.address;
   const retries = useSyncExternalStore(onEmbeddedSignerRetry, embeddedSignerRetries, () => 0);
@@ -52,6 +54,13 @@ export function TurnkeyWagmiSync() {
       clientState === ClientState.Error ? "unavailable" : clientState === ClientState.Ready ? "ready" : "starting",
     );
   }, [clientState]);
+
+  // The sign-in email, in memory, for the updates field in Settings (lib/turnkeyBridge).
+  const email = authState === AuthState.Authenticated ? (user?.userEmail ?? null) : null;
+  useEffect(() => {
+    setEmbeddedSignInEmail(email);
+  }, [email]);
+  useEffect(() => () => setEmbeddedSignInEmail(null), []);
 
   useEffect(() => {
     setEmbeddedSignOut(async () => {

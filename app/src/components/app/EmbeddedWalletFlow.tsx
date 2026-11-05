@@ -35,6 +35,7 @@ import {
 } from "@/lib/embeddedWallet";
 import { networkName } from "@/lib/networks";
 import { getActiveTurnkeyAccount, onEmbeddedSheetRequest, setEmbeddedNeedsWallet } from "@/lib/turnkeyBridge";
+import { subscribeToUpdates } from "@/lib/updatesClient";
 import { useNetwork } from "./NetworkProvider";
 
 const noopSubscribe = () => () => {};
@@ -49,6 +50,8 @@ const LIST_TRIES = 3;
  *
  *  1. Create your wallet: an optional name and one button. The key is made in
  *     Turnkey's secure hardware; the page never sees it and there is no seed phrase.
+ *     After an email sign-in, an unticked "Email me Gloam updates" box under it
+ *     sends that email alone to the updates list (lib/updatesClient), never the wallet.
  *  2. Add funds: the ways in the app already has, the ones that cost this wallet
  *     nothing first (lib/embeddedGas), with the backup offer under them.
  *  A wallet made before gets the backup offer on its own (once), when this
@@ -73,7 +76,7 @@ export type BackupView =
   | { kind: "error"; text: string; offer: Exclude<BackupOffer, { kind: "none" }>; returning: boolean };
 
 function Sheet({ signedIn }: { signedIn: boolean }) {
-  const { wallets, createWallet, refreshWallets } = useTurnkey();
+  const { wallets, createWallet, refreshWallets, user } = useTurnkey();
   const { address: connected, connector } = useAccount();
 
   const [list, setList] = useState<WalletListState>("unknown");
@@ -85,6 +88,9 @@ function Sheet({ signedIn }: { signedIn: boolean }) {
   const [dismissed, setDismissed] = useState(false);
   const [name, setName] = useState("");
   const [showAddress, setShowAddress] = useState(false);
+  const [updates, setUpdates] = useState(false);
+  const updatesSent = useRef(false);
+  const signInEmail = user?.userEmail?.trim() || null;
 
   const wallet = pickEmbeddedWallet(wallets);
   const embeddedConnected = Boolean(
@@ -162,6 +168,11 @@ function Sheet({ signedIn }: { signedIn: boolean }) {
 
   async function create() {
     if (creating || nameProblem) return;
+    // the email alone, once, and only when the box is ticked: the wallet never goes with it
+    if (updates && signInEmail && !updatesSent.current) {
+      updatesSent.current = true;
+      void subscribeToUpdates(signInEmail, "sign-in");
+    }
     setCreating(true);
     setError(null);
     try {
@@ -208,6 +219,9 @@ function Sheet({ signedIn }: { signedIn: boolean }) {
       onShowAddress={() => setShowAddress(true)}
       backup={backup.view}
       onBackup={backup.run}
+      updatesEmail={signInEmail}
+      updates={updates}
+      onUpdates={setUpdates}
     />
   );
 }
@@ -337,6 +351,9 @@ export function WalletSheet({
   onShowAddress,
   backup,
   onBackup,
+  updatesEmail = null,
+  updates = false,
+  onUpdates,
 }: {
   step: "unreadable" | "create" | "creating" | "failed" | "funding" | "backup";
   name: string;
@@ -351,6 +368,10 @@ export function WalletSheet({
   onShowAddress: () => void;
   backup: BackupView | null;
   onBackup: (how: "passkey-create" | "passkey-use" | "signature") => void;
+  /** The email this sign-in used, when it was an email: offers the updates box. */
+  updatesEmail?: string | null;
+  updates?: boolean;
+  onUpdates?: (on: boolean) => void;
 }) {
   const { network } = useNetwork();
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
@@ -469,6 +490,23 @@ export function WalletSheet({
             <p className="mt-3 text-[12.5px] leading-relaxed text-mute">
               Sign in with the same email or passkey on any device to open it again.
             </p>
+            {updatesEmail && onUpdates && (
+              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[14px] bg-surface px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={updates}
+                  disabled={creating}
+                  onChange={(e) => onUpdates(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-ink"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[13.5px] text-foreground">Email me Gloam updates</span>
+                  <span className="mt-0.5 block text-[12.5px] leading-relaxed text-mute [overflow-wrap:anywhere]">
+                    Sent to {updatesEmail}. Kept apart from your wallet. Unsubscribe any time.
+                  </span>
+                </span>
+              </label>
+            )}
             {step === "failed" && error && (
               <p role="alert" className="mt-4 text-[13px] leading-relaxed text-danger">
                 {error}

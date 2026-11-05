@@ -55,7 +55,7 @@ type MetricsPayload = {
   error?: string;
 };
 
-type Tab = "overview" | "revenue" | "relay" | "users" | "events" | "partners" | "testers" | "bugs" | "votes";
+type Tab = "overview" | "revenue" | "relay" | "users" | "events" | "partners" | "testers" | "updates" | "bugs" | "votes";
 
 /** The two views: mainnet or the testnets. Never mixed. */
 type Env = "mainnet" | "testnet";
@@ -596,6 +596,7 @@ export function AdminDashboard() {
   const opsTabs: [Tab, string][] = [
     ["partners", "Partners"],
     ["testers", "Testers"],
+    ["updates", "Email updates"],
     ["bugs", "Bug reports"],
     ["votes", "Votes"],
   ];
@@ -1078,6 +1079,7 @@ export function AdminDashboard() {
 
         {shown === "partners" && <PartnersPanel tier={env} />}
         {shown === "testers" && <TestersPanel />}
+        {shown === "updates" && <UpdatesPanel />}
         {shown === "bugs" && <BugsPanel />}
         {shown === "votes" && <VotesPanel />}
 
@@ -1963,6 +1965,84 @@ function TestersPanel() {
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           Approve Telegram join requests that match an application. The CSV has full addresses for paying rewards. Store:{" "}
           {data.backend}.
+        </p>
+      </Panel>
+    </>
+  );
+}
+
+type UpdatesData = { backend: string; count: number; bySource: { "sign-in": number; settings: number; site: number } };
+
+/**
+ * The "Email me Gloam updates" list: how many, from where, and the CSV. The
+ * emails themselves are only in the CSV, which holds email, day and source
+ * (and each person's unsubscribe link), nothing about wallets.
+ */
+function UpdatesPanel() {
+  const [data, setData] = useState<UpdatesData | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/updates", { credentials: "include", cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: UpdatesData; error?: { message?: string } } | null;
+        if (!live) return;
+        if (!res.ok || !json?.ok || !json.data) {
+          setErr(json?.error?.message ?? `Updates list failed (${res.status})`);
+          return;
+        }
+        setErr(null);
+        setData(json.data);
+      } catch {
+        if (live) setErr("Network error loading the updates list");
+      }
+    };
+    void load();
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, ADMIN_REFRESH_MS);
+    return () => {
+      live = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (err) {
+    return (
+      <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger" role="alert">
+        {err}
+      </p>
+    );
+  }
+  if (!data) {
+    return (
+      <p className="flex items-center gap-2.5 rounded-xl bg-surface px-4 py-3 text-[14px] text-mute" role="status">
+        <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
+        Loading the updates list
+      </p>
+    );
+  }
+  return (
+    <>
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Subscribed" value={n(data.count)} sub="emails on the list" />
+        <Kpi label="From sign-in" value={n(data.bySource["sign-in"])} sub="Gloam wallet sign-in" />
+        <Kpi label="From Settings" value={n(data.bySource.settings)} sub="in the app" />
+        <Kpi label="From the site" value={n(data.bySource.site)} sub="footer field" />
+      </section>
+      <Panel
+        title="Email updates list"
+        action={
+          <a href="/api/updates?format=csv" className="btn btn-ghost btn-sm">
+            Download CSV
+          </a>
+        }
+      >
+        <p className="text-[13px] leading-relaxed text-mute">
+          The CSV has each email, the day it joined and where, plus its unsubscribe link for the bottom of an update. Emails
+          are kept alone: no wallet, address or IP is stored with them. Store: {data.backend}.
         </p>
       </Panel>
     </>
