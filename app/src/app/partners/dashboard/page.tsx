@@ -4,7 +4,7 @@ import { PartnerDashboard } from "./PartnerDashboard";
 
 export const metadata: Metadata = {
   title: "Partner portal",
-  description: "Your Gloam API keys, fee setting, payout addresses, volume and would-be commissions.",
+  description: "Your Gloam API keys, fee setting, fee addresses, volume and fees charged.",
   robots: { index: false, follow: false },
 };
 

@@ -220,7 +220,7 @@ export function LinksPanel({
             once it lands, checked on its chain. Only public facts about the transaction are kept: hash, chain, kind, token, amount
             and time. Never the payer&apos;s wallet or anything else about them. You see cash outs and swaps one by one, since they
             are public on chain; private payments only as counts per day. A name in a link (name=, ref=) counts for nothing.
-            Nothing is charged.
+            Your fee is added by the Gloam app and shown before the payer confirms.
           </>
         }
       >

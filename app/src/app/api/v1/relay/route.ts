@@ -1,7 +1,9 @@
 import { jsonBody, requireKeyEnv, withApiKey } from "@/lib/partnersApi";
 import { keyEnvForNetwork } from "@/lib/apiKeys";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
+import { after } from "next/server";
 import { relayForPartner } from "@/lib/partnerRelay";
+import { settleFeeAfterSend } from "@/lib/partnerFees";
 import { checkChainRateLimit, checkRateLimit, networkForChain, relayStatus } from "@/lib/relay/server";
 
 export const runtime = "nodejs";
@@ -42,7 +44,20 @@ export async function POST(req: Request) {
       if (body.action !== "memo") await checkChainRateLimit(net, one);
     }
     // the same sender holds its share of the network's cap when the relay sends (lib/relay/server)
-    const { hash, action, attribution } = await relayForPartner({ net, body, partner, keyId: key.id, sender });
-    return { data: { hash, chainId: net.chainId, network: net.key, action, attribution, charged: false } };
+    const { hash, action, attribution, partnerFee } = await relayForPartner({ net, body, partner, keyId: key.id, sender });
+    // your interface fee: counted as charged once it lands, with the amount sent here (reported)
+    if (partnerFee) after(() => settleFeeAfterSend({ partner, net, hash, fee: partnerFee, source: "api" }).then(() => undefined));
+    return {
+      data: {
+        hash,
+        chainId: net.chainId,
+        network: net.key,
+        action,
+        attribution,
+        partnerFee: partnerFee ? { kind: partnerFee.kind, asset: partnerFee.asset, amount: partnerFee.amount.toString(), status: "counted_once_landed", reported: true } : null,
+        // false: Gloam itself adds no partner fee; yours is the transfer your app sent (partnerFee)
+        charged: false,
+      },
+    };
   });
 }

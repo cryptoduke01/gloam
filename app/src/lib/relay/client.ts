@@ -134,6 +134,8 @@ export async function relayTransfer(p: {
   commitments: readonly [Hex, Hex];
   /** A partner's link code: the relay counts the payment to them once it lands (lib/partnerAttribution). */
   partnerCode?: string;
+  /** This transfer is a partner's interface fee (lib/partnerFees): counted as charged once it lands. */
+  partnerFee?: { code: string; kind: "private_payment" | "cash_out" | "deposit"; asset: Address; amount: string };
 }): Promise<Hex> {
   const { hash, memoTicket } = await post({ action: "transfer", ...p });
   // commitments[0] is the payment, the one its heads-up is for

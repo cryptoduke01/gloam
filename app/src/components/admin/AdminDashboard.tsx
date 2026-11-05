@@ -1256,6 +1256,9 @@ type AdminPartner = {
   addresses?: { total: number; verified: number };
   /** "partial:<n>" when older activity outran what could be split into mainnet and testnet. */
   migration?: string | null;
+  /** Interface fees charged (lib/partnerFees), as reported with each fee's own private payment. */
+  feesCharged?: { count: number; usd: number } | null;
+  feeTo?: Record<string, string>;
   totals: {
     privatePayments: number;
     cashOuts: number;
@@ -1443,7 +1446,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
         <Kpi
           label="Vault fees"
           value={tier === "testnet" ? "Not priced" : fmtUsd(t?.vaultFeeUsd ?? 0)}
-          sub={`Gloam's cash-out fee on partner flows; would-be partner fees ${fmtUsd(t?.commissionUsd ?? 0)}, ${MAINNET_ENABLED ? "not charged" : "testnet"}`}
+          sub={`Gloam's cash-out fee on partner flows; partners charged ${tier === "testnet" ? `${n(data.partners.reduce((s, p) => s + (p.feesCharged?.count ?? 0), 0))} fees` : fmtUsd(data.partners.reduce((s, p) => s + (p.feesCharged?.usd ?? 0), 0))} of their own, as reported`}
         />
       </section>
       <Panel
@@ -1460,7 +1463,7 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
         }
       >
         <DataTable
-          headers={["Partner", "", "Name in links", "Owner", "Keys", "Codes", "Addresses (proven)", "Messages", "Private payments", "Cash outs", "Deposits", "Swaps", "Via API key", "Via link", "Matched on chain", "Public volume", "Vault fees", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
+          headers={["Partner", "", "Name in links", "Owner", "Keys", "Codes", "Addresses (proven)", "Messages", "Private payments", "Cash outs", "Deposits", "Swaps", "Via API key", "Via link", "Matched on chain", "Public volume", "Vault fees", "Fees charged", "Fee setting", "Fee addresses", "Last payment", "Joined"]}
           rows={data.partners.map((p) => [
             <span key="n" className="text-foreground">
               {p.website ? (
@@ -1562,13 +1565,14 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
             n(sourceCount(p.totals, "chain")),
             tier === "testnet" ? "Not priced" : fmtUsd(p.totals?.publicVolumeUsd ?? 0),
             tier === "testnet" ? "Not priced" : fmtUsd(p.totals?.vaultFeeUsd ?? 0),
-            tier === "testnet" ? "Not priced" : fmtUsd(p.totals?.commissionUsd ?? 0),
+            tier === "testnet" ? `${n(p.feesCharged?.count ?? 0)} fees` : `${fmtUsd(p.feesCharged?.usd ?? 0)} (${n(p.feesCharged?.count ?? 0)})`,
             `$${(p.fees.privatePaymentCents / 100).toFixed(2)} · ${pct(p.fees.cashoutBps)} · ${pct(p.fees.depositBps)}`,
+            n(Object.values(p.feeTo ?? {}).filter(Boolean).length),
             p.totals?.lastActivity ? new Date(p.totals.lastActivity).toLocaleString() : "None yet",
             new Date(p.createdAt).toLocaleDateString(),
           ])}
           empty={data.backend === "none" ? "Partner storage is not configured (set Upstash Redis)." : "No partners yet"}
-          minWidth={1900}
+          minWidth={2000}
         />
         {saveErr && (
           <p className="mt-3 text-[13px] text-danger" role="alert">
@@ -1593,7 +1597,8 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
             "Matched on chain: past cash outs to the partner's proven addresses.",
             "Name in links: shows only once approved. A rename needs approving again.",
             "Messages: approved keys get the relay's larger message budget.",
-            "Fee setting: per private payment, cash out, deposit.",
+            "Fee setting: per private payment, cash out, deposit. Users pay it on top, as one private payment to the partner's Gloam address, added by the app (links) or the partner's app (API key).",
+            "Fees charged: counted once each fee's private payment landed, with the amount reported beside it. Amounts are hidden on chain.",
             tier === "testnet" ? "Testnet: counted, never valued." : "Mainnet only. Testnet is counted apart.",
             "Only public transaction facts are kept. Never a payer's wallet or IP.",
             `Store: ${data.backend}.`,
@@ -1747,7 +1752,7 @@ function RevenuePanel({
                       ? `On, ${(bridgeFeeBps / 100).toFixed(2)}%. Paid out by Relay, not read here`
                       : "Off. Bridging and swaps charge nothing on top of Relay",
                   ],
-                  ["Partner API fees", "", "", "", "", "Not charged yet. Would-be fees are on the Partners tab"],
+                  ["Partner interface fees", "", "", "", "", "Paid by users to partners, not Gloam revenue. On the Partners tab"],
                   [
                     <span key="t" className="font-medium text-foreground">
                       Total

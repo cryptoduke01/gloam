@@ -14,6 +14,7 @@ import {
 } from "@/lib/partnerAddresses";
 import { PRIVATE_PAYMENTS_NOT_MATCHED, SWAPS_NOT_MATCHED } from "@/lib/partnerBackfill";
 import { networkName } from "@/lib/networks";
+import { readFeeLog, readFeesCharged } from "@/lib/partnerFees";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,16 +44,20 @@ export async function GET(req: NextRequest) {
     const partner = await getPartner(q.get("id") ?? "");
     if (!partner) throw new ApiError(404, "not_found", "No partner with that id.");
     const now = Date.now();
-    const [stats, codes, addresses, migration] = await Promise.all([
+    const [stats, codes, addresses, migration, feesCharged, feeLog] = await Promise.all([
       readPartnerStats(partner.id, { recent: 50, days: 30, tier }),
       listLinkCodes(partner.id),
       getPartnerAddresses(partner.id),
       migrationNote(partner.id),
+      readFeesCharged(partner.id, tier),
+      readFeeLog(partner.id, tier, 50),
     ]);
     return {
       data: {
         partner: partnerView(partner),
         stats,
+        feesCharged,
+        feeLog,
         codes: codes.map((c) => linkCodeView(c, now)),
         addresses: addressesView(addresses),
         addressCount: countAddresses(addresses),

@@ -28,15 +28,18 @@ import type { Hex } from "viem";
 import { useEffect, useState } from "react";
 import { isLinkCodeShape, linkBindHash, linkNullifierHash, proofBindValue, PUBLIC_MEMPOOL_CHAINS } from "./partnerCode";
 import { readDemo } from "./demoFlag";
+import type { LinkFeeTerms } from "./partnerFeeMath";
 
 export type LinkFlow = "pay" | "swap";
 
-const names = new Map<string, Promise<string | null>>();
+type LinkLookup = { name: string | null; terms: LinkFeeTerms | null };
+const lookups = new Map<string, Promise<LinkLookup>>();
 
-/** The approved partner name for a live code, null otherwise; cached per page. A POST, so the code stays out of request logs. */
-export function lookupPartnerName(code: string): Promise<string | null> {
-  const hit = names.get(code);
+/** What a live code's partner shows, and its fee terms when Gloam approved its name; cached per page. A POST, so the code stays out of request logs. */
+export function lookupPartnerLink(code: string): Promise<LinkLookup> {
+  const hit = lookups.get(code);
   if (hit) return hit;
+  const none: LinkLookup = { name: null, terms: null };
   const p = fetch("/api/partners/link-code", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -45,33 +48,53 @@ export function lookupPartnerName(code: string): Promise<string | null> {
     credentials: "same-origin",
   })
     .then(async (res) => {
-      if (!res.ok) return null;
-      const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: { name?: unknown } } | null;
-      return json?.ok && typeof json.data?.name === "string" && json.data.name.trim() ? json.data.name : null;
+      if (!res.ok) return none;
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        data?: { name?: unknown; fee?: { fees?: unknown; feeTo?: unknown } | null };
+      } | null;
+      const name = json?.ok && typeof json.data?.name === "string" && json.data.name.trim() ? json.data.name : null;
+      const f = json?.data?.fee;
+      const fees = f?.fees as LinkFeeTerms["fees"] | undefined;
+      const terms =
+        name && fees && typeof fees.privatePaymentCents === "number" && typeof fees.cashoutBps === "number" && f?.feeTo && typeof f.feeTo === "object"
+          ? { name, fees, feeTo: f.feeTo as LinkFeeTerms["feeTo"] }
+          : null;
+      return { name, terms };
     })
     .catch(() => {
       // a network blip: ask again next time rather than remember "nobody"
-      names.delete(code);
-      return null;
+      lookups.delete(code);
+      return none;
     });
-  names.set(code, p);
+  lookups.set(code, p);
   return p;
+}
+
+/** The approved partner name for a live code, null otherwise. */
+export function lookupPartnerName(code: string): Promise<string | null> {
+  return lookupPartnerLink(code).then((l) => l.name);
 }
 
 /** The partner a link's code is from, once the server says the code is live and Gloam approved the name; null otherwise. */
 export function usePartnerName(code: string | null | undefined): string | null {
-  const [found, setFound] = useState<{ code: string; name: string | null } | null>(null);
+  return usePartnerLink(code).name;
+}
+
+/** The link's partner name and, with an approved name, its fee terms (lib/partnerFeeMath linkFee). */
+export function usePartnerLink(code: string | null | undefined): LinkLookup {
+  const [found, setFound] = useState<{ code: string; link: LinkLookup } | null>(null);
   useEffect(() => {
     if (!code || !isLinkCodeShape(code) || readDemo()) return;
     let live = true;
-    void lookupPartnerName(code).then((name) => {
-      if (live) setFound({ code, name });
+    void lookupPartnerLink(code).then((link) => {
+      if (live) setFound({ code, link });
     });
     return () => {
       live = false;
     };
   }, [code]);
-  return code && found?.code === code ? found.name : null;
+  return code && found?.code === code ? found.link : { name: null, terms: null };
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

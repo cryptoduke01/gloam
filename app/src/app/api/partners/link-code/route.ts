@@ -11,7 +11,9 @@ const LOOKUPS_PER_MIN = 60;
 
 /**
  * POST { code }: the name a live code's partner shows in links ("From Motion"),
- * or null when Gloam has not approved one. The name comes from the partner's
+ * or null when Gloam has not approved one, and with an approved name the
+ * partner's fee setting and Gloam addresses for fees (the app adds that fee, as
+ * one private payment, and shows it before the user confirms). The name comes from the partner's
  * account as an admin approved it, never from the link. A POST, so the code stays
  * out of request logs. An unknown, revoked or expired code is a 404 and names
  * nobody. Nothing about the caller is kept.
@@ -27,6 +29,9 @@ export async function POST(req: Request) {
     }
     const r = await resolveLinkCode(body.code);
     if (!r) throw new ApiError(404, "code_not_live", "That link code is not live.");
-    return { data: { name: r.partner.approvedName ?? null } };
+    const name = r.partner.approvedName ?? null;
+    // the partner's interface fee, which the app adds and shows before the user confirms: only with an approved name
+    const fee = name ? { fees: r.partner.fees, feeTo: r.partner.feeTo ?? {} } : null;
+    return { data: { name, fee } };
   });
 }
