@@ -93,8 +93,17 @@ vault, the network's payment-message board, a token contract, a Gloam swap
 router and the zero address.
 
 The engine is `GloamAgent` (`plugin.agent`), usable without GAME: `add`, `pay`,
-`payByClaimLink`, `requestPayment`, `checkIncoming`, `claim`, `cashOut`,
-`proveFunds`, `provePayment`, `verifyProof`, `refresh`.
+`payX402`, `payByClaimLink`, `requestPayment`, `checkIncoming`, `claim`, `cashOut`,
+`proveFunds`, `provePayment`, `verifyProof`, `refresh`. Import it from
+`@gloamtrade/game-plugin-gloam/engine` to load no GAME code. Two options are
+for agent kits: `noteBackend` keeps the encrypted note store somewhere other
+than a local file (it only ever sees ciphertext), and `apiKey` (or
+`GLOAM_API_KEY`), a Gloam partner key, sends private payments and cash outs
+through the partner relay and attributes deposits, so they count on the partner
+dashboard. `payX402(requirements)` pays a Gloam x402 price privately and returns
+the `X-PAYMENT` value. The tool pack in
+[`examples/agent-kit-tools`](https://github.com/cryptoduke01/gloam/tree/main/examples/agent-kit-tools)
+is built on it.
 
 What the proofs show:
 
