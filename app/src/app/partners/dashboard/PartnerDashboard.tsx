@@ -24,7 +24,8 @@ import { QuickstartPanel } from "./QuickstartPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Field, Notice, shortAddr } from "./ui";
 
-type Session = { wallet: string; partner: PartnerAccount | null };
+/** `removed`: Gloam removed this wallet's last account; it can make a new one. */
+type Session = { wallet: string; partner: PartnerAccount | null; removed?: { name: string; removedAt: number } | null };
 type Tab = "overview" | "links" | "keys" | "settings" | "quickstart";
 
 /** id, label, shorter label for phones */
@@ -142,7 +143,17 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
   );
 }
 
-function Onboard({ wallet, onDone, onSignOut }: { wallet: string; onDone: (p: PartnerAccount) => void; onSignOut: () => void }) {
+function Onboard({
+  wallet,
+  removed,
+  onDone,
+  onSignOut,
+}: {
+  wallet: string;
+  removed?: Session["removed"];
+  onDone: (p: PartnerAccount) => void;
+  onSignOut: () => void;
+}) {
   const [name, setName] = useState("");
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
@@ -171,6 +182,14 @@ function Onboard({ wallet, onDone, onSignOut }: { wallet: string; onDone: (p: Pa
           <p className="mt-2 text-[14px] leading-relaxed text-mute">
             This names your account. You set your fee and make keys next.
           </p>
+          {removed && (
+            <div className="mt-4">
+              <Notice tone="warn">
+                Gloam removed your partner account {removed.name} on {new Date(removed.removedAt).toLocaleDateString()}. Its keys and
+                link codes no longer work. You can start a new account below.
+              </Notice>
+            </div>
+          )}
           <div className="mt-6 space-y-4">
             <Field label="App name" htmlFor="ob-name">
               <input
@@ -210,7 +229,18 @@ function Onboard({ wallet, onDone, onSignOut }: { wallet: string; onDone: (p: Pa
 
 /* ---------------------------------------------------------------- dashboard */
 
-function Dashboard({ session, onSignOut, onPartner }: { session: Session & { partner: PartnerAccount }; onSignOut: () => void; onPartner: (p: PartnerAccount) => void }) {
+function Dashboard({
+  session,
+  onSignOut,
+  onPartner,
+  onGone,
+}: {
+  session: Session & { partner: PartnerAccount };
+  onSignOut: () => void;
+  onPartner: (p: PartnerAccount) => void;
+  /** The account is gone (an admin removed it): read the session again. */
+  onGone: () => void;
+}) {
   const [tab, setTab] = useState<Tab>("overview");
   const [stats, setStats] = useState<Stats | null>(null);
   const [tier, setTier] = useState<"mainnet" | "testnet">("mainnet");
@@ -231,11 +261,12 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
       setErr(null);
     } catch (e) {
       if (e instanceof PortalError && e.status === 401) return onSignOut();
+      if (e instanceof PortalError && e.code === "no_account") return onGone();
       setErr(e instanceof PortalError ? e.message : "Could not load your figures.");
     } finally {
       setStatsLoading(false);
     }
-  }, [onSignOut, tier]);
+  }, [onGone, onSignOut, tier]);
 
   const loadKeys = useCallback(async () => {
     try {
@@ -244,9 +275,10 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
       setKeyMeta({ maxActive: r.maxActive, liveKeys: r.liveKeys });
     } catch (e) {
       if (e instanceof PortalError && e.status === 401) return onSignOut();
+      if (e instanceof PortalError && e.code === "no_account") return onGone();
       setErr(e instanceof PortalError ? e.message : "Could not load your keys.");
     }
-  }, [onSignOut]);
+  }, [onGone, onSignOut]);
 
   const loadCodes = useCallback(async () => {
     try {
@@ -255,9 +287,10 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
       setMaxLiveCodes(r.maxLive);
     } catch (e) {
       if (e instanceof PortalError && e.status === 401) return onSignOut();
+      if (e instanceof PortalError && e.code === "no_account") return onGone();
       setErr(e instanceof PortalError ? e.message : "Could not load your link codes.");
     }
-  }, [onSignOut]);
+  }, [onGone, onSignOut]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -431,6 +464,7 @@ export function PartnerDashboard() {
     return (
       <Onboard
         wallet={session.wallet}
+        removed={session.removed}
         onSignOut={() => void signOut()}
         onDone={(p) => setSession({ wallet: session.wallet, partner: p })}
       />
@@ -441,6 +475,7 @@ export function PartnerDashboard() {
       session={session as Session & { partner: PartnerAccount }}
       onSignOut={signOut}
       onPartner={(p) => setSession({ wallet: session.wallet, partner: p })}
+      onGone={load}
     />
   );
 }

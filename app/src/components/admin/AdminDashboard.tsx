@@ -1301,6 +1301,46 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  /** The account whose Remove was clicked once: a second click removes it. */
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [removedNote, setRemovedNote] = useState<string | null>(null);
+
+  /** Removes an account for good (lib/partnerRemove), after the inline confirm. */
+  const remove = async (p: AdminPartner) => {
+    setSaving(p.id);
+    setSaveErr(null);
+    setRemovedNote(null);
+    try {
+      const res = await fetch("/api/partners/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: p.id, remove: true }),
+      });
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        data?: { removed?: { keysRevoked?: number; codesRevoked?: number; addressesDropped?: number } };
+        error?: { message?: string };
+      } | null;
+      if (!res.ok || !json?.ok) {
+        setSaveErr(json?.error?.message ?? `Removing failed (${res.status})`);
+        return;
+      }
+      const r = json.data?.removed ?? {};
+      setRemovedNote(
+        `Removed ${p.name}: ${n(r.keysRevoked ?? 0)} keys revoked, ${n(r.codesRevoked ?? 0)} link codes revoked, ${n(r.addressesDropped ?? 0)} addresses dropped.`
+      );
+      setData((d) => (d ? { ...d, partners: d.partners.filter((x) => x.id !== p.id) } : d));
+      setOpen((o) => (o === p.id ? null : o));
+      // the program's totals no longer count it
+      setReload((v) => v + 1);
+    } catch {
+      setSaveErr("Network error removing the partner");
+    } finally {
+      setSaving(null);
+      setConfirmRemove(null);
+    }
+  };
 
   /** Approves an account for the relay's larger message budget, or its name to show in links, or takes either back. */
   const save = async (id: string, change: { relayApproved: boolean } | { approveName: boolean }) => {
@@ -1428,15 +1468,46 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
                 p.name
               )}
             </span>,
-            <button
-              key="d"
-              type="button"
-              aria-expanded={open === p.id}
-              onClick={() => setOpen((o) => (o === p.id ? null : p.id))}
-              className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong"
-            >
-              {open === p.id ? "Close" : "Details"}
-            </button>,
+            <span key="d" className="inline-flex items-center gap-2 whitespace-nowrap">
+              <button
+                type="button"
+                aria-expanded={open === p.id}
+                onClick={() => setOpen((o) => (o === p.id ? null : p.id))}
+                className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong"
+              >
+                {open === p.id ? "Close" : "Details"}
+              </button>
+              {confirmRemove === p.id ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={saving === p.id}
+                    onClick={() => void remove(p)}
+                    className="rounded-full bg-danger px-3 py-1 text-[13px] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {saving === p.id ? "Removing" : "Remove for good"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving === p.id}
+                    onClick={() => setConfirmRemove(null)}
+                    className="rounded-full px-2 py-1 text-[13px] text-mute transition-colors hover:text-foreground disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={saving === p.id}
+                  onClick={() => setConfirmRemove(p.id)}
+                  className="rounded-full border border-line px-3 py-1 text-[13px] text-mute transition-colors hover:border-danger hover:text-danger disabled:opacity-50"
+                  title="Remove the account. Its keys and link codes stop working at once, its addresses and approvals go, and it leaves this list and the totals."
+                >
+                  Remove
+                </button>
+              )}
+            </span>,
             <span key="nm" className="inline-flex items-center gap-2">
               <span className={p.approvedName ? "text-foreground" : "text-mute"} title={p.nameAwaitingApproval ? `Account name now: ${p.name}` : undefined}>
                 {p.approvedName ?? "Not shown"}
@@ -1457,8 +1528,9 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
                   disabled={saving === p.id}
                   onClick={() => void save(p.id, { approveName: false })}
                   className="rounded-full border border-line px-3 py-1 text-[13px] text-mute transition-colors hover:border-line-strong disabled:opacity-50"
+                  title="Stop showing this name in links. The account and its keys stay."
                 >
-                  Hide
+                  Hide name
                 </button>
               ) : null}
             </span>,
@@ -1500,8 +1572,15 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
             {saveErr}
           </p>
         )}
+        {removedNote && (
+          <p className="mt-3 text-[13px] text-foreground" role="status">
+            {removedNote}
+          </p>
+        )}
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
-          Messages: payment messages from an approved account&apos;s keys use the relay&apos;s larger budget. Every other
+          Hide name takes the name out of links and keeps the account. Remove ends the account: its keys and link codes stop
+          working at once, its receiving addresses and approvals go, and it leaves this list and the totals. Its past activity is
+          kept on record, counted nowhere. The owner&apos;s wallet can start a new account from nothing. Messages: payment messages from an approved account&apos;s keys use the relay&apos;s larger budget. Every other
           account&apos;s keys share a small one. Fee setting is per private payment, cash outs, deposits. Via API key: payments
           relayed with a partner key and deposits partners reported (checked on chain). Via link: payments, cash outs and swaps
           opened from a link with the partner&apos;s code, checked on chain. Matched on chain: past cash outs to the partner&apos;s own
