@@ -370,6 +370,9 @@ export function SignInSheetView({
             onPasskey={onPasskey}
             google={google}
             onGoogle={onGoogle}
+            onUseWallet={onUseWallet}
+            walletLabel={walletLabel}
+            walletDisabled={!closable}
           />
         ) : state.kind === "passkey" ? (
           <PasskeyStep state={state} onPasskey={onPasskey} onBack={onBack} />
@@ -400,17 +403,6 @@ export function SignInSheetView({
           <Link href="/privacy" target="_blank" rel="noopener" className={FOOT_LINK}>
             Privacy
           </Link>
-          {onUseWallet && (
-            <>
-              {/* on a phone the link takes its own line, with no dot left hanging */}
-              <span aria-hidden className="hidden sm:inline">
-                ·
-              </span>
-              <button type="button" onClick={onUseWallet} disabled={!closable} className={`${FOOT_LINK} w-full disabled:opacity-50 sm:w-auto`}>
-                {walletLabel}
-              </button>
-            </>
-          )}
         </p>
       </motion.div>
     </div>,
@@ -435,6 +427,9 @@ function StartStep({
   onPasskey,
   google,
   onGoogle,
+  onUseWallet,
+  walletLabel,
+  walletDisabled,
 }: {
   state: Extract<SignInState, { kind: "start" }>;
   clientState: "starting" | "ready" | "error";
@@ -446,8 +441,18 @@ function StartStep({
   onPasskey: (mode: "login" | "signup") => void;
   google: boolean;
   onGoogle: () => void;
+  /** A browser wallet is a first-class way in, so it gets a full button, not a footer link. */
+  onUseWallet?: () => void;
+  walletLabel: string;
+  walletDisabled: boolean;
 }) {
   const ready = clientState === "ready";
+  const walletButton = onUseWallet ? (
+    <button type="button" onClick={onUseWallet} disabled={walletDisabled} className="btn btn-ghost btn-lg btn-block mt-2 px-3">
+      <WalletGlyph />
+      {walletLabel}
+    </button>
+  ) : null;
   const busy = state.busy;
   const sendError = state.error?.during === "send" ? state.error : null;
   const otherError = state.error && !sendError ? state.error : null;
@@ -464,9 +469,12 @@ function StartStep({
       </p>
 
       {clientState === "error" ? (
-        <p role="alert" className="mt-5 text-[13.5px] leading-relaxed text-danger">
-          Email and passkey sign-in isn&apos;t available here right now. Close this and connect a wallet instead.
-        </p>
+        <>
+          <p role="alert" className="mt-5 text-[13.5px] leading-relaxed text-danger">
+            Email and passkey sign-in isn&apos;t available here right now. Use a browser wallet instead.
+          </p>
+          <div className="mt-3">{walletButton}</div>
+        </>
       ) : (
         <>
           <form
@@ -537,6 +545,7 @@ function StartStep({
               {busy === "passkey-login" ? "Waiting…" : "Passkey"}
             </button>
           </div>
+          {walletButton}
           {otherError && (
             <p role="alert" className="mt-2.5 text-center text-[12.5px] leading-snug text-danger">
               {otherError.text}
@@ -734,6 +743,16 @@ function BackGlyph() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="m15 6-6 6 6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function WalletGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18a1 1 0 0 1 1 1v2" />
+      <rect x="4" y="7.5" width="16" height="11.5" rx="2.5" />
+      <circle cx="16" cy="13.25" r="1.1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
