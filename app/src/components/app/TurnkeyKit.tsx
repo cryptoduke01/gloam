@@ -79,11 +79,13 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
       // Browser wallets connect through wagmi, not the kit. The kit still needs
       // its wallet manager: refreshWallets asks it for providers first and throws
       // "Wallet manager is not initialized" without one, so the wallet list never
-      // loads. With `auth` on and no chains it starts with no wallet interfaces,
-      // finds no providers, and no browser wallet ever shows up next to the Gloam
-      // wallet. The sign-in sheet still hides wallet sign-in (authModal below).
+      // loads. `auth` can't do it: the kit replaces it with authModal's
+      // walletAuthEnabled (false below). So `connecting` is on instead, with no
+      // chains: the manager starts with no wallet interfaces, finds no providers,
+      // nothing calls the kit's connect flow, and no browser wallet ever shows up
+      // next to the Gloam wallet.
       walletConfig: {
-        features: { auth: true, connecting: false },
+        features: { auth: false, connecting: true },
         chains: { ethereum: { native: false }, solana: { native: false } },
       },
       ui: {
