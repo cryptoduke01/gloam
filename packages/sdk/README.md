@@ -461,6 +461,31 @@ The sealed ticket is the same format the Gloam app uses for paying a receive tag
 
 **Upgrading from 0.0.5.** `payTo` must now be a receive tag, in `buildGloamPaymentRequirements` and `buildGloamPayment` (pass `legacyUnsealed: true` to pay an old server anyway; the note then travels in plain text, readable by anyone who sees the header). A sealed payment must be opened before `verifyGloamPayment` can read it (`openGloamPaymentNote`, then pass `note`); `settleGloamPayment` does all of this and the sweep.
 
+### Private payer, public payee (gloam-cashout)
+
+New in 0.6.0. Some x402 gateways pay out to a public address (a creator's splitter) in USDG on Robinhood Chain. Scheme `gloam-cashout` lets the paying agent stay private there: it cashes out of its private balance straight to the gateway's `payTo`. The chain shows USDG leaving the Gloam vault to `payTo`. It does not show the agent's wallet (the relay sends it) or which deposit funded it.
+
+- **The 402** lists `{ scheme: "gloam-cashout", network: "eip155:4663", asset: USDG, payTo, amount: G, quoteId }` in `accepts`. G is gross: `ceil(price * 10000 / (10000 - bps)) + tag`, with `bps` the vault's live `withdrawFeeBps()` and a tag of 1 to 9999 unique per quote. The vault keeps `floor(G * bps / 10000)`; `payTo` gets the rest, at least the price.
+- **The agent** cashes out exactly G to `payTo` and retries with `X-PAYMENT` = base64 JSON `{ scheme, txHash, quoteId }`. `maxAmount` is required.
+- **The gateway** runs `verifyGloamCashout` and keeps its own store of used tx hashes.
+
+```ts
+import { findGloamCashoutRequirement, payGloamCashout, quoteGross, buildGloamCashoutRequirement, verifyGloamCashout } from "@gloamtrade/sdk";
+
+// Agent: a note of exactly G (split a larger one first, or use GloamAgent.payX402Cashout, which does).
+const req = findGloamCashoutRequirement(res.headers, await res.text());
+const paid = await payGloamCashout({ requirement: req!, maxAmount: 1_010_000n, note: { secretHex, amountWei: G, path }, prove: unshieldProver, client });
+await fetch(url, { headers: { "X-PAYMENT": paid.header } });
+
+// Gateway: quote, then check the payment.
+const q = await quoteGross(price, tag);                                   // reads withdrawFeeBps live
+const entry = buildGloamCashoutRequirement({ payTo: splitter, gross: q.gross, quoteId });
+const v = await verifyGloamCashout({ txHash, quote: { payTo: splitter, gross: q.gross, price, issuedAt, windowSec: 300 } });
+if (v.ok && markUsed(txHash)) serve();                                     // the txHash store is yours
+```
+
+With both `gloam-private` and `gloam-cashout` offered, `chooseGloamX402Scheme` keeps `gloam-private` unless the caller prefers `gloam-cashout`; with only `gloam-cashout` (alone or next to `exact`), it picks `gloam-cashout`. `gloamCashoutProblem` refuses a wrong network, asset or vault, a `payTo` a cash out cannot reach, a zero or fractional amount, a missing `quoteId`, a missing or exceeded `maxAmount`, and an expired quote.
+
 **This is not a Tempo Zone.** A Zone is operator-visible: the zone operator sees every transaction inside it. Gloam is private from the public and from any operator; only the payer and the payee learn the amount. Compliance visibility is opt-in per payment via `buildComplianceDisclosure`, an issuer-scoped disclosure that reuses the shield-circuit proof rather than handing an operator a blanket view. See [`TEMPO_EXPANSION.md`](https://github.com/cryptoduke01/gloam/blob/main/TEMPO_EXPANSION.md).
 
 ## Take payments and read their notes
@@ -676,6 +701,16 @@ buildComplianceDisclosure(p): Promise<GloamComplianceDisclosure>  // optional is
 encodeRequirements / decodeRequirements                      // 402 body transport
 encodePaymentHeader / decodePaymentHeader                    // X-PAYMENT transport
 GLOAM_VS_ZONE, GLOAM_X402_SCHEME, GLOAM_NOT_FINAL            // posture, scheme id, the not-final notice
+
+// scheme gloam-cashout (new in 0.6.0): a private payer, a public payee
+findGloamCashoutRequirement(headers, body) / parseGloamCashoutRequirement(entry)
+chooseGloamX402Scheme({ gloamPrivate, gloamCashout }, prefer?)
+gloamCashoutProblem(req, { maxAmount }) / assertGloamCashoutPayable  // refusals before paying
+buildGloamCashoutIntent(p) / payGloamCashout(p)              // agent: unshield exactly G to payTo, header back
+encodeGloamCashoutHeader / decodeGloamCashoutHeader          // X-PAYMENT: base64 JSON { scheme, txHash, quoteId }
+cashoutGross(price, tag, bps) / quoteGross(price, tag, opts?) // gateway: G, at the live fee
+buildGloamCashoutRequirement(p)                              // gateway: the accepts entry
+verifyGloamCashout({ txHash, quote, rpcUrl?, client? })      // gateway: receipt, logs, window (not replay)
 ```
 
 `buildGloamPayment` does not broadcast: the agent signs and broadcasts the returned `intent.exec` itself, staying self-custodial, then sets `payload.txHash`. `verifyGloamPayment` confirms the payment note binds the required amount and asset, is the payment output of the transfer, and settles through the right pool. It never makes a payment final: its result carries `final: false` and a plain `finality` notice. `settleGloamPayment` runs it, checks the binding, and sweeps.
