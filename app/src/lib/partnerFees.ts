@@ -88,6 +88,8 @@ const SHARE_CEILING_TOKENS = 100_000n;
  */
 export function feeProblem(partner: Pick<Partner, "fees" | "feeTo">, net: GloamNetwork, fee: { kind: FeeKind; asset: Address; amount: bigint }): string | null {
   if (!feeAddressFor(partner.feeTo, net)) return "This partner has no Gloam address for fees on this network.";
+  // the fee note reaches the partner only through its sealed heads-up on the memo board
+  if (!net.payMemo) return "This network has no payment memo board, so a fee there could not reach the partner.";
   const info = assetInfo(net, fee.asset);
   if (!info) return "Gloam does not know that token on this network.";
   if (fee.kind === "private_payment") {

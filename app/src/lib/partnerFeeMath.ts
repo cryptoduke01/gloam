@@ -78,16 +78,17 @@ export type LinkFeeTerms = {
 /**
  * The fee the app adds to a flow from a partner's link, or null when there is
  * none: no approved name, no fee for this kind, no Gloam address for fees on this
- * network, or a fee that rounds to nothing.
+ * network, no payment memo board there (the fee note reaches the partner only
+ * through its heads-up), or a fee that rounds to nothing.
  */
 export function linkFee(
   terms: LinkFeeTerms | null | undefined,
   kind: FeeKind,
-  net: Pick<GloamNetwork, "key" | "family">,
+  net: Pick<GloamNetwork, "key" | "family" | "payMemo">,
   asset: FeeAsset,
   amount: bigint
 ): { amount: bigint; to: string; name: string; label: string } | null {
-  if (!terms?.name) return null;
+  if (!terms?.name || !net.payMemo) return null;
   const to = feeAddressFor(terms.feeTo, net);
   if (!to) return null;
   const fee = feeDue(kind, terms.fees, asset, amount);

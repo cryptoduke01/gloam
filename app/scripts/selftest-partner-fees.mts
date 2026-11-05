@@ -113,6 +113,7 @@ await test("link fee: only with an approved name, an address on this network, an
   assert.equal(FM.linkFee(null, "cash_out", RH, USD6, 1_000_000_000n), null);
   assert.equal(FM.linkFee(terms, "cash_out", RH, USD6, 100n), null, "rounds to nothing");
   assert.equal(FM.linkFee({ ...terms, feeTo: { robinhood: "gloamr1.broken" } }, "cash_out", RH, USD6, 1_000_000_000n), null, "a broken address adds no fee");
+  assert.equal(FM.linkFee(terms, "cash_out", { ...RH, payMemo: null }, USD6, 1_000_000_000n), null, "no memo board: the fee could not reach the partner, so none is added");
   // a network key wins over the chain's
   assert.equal(FM.feeAddressFor({ robinhood: TAG, "robinhood-mainnet": TAG2 }, RH), TAG2);
   assert.equal(FM.feeAddressFor({ robinhood: TAG, "robinhood-mainnet": TAG2 }, RH_TEST), TAG);
@@ -166,6 +167,7 @@ await test("relay check: the fee must be one the partner set", () => {
   assert.match(F.feeProblem({ ...shop, fees: { ...FEES, cashoutBps: 0 } }, RH, ok)!, /no fee on cash outs/);
   assert.match(F.feeProblem(shop, RH, { ...ok, asset: "0x00000000000000000000000000000000000000Aa" as Address })!, /does not know that token/);
   assert.match(F.feeProblem(shop, RH, { ...ok, amount: 10n ** 30n })!, /larger than any/);
+  assert.match(F.feeProblem(shop, { ...RH, payMemo: null }, ok)!, /no payment memo board/, "no memo board: refused before sending");
 });
 
 await test("relay check: partnerFee is read to the letter", () => {
