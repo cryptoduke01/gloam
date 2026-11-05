@@ -643,7 +643,9 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
           digits and spaces, no Gloam, no web address, at most 32 characters and
           4 words. A rename shows only once
           Gloam approves it again. Until then links show no partner name, and still
-          count to you.
+          count to you. To ask, message{" "}
+          <a href="https://x.com/gloamtrade">@gloamtrade on X</a> from your
+          project&apos;s account.
         </li>
         <li>
           <strong>Through the Gloam relay</strong> (the default for payments and
