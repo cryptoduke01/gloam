@@ -120,6 +120,11 @@ export type StoredNote = {
   /** A swap's new note: the handle of the refund note made with it. */
   swapPair?: string;
   /**
+   * A note set aside for one x402 gloam-cashout quote (src/x402Cashout.ts): a hash of the quote's id,
+   * payee and amount. A call for the same quote finds it again, so a quote is never cashed out twice.
+   */
+  cashOutKey?: string;
+  /**
    * A note whose private swap reverted, or ran out of time, after it went out: that swap's unshield
    * proof is public and stays valid until this note is spent. The note is held (no tool spends it)
    * until it moves whole to a fresh note of this server's (src/swaps.ts moveHeldNote), and this stays

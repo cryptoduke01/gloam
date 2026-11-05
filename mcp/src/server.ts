@@ -68,6 +68,9 @@ import {
   GLOAM_VS_ZONE,
   GLOAM_RELAY_URL,
   GLOAM_X402_SCHEME,
+  GLOAM_CASHOUT_SCHEME,
+  chooseGloamX402Scheme,
+  findGloamCashoutRequirement,
   relayIntent,
   relaySwapCall,
   relayStatus as readRelayStatus,
@@ -91,6 +94,7 @@ import { checkAccessKey } from "./accessKey.js";
 import { packageVersion } from "./version.js";
 import { receiptArtifacts, shieldArtifacts, transferArtifacts, unshieldArtifacts } from "./artifacts.js";
 import { SWAP_PRIVACY, refreshSwapNotes, registerSwapTools, type SwapToolContext } from "./swaps.js";
+import { payGloamCashoutQuote } from "./x402Cashout.js";
 import {
   allNetworks,
   defaultNetworkKey,
@@ -477,7 +481,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           "gloam_payment_requirements: price an agent resource in a private payment, as x402 requirements and an MPP challenge (server side)",
           "gloam_pay_x402: plan the private payment for a 402 challenge, x402 or MPP (agent side)",
           "gloam_execute_private_pay: REAL private settlement from a note handle: sync, prove, broadcast transfer; returns the X-PAYMENT header, or the Authorization credential for an MPP challenge (execution; needs a signer)",
-          "gloam_fetch_paid: fetch a URL and, if it answers 402 with a Gloam price (x402, or MPP method gloam), pay privately and retry, all inside this server (execution; needs a signer)",
+          "gloam_fetch_paid: fetch a URL and, if it answers 402 with a Gloam price (x402, or MPP method gloam), pay privately and retry, all inside this server (execution; needs a signer). x402 gloam-cashout (a public payee on Robinhood Chain) is paid with a cash out through the relay, the payer kept private",
           "gloam_verify_payment: open a presented payment (x402 X-PAYMENT or MPP Authorization: Payment), verify it, and sweep it into a fresh note; grant access only when it says so (server side)",
           "gloam_get_limits: this agent's spending limits (read)",
           "gloam_get_spending_report: spent and remaining in the last 24 hours, recent payments and refusals (read)",
@@ -1172,6 +1176,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     }
   ): Promise<PayResult> {
     const fail = (result: Record<string, unknown>): PayResult => ({ ok: false, result });
+    if ((req.scheme as string) === GLOAM_CASHOUT_SCHEME) {
+      return fail({ status: "error", error: `This is a ${GLOAM_CASHOUT_SCHEME} price (a cash out to a public payee). Pay it with gloam_fetch_paid and a maxAmount.` });
+    }
     if (req.scheme !== GLOAM_X402_SCHEME) return fail({ status: "error", error: `Not a Gloam private payment (scheme "${req.scheme}").` });
     // The requirements name the network to settle on; use it for the signer,
     // tree scan, keys and explorer. A chain this build has no pool for is refused.
@@ -1907,12 +1914,46 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     return { "x-payment": payment };
   }
 
+  /** gloam_fetch_paid for an x402 gloam-cashout price: cash out to the payee, then retry with X-PAYMENT. */
+  async function fetchPaidCashout(a: {
+    cashout: Parameters<typeof payGloamCashoutQuote>[1];
+    url: string;
+    note: string | undefined;
+    maxAmount: number | undefined;
+    request: (payHeaders?: Record<string, string>) => Promise<Response>;
+  }) {
+    const paid = await payGloamCashoutQuote(swapCtx, a.cashout, { maxAmount: a.maxAmount, note: a.note, requested: a.url });
+    if (!paid.ok) return text({ ...paid.result, httpStatus: 402, scheme: GLOAM_CASHOUT_SCHEME });
+    let second: Response;
+    try {
+      second = await a.request({ "x-payment": paid.header });
+    } catch (e) {
+      return text({
+        ...paid.result,
+        status: "paid_not_served",
+        message: `Paid, but the retry failed (${errMsg(e)}). Call gloam_fetch_paid again with paymentHeader to present this payment without paying twice.`,
+        paymentHeader: paid.header,
+      });
+    }
+    const served = await readBody(second);
+    if (!second.ok) {
+      return text({
+        ...paid.result,
+        status: "paid_not_served",
+        message: "Paid, but the server did not serve the resource yet (it may still be checking the cash out). Retry with paymentHeader; do not pay again.",
+        paymentHeader: paid.header,
+        ...served,
+      });
+    }
+    return text({ ...paid.result, status: "ok", ...served, paymentResponse: second.headers.get("x-payment-response") ?? second.headers.get("payment-response") });
+  }
+
   server.registerTool(
     "gloam_fetch_paid",
     {
       title: "Fetch a paid resource (x402 or MPP, paid privately)",
       description:
-        "AGENT side, REAL execution. Request a URL; if it answers 402 with a Gloam private price, pay it privately from this server's notes (same limits as gloam_execute_private_pay), retry, and return the response. Understands both dialects: an MPP challenge (WWW-Authenticate: Payment with method gloam, answered with Authorization: Payment) is preferred when offered, else x402 (X-PAYMENT). The agent never handles a note secret or the payment header unless a retry is needed. A call whose answer never arrived is not paid twice: the same call again gets that answer, presents the first payment, or answers payment_in_progress while it is running. Requires GLOAM_AGENT_PRIVATE_KEY to pay.",
+        "AGENT side, REAL execution. Request a URL; if it answers 402 with a Gloam private price, pay it privately from this server's notes (same limits as gloam_execute_private_pay), retry, and return the response. Understands both dialects: an MPP challenge (WWW-Authenticate: Payment with method gloam, answered with Authorization: Payment) is preferred when offered, else x402 (X-PAYMENT). Also pays x402 scheme gloam-cashout (a gateway on Robinhood Chain that pays out to a public address): a cash out of exactly the quoted USDG from this server's notes to that address, sent through the Gloam relay. The payee and the amount are public there; this server's wallet and balance are not. gloam-cashout needs maxAmount. With gloam-private and gloam-cashout both offered, gloam-private is paid unless prefer says gloam-cashout. The agent never handles a note secret or the payment header unless a retry is needed. A call whose answer never arrived is not paid twice: the same call again gets that answer, presents the first payment, or answers payment_in_progress while it is running. Requires GLOAM_AGENT_PRIVATE_KEY to pay.",
       inputSchema: {
         url: z.string().url().describe("http(s) URL of the resource."),
         method: z.enum(["GET", "POST"]).default("GET"),
@@ -1928,9 +1969,13 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           .string()
           .optional()
           .describe("Present a payment already made (paymentHeader from an earlier result: an X-PAYMENT value or an MPP Payment credential) instead of paying again."),
+        prefer: z
+          .enum([GLOAM_X402_SCHEME, GLOAM_CASHOUT_SCHEME])
+          .optional()
+          .describe("Which x402 scheme to pay when the resource offers both gloam-private and gloam-cashout. Default gloam-private, which keeps the payee private too."),
       },
     },
-    oncePerPurchase(async ({ url, method, body, contentType, note, maxAmount, paymentHeader }, slot) => {
+    oncePerPurchase(async ({ url, method, body, contentType, note, maxAmount, paymentHeader, prefer }, slot) => {
       if (!/^https?:\/\//i.test(url)) return text({ status: "error", error: "Only http and https URLs." });
       const request = (payHeaders: Record<string, string> = {}) =>
         deps.fetch(url, {
@@ -1977,9 +2022,22 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         });
       }
 
-      // MPP first: a gloam/charge challenge in WWW-Authenticate. Otherwise x402.
+      // MPP first: a gloam/charge challenge in WWW-Authenticate. Otherwise x402: gloam-private, or
+      // gloam-cashout when that is the only Gloam scheme offered or the caller prefers it.
       let req: GloamPaymentRequirements | string;
-      const mpp = gloamChallenges(first.headers.get("www-authenticate"))[0] ?? null;
+      const cashout = findGloamCashoutRequirement(first.headers, firstBody);
+      const mpp = prefer === GLOAM_CASHOUT_SCHEME && cashout ? null : (gloamChallenges(first.headers.get("www-authenticate"))[0] ?? null);
+      if (!mpp && cashout) {
+        let priv: GloamPaymentRequirements | string;
+        try {
+          priv = requirementsFrom402(first.headers, firstBody);
+        } catch {
+          priv = "does not decode";
+        }
+        if (chooseGloamX402Scheme({ gloamPrivate: typeof priv !== "string", gloamCashout: true }, prefer) === GLOAM_CASHOUT_SCHEME) {
+          return fetchPaidCashout({ cashout, url, note, maxAmount, request });
+        }
+      }
       if (mpp) {
         let request: GloamChargeRequest;
         try {
