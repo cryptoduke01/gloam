@@ -19,6 +19,8 @@ export type EmbeddedEnv = {
   enabled?: string | undefined;
   organizationId?: string | undefined;
   authProxyConfigId?: string | undefined;
+  /** Google's OAuth Web client ID. Unset: no Google button. */
+  googleClientId?: string | undefined;
 };
 
 /**
@@ -29,6 +31,7 @@ const BUILD_ENV: EmbeddedEnv = {
   enabled: process.env.NEXT_PUBLIC_TURNKEY_ENABLED,
   organizationId: process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID,
   authProxyConfigId: process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID,
+  googleClientId: process.env.NEXT_PUBLIC_TURNKEY_GOOGLE_CLIENT_ID,
 };
 
 /** Gloam wallets are on: the flag says exactly "true" and both dashboard ids are there. */
@@ -39,6 +42,27 @@ export function embeddedWalletsOn(env: EmbeddedEnv = BUILD_ENV): boolean {
 export const EMBEDDED_WALLETS = embeddedWalletsOn();
 export const TURNKEY_ORGANIZATION_ID = BUILD_ENV.organizationId?.trim() ?? "";
 export const TURNKEY_AUTH_PROXY_CONFIG_ID = BUILD_ENV.authProxyConfigId?.trim() ?? "";
+
+/**
+ * Continue with Google: the Web client ID from Google Cloud (DEPLOY-TURNKEY.md),
+ * or "" to leave the button out. Only a value shaped like a Google client ID counts.
+ */
+export function googleClientIdFrom(env: EmbeddedEnv = BUILD_ENV): string {
+  const id = env.googleClientId?.trim() ?? "";
+  return /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(id) ? id : "";
+}
+export const TURNKEY_GOOGLE_CLIENT_ID = googleClientIdFrom();
+
+/**
+ * Where Google sends the sign-in window back to after Continue with Google: this
+ * origin itself, with no path and no trailing slash, exactly as it is listed under
+ * Authorized redirect URIs in Google Cloud (DEPLOY-TURNKEY.md). The window is never
+ * read as a page: the kit reads the token off its address the moment it is back on
+ * this origin, then closes it.
+ */
+export function oauthRedirectFor(origin: string): string {
+  return origin.replace(/\/+$/, "");
+}
 
 /**
  * The passkey's relying party. On gloam.trade and its subdomains it is the bare

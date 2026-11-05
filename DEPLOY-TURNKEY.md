@@ -32,17 +32,83 @@ In the Turnkey dashboard, under **Embedded Wallets > Configuration**:
 | Allowed Origins | `https://www.gloam.trade`, `https://gloam.trade`, and `http://localhost:3000` for development. Exact URLs: no wildcard, no path, no trailing slash. A Vercel preview needs its own exact URL added before sign-in works there. |
 | Email OTP | On |
 | Passkey | On |
-| Wallet sign-in, SMS, social logins | Off. The app hides them anyway: browser wallets connect through the app's own "Use a wallet". |
+| Wallet sign-in, SMS | Off. The app hides them anyway: browser wallets connect through the app's own "Use a browser wallet". |
+| Google | On only for Continue with Google, with its Web client ID (see "Continue with Google" below). Other social logins: Off. |
 | Session expiration | 86400 (one day) is a reasonable start. Today it is 900 (15 minutes). The app refreshes a session while the page is open; a longer session means fewer sign-ins, and longer access for anyone holding the unlocked browser. |
 | OTP | 6 digits is fine. Letters and digits (up to 9) is stronger. |
 | Email customization | App name `Gloam`; logo `https://www.gloam.trade/brand/logo.png` (PNG, at most 340x124). The app name is required for email sign-in. |
-| OAuth redirect URL | Leave empty: no social logins. |
+| OAuth redirect URL | Empty without Google. With Google: `https://www.gloam.trade`. The app sends the page's own origin, so this is only a fallback. |
 
 Wallets are not created at sign-up. After the first sign-in the app reads the wallet
 list (a failed read is retried, never taken for "no wallet"), then asks for an optional
 name and creates one Ethereum wallet (`m/44'/60'/0'/0/0`), which signs on every chain
 Gloam runs on. It reads the list once more just before creating, and with more than one
 wallet it always signs with the oldest.
+
+### Continue with Google (optional)
+
+The sign-in sheet shows a Google button only when `NEXT_PUBLIC_TURNKEY_GOOGLE_CLIENT_ID`
+is set **and** Google is on in the auth proxy config. Unset, nothing about Google ships.
+
+How it works (`handleGoogleOauth({ openInPage: false })` in `@turnkey/react-wallet-kit`
+2.2.0): the kit opens a **popup** (500x600) on `accounts.google.com` and asks for an ID
+token (`response_type=id_token`, scopes `openid email profile`, the nonce bound to a fresh
+session key). Google sends the popup back to this site's own origin with the token in the
+address (after the `#`). The page that opened the popup reads that address, closes the
+popup and finishes the sign-in through the auth proxy (`completeOauth`). No client secret
+is used anywhere.
+
+- The redirect URI is the page's origin itself: `https://www.gloam.trade`, `https://gloam.trade`,
+  `http://localhost:3000` or the preview's origin, with no path and no trailing slash
+  (`oauthRedirectFor` in `lib/embeddedWallet`). The popup only lands there for a moment.
+- Popup on phones too. The kit's default on narrow screens is a whole-page redirect, but
+  the origin's root (the marketing page) doesn't run the kit, so that flow could not finish.
+  If a phone browser blocks the popup, the sheet says how to allow pop-ups.
+- Vercel Analytics never sees the token: it sends the origin and path only.
+
+**Google finds accounts by the Google identity, not by the email address.** Someone who
+signed up with the email code and later uses Google with the same address gets a new
+Gloam account and a new wallet. The sheet keeps the email field first for that reason.
+
+**1. Google Cloud** (done for project `gloam-sign-in`, published to production; for reference):
+
+1. Google Auth Platform > **Branding**: App name `Gloam`; support email `hello@gloam.trade`;
+   logo `app/public/brand/logo.png`; home page `https://www.gloam.trade`; privacy policy
+   `https://www.gloam.trade/privacy`; terms `https://www.gloam.trade/terms`; authorized
+   domain `gloam.trade`.
+2. **Audience**: External, published ("In production"). While it is in Testing only listed
+   test users can sign in. The scopes are the basic ones (`openid`, `email`, `profile`).
+3. **Clients**: a **Web application** client. Authorized JavaScript origins **and**
+   Authorized redirect URIs both list, exactly (no path, no trailing slash):
+   - `https://www.gloam.trade`
+   - `https://gloam.trade`
+   - `http://localhost:3000`
+   - `https://gloam-trade-git-feat-gloam-signin-sheet-duke-s-team.vercel.app` (this PR's
+     preview; add each new preview origin the same way, Google allows no wildcards)
+4. Copy the **Client ID**. The client secret is not used; leave it in Google.
+
+**2. Turnkey dashboard**, Embedded Wallets > Configuration (the same auth proxy config):
+
+1. Turn **Google** on under the social logins and paste the same Client ID as Google's
+   client ID. The auth proxy checks the ID token against it (the token's audience).
+2. OAuth redirect URL: `https://www.gloam.trade`. It is only a fallback: the app sends
+   the page's own origin.
+3. Allowed Origins: unchanged, plus any preview you test Google on.
+4. The **OAuth 2.0** tab needs nothing for Google. It holds client secrets for providers
+   that exchange a code on Turnkey's side (X, Discord, Facebook). Google's ID token flow
+   has no code and no secret, and the issuer (`https://accounts.google.com`) is not
+   something to register.
+
+**3. Vercel**: `NEXT_PUBLIC_TURNKEY_GOOGLE_CLIENT_ID` for Production and Preview (set),
+then redeploy.
+
+**4. Check**: run `scripts/turnkey-check.mjs` with `NEXT_PUBLIC_TURNKEY_GOOGLE_CLIENT_ID`
+set as well. It fails if Google is off in the config or holds a different client ID.
+
+Content Security Policy: no change. Google is only ever a popup (a navigation, which the
+policy does not cover), the token comes back in the address on our own origin, and it
+goes to `*.turnkey.com`, which is already allowed. `csp.config.mjs` says the same, and
+`scripts/selftest-csp.mts` checks it.
 
 ### Recovery for Gloam wallets
 
@@ -157,6 +223,25 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
 13. Partner portal: on `/partners`, Sign in with email opens the portal and the email
     sheet. A new email gets Create Gloam wallet, then lands signed in. Sign out, sign in
     again: the same partner account. With the flag off, only Connect wallet shows.
+    Closing the email sheet, or "Use a browser wallet" in it, lands back on the
+    Sign in card with both ways in, and `?with=email` is gone from the address.
+14. The sign-in sheet (Gloam's own, `GloamSignInSheet`): the code email arrives and the
+    6 boxes take a paste of the whole code and the browser's one-time-code fill (iOS
+    Mail and Gmail suggestions), then sign in on the 6th digit. A wrong code says so and
+    clears; Resend opens after 30 seconds; an old code says it expired and offers a new
+    one. Passkey signs in on a browser that has one; closing the passkey prompt moves
+    to the passkey step (as in 15), signing nothing in. Back on the code step returns to
+    the email with it still filled in. The "Use a browser wallet" button under Google and
+    Passkey closes the sheet and opens the usual wallet connect; with no browser wallet
+    found it is not shown.
+15. Passkey on a browser with no Gloam passkey: the prompt finds none, and the sheet
+    offers Create a passkey and "I have one. Try again". Create makes a new account.
+16. With Google set up: Google opens in a popup, and the sheet closes once you are signed
+    in (on `/app`, and on the partner portal, which then signs the partner message by
+    itself). Closing the popup says so. With pop-ups blocked, the sheet says how to allow
+    them. Try it on an iPhone (Safari) and an Android phone (Chrome): the popup must open
+    there too. Sign in with Google using an email that already has a Gloam account: a
+    second account and wallet, as described above.
 
 ## Rolling back
 

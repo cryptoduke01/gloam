@@ -2,10 +2,10 @@ import Image from "next/image";
 
 /**
  * Partners already live on Gloam: a plain logo row on the landing page and /partners.
- * Raeto, Agent Wormhole and Motion are drawn inline so they follow the theme: Raeto's
- * ring takes the text colour, Agent Wormhole and Motion keep their own dark grounds.
+ * Raeto, Agent Wormhole, Motion and Killfloor are drawn inline so they follow the theme: Raeto's
+ * ring takes the text colour, the others keep their own dark grounds.
  * Zedkr's mark and VEYA's wordmark are rendered files, so each ships as a light and a
- * dark PNG and the theme picks one. Static copies of all five live in public/brand/partners.
+ * dark PNG and the theme picks one. Static copies of the first five live in public/brand/partners.
  */
 
 /** Raeto's mark: an open ring, a centre dot and the green dot in the gap. */
@@ -83,6 +83,18 @@ export function VeyaWordmark({ size = 40 }: { size?: number }) {
   );
 }
 
+/** Killfloor's mark: their white pulse line with the red floor, on their dark disc, edged in the text colour so it holds on dark grounds. */
+export function KillfloorMark({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+      <circle cx="32" cy="32" r="32" fill="#141414" />
+      <circle cx="32" cy="32" r="31.2" fill="none" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1.6" />
+      <polyline points="13,36 21,36 26,17 33,45" fill="none" stroke="#F4F1EA" strokeWidth="3.6" strokeLinejoin="miter" strokeLinecap="square" />
+      <rect x="32.5" y="42.6" width="17" height="4.4" fill="#C0392B" />
+    </svg>
+  );
+}
+
 type Partner = {
   name: string;
   href: string;
@@ -99,6 +111,7 @@ export const LIVE_PARTNERS: Partner[] = [
   { name: "Zedkr", href: "https://zedkr.finance", line: "Shop Amazon and eBay from a private balance", Mark: ZedkrMark },
   { name: "Motion", href: "https://motion.gift", line: "Fund a trading wallet privately", Mark: MotionMark },
   { name: "VEYA", href: "https://www.veyanet.tech", line: "Budget checks before an agent pays", Mark: VeyaWordmark, wordmark: true },
+  { name: "Killfloor", href: "https://killfloor.org", line: "AI agents pay each other privately", Mark: KillfloorMark },
 ];
 
 function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?: boolean; size?: number }) {

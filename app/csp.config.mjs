@@ -76,7 +76,12 @@ const SERVICES = [
   "wss://*.walletconnect.com",
   "https://api.web3modal.org",
   "https://*.reown.com",
-  // Gloam wallets (Turnkey): api, authproxy, and the success animation the sign-in sheet loads
+  // Gloam wallets (Turnkey): api, authproxy, and the success animation the sign-in sheet loads.
+  // Continue with Google needs no entry of its own: accounts.google.com only ever opens
+  // as a popup window (a navigation, which no directive here covers), Google hands the
+  // token back in the popup's address on our own origin, and the
+  // token goes to Turnkey's authproxy, which is listed here. The page never fetches from,
+  // frames or loads a script from Google. Add a Google host only if that changes.
   "https://*.turnkey.com",
   "https://lottie.host",
   "https://wallet.tempo.xyz",

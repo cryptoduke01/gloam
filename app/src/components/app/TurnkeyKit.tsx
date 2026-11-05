@@ -5,14 +5,21 @@ import {
   TurnkeyProvider,
   type TurnkeyProviderConfig,
 } from "@turnkey/react-wallet-kit";
-import { TURNKEY_AUTH_PROXY_CONFIG_ID, TURNKEY_ORGANIZATION_ID, embeddedRpId } from "@/lib/embeddedWallet";
+import {
+  TURNKEY_AUTH_PROXY_CONFIG_ID,
+  TURNKEY_GOOGLE_CLIENT_ID,
+  TURNKEY_ORGANIZATION_ID,
+  embeddedRpId,
+  oauthRedirectFor,
+} from "@/lib/embeddedWallet";
 import { TurnkeyWagmiSync } from "./TurnkeyWagmiSync";
+import { GloamSignInSheet } from "./GloamSignInSheet";
 import { ClientOnly } from "./ClientOnly";
 
 /**
- * Turnkey's modal renders outside our token system, so it takes literal
- * colours. These mirror the Gloam tokens in globals.css: ink on paper with cool
- * greys, and the sealed green only for the success state.
+ * Sign-in is Gloam's own sheet (GloamSignInSheet), so nothing opens the kit's
+ * modal today. Its colours stay set in case a kit screen ever shows: they take
+ * literal values, mirroring the Gloam tokens in globals.css.
  */
 const TURNKEY_COLORS: NonNullable<
   NonNullable<TurnkeyProviderConfig["ui"]>["colors"]
@@ -68,6 +75,11 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
   // in the browser, so the relying party is read then (it never reaches the page's
   // markup). On the server there is no host and no signer.
   const [rpId] = useState(() => (typeof window === "undefined" ? undefined : embeddedRpId(window.location.hostname)));
+  // Continue with Google, when its client ID is set: Google sends its window back to
+  // this origin, where the kit reads the token off the address (lib/embeddedWallet).
+  const [oauthRedirectUri] = useState(() =>
+    typeof window === "undefined" || !TURNKEY_GOOGLE_CLIENT_ID ? undefined : oauthRedirectFor(window.location.origin)
+  );
 
   // Memoised so the provider only rebuilds its config when the theme flips,
   // not on every parent render.
@@ -76,6 +88,9 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
       organizationId: TURNKEY_ORGANIZATION_ID,
       authProxyConfigId: TURNKEY_AUTH_PROXY_CONFIG_ID,
       ...(rpId ? { passkeyConfig: { rpId } } : {}),
+      ...(oauthRedirectUri
+        ? { auth: { oauthConfig: { oauthRedirectUri, google: { primaryClientId: TURNKEY_GOOGLE_CLIENT_ID } } } }
+        : {}),
       // Browser wallets connect through wagmi, not the kit. The kit still needs
       // its wallet manager: refreshWallets asks it for providers first and throws
       // "Wallet manager is not initialized" without one, so the wallet list never
@@ -105,7 +120,7 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
         colors: TURNKEY_COLORS,
       },
     }),
-    [dark, rpId]
+    [dark, rpId, oauthRedirectUri]
   );
 
   // One object for the provider's life: the kit's methods (refreshWallets, logout)
@@ -122,6 +137,7 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
     >
       <ClientOnly>
         <TurnkeyWagmiSync />
+        <GloamSignInSheet />
       </ClientOnly>
       {children}
     </TurnkeyProvider>
