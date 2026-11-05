@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { AuthState, ClientState, OtpType, useTurnkey } from "@turnkey/react-wallet-kit";
 import { Mark } from "@/components/Logo";
+import { Spinner } from "@/components/ui/Spinner";
 import { useModalFocus } from "@/hooks/useModalFocus";
 import { TURNKEY_GOOGLE_CLIENT_ID } from "@/lib/embeddedWallet";
 import { onSignInSheetRequest, type SignInSheetOptions } from "@/lib/turnkeyBridge";
@@ -515,7 +516,8 @@ function StartStep({
                 {fieldError}
               </p>
             )}
-            <button type="submit" disabled={!ready || busy !== null} className="btn btn-ink btn-lg btn-block mt-2.5">
+            <button type="submit" disabled={!ready || busy !== null} aria-busy={busy === "send"} className="btn btn-ink btn-lg btn-block mt-2.5">
+              {busy === "send" && <Spinner />}
               {busy === "send" ? "Sending code…" : "Continue"}
             </button>
           </form>
@@ -535,7 +537,7 @@ function StartStep({
                 aria-label="Continue with Google"
                 className="btn btn-ghost btn-lg btn-block px-3"
               >
-                <GoogleGlyph />
+                {busy === "google" ? <Spinner className="h-4 w-4" /> : <GoogleGlyph />}
                 {busy === "google" ? "Opening…" : "Google"}
               </button>
             )}
@@ -546,7 +548,7 @@ function StartStep({
               aria-label="Sign in with a passkey"
               className="btn btn-ghost btn-lg btn-block px-3"
             >
-              <KeyGlyph />
+              {busy === "passkey-login" ? <Spinner className="h-4 w-4" /> : <KeyGlyph />}
               {busy === "passkey-login" ? "Waiting…" : "Passkey"}
             </button>
           </div>
@@ -557,7 +559,8 @@ function StartStep({
             </p>
           )}
           {!ready && (
-            <p role="status" className="mt-2.5 text-center text-[12.5px] text-mute">
+            <p role="status" className="mt-2.5 flex items-center justify-center gap-2 text-[12.5px] text-mute">
+              <Spinner className="h-3 w-3" />
               Getting sign-in ready…
             </p>
           )}
@@ -606,11 +609,14 @@ function PasskeyStep({
         type="button"
         onClick={() => onPasskey("signup")}
         disabled={busy !== null}
+        aria-busy={busy === "passkey-signup"}
         className="btn btn-ink btn-lg btn-block mt-5"
       >
+        {busy === "passkey-signup" && <Spinner />}
         {busy === "passkey-signup" ? "Waiting for your passkey…" : "Create a passkey"}
       </button>
       <button type="button" onClick={() => onPasskey("login")} disabled={busy !== null} className="btn btn-quiet btn-block mt-1.5">
+        {busy === "passkey-login" && <Spinner />}
         {busy === "passkey-login" ? "Waiting…" : "I have one. Try again"}
       </button>
     </div>
@@ -736,12 +742,14 @@ function CodeStep({
         )}
 
         <button type="submit" disabled={verifying || !otpComplete(code, format) || spent} className="btn btn-ink btn-lg btn-block mt-2.5">
+          {verifying && <Spinner />}
           {verifying ? "Signing in…" : "Continue"}
         </button>
       </form>
 
       <div className="mt-1.5 grid grid-cols-2 gap-1">
         <button type="button" onClick={onResend} disabled={!resendOpen} className="btn btn-quiet btn-sm">
+          {state.busy === "resend" && <Spinner />}
           {state.busy === "resend" ? "Sending…" : resendOpen ? (spent ? "Send a new code" : "Resend code") : `Resend in ${wait}s`}
         </button>
         <button type="button" onClick={onBack} disabled={verifying} className="btn btn-quiet btn-sm text-mute">
