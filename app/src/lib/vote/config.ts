@@ -122,10 +122,11 @@ export const VOTES: VoteConfig[] = [
     end: FIRST_END,
   },
   {
-    // Published 5 Nov 2026. A yes is not a migration by itself: it goes ahead only on terms that keep
+    // Taken down 5 Nov 2026 before announcing, while the team settles the plan; reopen with new
+    // start/end. A yes is not a migration by itself: it goes ahead only on terms that keep
     // supply fixed and lock the new liquidity forever, with holders on fomo and in the vault covered.
     id: "gloam-migration",
-    published: true,
+    published: false,
     question: "Should $GLOAM move to a new pool?",
     description:
       "$GLOAM trades on its Orynth pool, where every trade pays a 2% fee and the liquidity is locked forever. A migration would swap every $GLOAM one for one into a new token on a new pool. The team will only migrate if holders vote yes.",
