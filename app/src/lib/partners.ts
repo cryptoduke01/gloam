@@ -36,6 +36,9 @@
  *   name-ok:<id>            the account name an admin approved to show in links
  *   owner:<address>         partner id for a wallet (one account per wallet)
  *   partners                set of partner ids
+ *   removed:<id>            an admin removed this account (JSON; lib/partnerRemove): it reads as
+ *                           no account from then on, and its past activity stays under its id
+ *   removed-owner:<address> the wallet's last removed account, for the notice in the portal (JSON)
  *   tx:<chainId>:<hash>     partner id that a transaction is attributed to
  *   txrec:<chainId>:<hash>  that partner and the record, so a claim can be moved (JSON)
  *   events:<id>             newest-first list of activity records (capped)
@@ -309,14 +312,30 @@ function recordOf(p: Partner): string {
   return JSON.stringify(rest);
 }
 
+export function isPartnerId(id: unknown): id is string {
+  return typeof id === "string" && /^ptr_[A-Za-z0-9]{6,32}$/.test(id);
+}
+
+/** Null for an unknown id, and for an account an admin removed, whatever is left under its keys. */
 export async function getPartner(id: string): Promise<Partner | null> {
-  if (!/^ptr_[A-Za-z0-9]{6,32}$/.test(id)) return null;
-  const [raw, approved, nameOk] = await kv([
+  if (!isPartnerId(id)) return null;
+  const [raw, approved, nameOk, removed] = await kv([
     ["GET", k("partner", id)],
     ["GET", k("relay-approved", id)],
     ["GET", k("name-ok", id)],
+    ["EXISTS", k("removed", id)],
   ]);
+  if (Number(removed) > 0) return null;
   return withApproval(raw, approved, nameOk);
+}
+
+/** What the portal tells a wallet whose account an admin removed. */
+export type RemovedNotice = { name: string; removedAt: number };
+
+/** The wallet's last removed account, when it has no account now; null otherwise. */
+export async function removedNoticeFor(owner: string): Promise<RemovedNotice | null> {
+  const r = jsonOf<{ name?: unknown; removedAt?: unknown }>(await kv1(["GET", k("removed-owner", owner.toLowerCase())]));
+  return r && typeof r.name === "string" && typeof r.removedAt === "number" ? { name: r.name, removedAt: r.removedAt } : null;
 }
 
 export async function getPartnerByOwner(owner: string): Promise<Partner | null> {

@@ -7,6 +7,7 @@ import { isTier, listPartners, migrationNote, partnerView, readAllPartnerTotals,
 import { kvBackend } from "@/lib/partnersKv";
 import { linkCodeState, listLinkCodes } from "@/lib/partnerLinks";
 import { countAddresses, getPartnerAddresses } from "@/lib/partnerAddresses";
+import { removePartner } from "@/lib/partnerRemove";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,13 +60,16 @@ export async function GET(req: NextRequest) {
  *                                   relay's larger message budget (lib/relay/server, relayMemo)
  *   { id, approveName: boolean }    the account's current name shows in links as
  *                                   "From <name> · Gloam partner"; a later rename needs this again
+ *   { id, remove: true }            removes the account for good (lib/partnerRemove): its keys and
+ *                                   link codes stop working at once, its addresses and approvals go,
+ *                                   and it leaves the list and the totals
  */
 export async function POST(req: NextRequest) {
   return portal(async () => {
     if (!sameSiteJson(req)) throw new ApiError(403, "bad_origin", "Change partners from the Gloam site.");
     if (!(await isAdminAuthenticated())) throw new ApiError(401, "unauthorized", "Admin session required.");
     const body = await jsonBody(req);
-    if (typeof body.id !== "string") throw new ApiError(400, "bad_request", "Send { id, relayApproved } or { id, approveName }.");
+    if (typeof body.id !== "string") throw new ApiError(400, "bad_request", "Send { id, relayApproved }, { id, approveName } or { id, remove: true }.");
     if (typeof body.relayApproved === "boolean") {
       const partner = await setRelayApproved(body.id, body.relayApproved);
       if (!partner) throw new ApiError(404, "not_found", "No partner with that id.");
@@ -76,6 +80,11 @@ export async function POST(req: NextRequest) {
       if (!partner) throw new ApiError(404, "not_found", "No partner with that id.");
       return { data: { partner: partnerView(partner) } };
     }
-    throw new ApiError(400, "bad_request", "Send { id, relayApproved: true | false } or { id, approveName: true | false }.");
+    if (body.remove === true) {
+      const removed = await removePartner(body.id);
+      if (!removed) throw new ApiError(404, "not_found", "No partner with that id.");
+      return { data: { removed } };
+    }
+    throw new ApiError(400, "bad_request", "Send { id, relayApproved: true | false }, { id, approveName: true | false } or { id, remove: true }.");
   });
 }
