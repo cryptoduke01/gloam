@@ -1,5 +1,6 @@
 "use client";
 
+import { HowItWorks } from "@/components/ui/HowItWorks";
 import type { ReactNode } from "react";
 import { getNetwork, networkName, type NetworkKey } from "@/lib/networks";
 import type { ActivityKind, ActivitySource, PartnerStats } from "@/lib/partners";
@@ -131,13 +132,17 @@ export function PartnerBreakdown({
         }
         foot={
           <>
-            {testnet
-              ? "Testnet: counted, never valued. Test tokens have no price. "
-              : "Volume is the dollar value of public edges: deposits, cash outs and each swap's input. The vault fee is Gloam's own cash-out fee on those cash outs and swaps, read from each transaction or the vault's setting at the time. "}
-            Nothing is charged to partners. Private payments show only as counts: never an amount, never one by one, and, in the
-            partner&apos;s own view, only for days that have ended (UTC). Fee-split grade: API key, relay-bound links and matched on
-            chain. Link counts the payer&apos;s wallet registered are attribution grade (shown in brackets).
-            {notMatched ? ` ${notMatched.privatePayments} ${notMatched.swaps}` : ""}
+            {testnet ? "Testnet: counted, never valued." : "Nothing is charged to partners."} Private payments show only as counts.
+            <HowItWorks
+              items={[
+                testnet ? "Test tokens have no price." : "Volume: the dollar value of deposits, cash outs and each swap's input.",
+                ...(testnet ? [] : ["Vault fee: Gloam's own cash-out fee on those, read from each transaction."]),
+                "Private payments: never an amount, never one by one. The partner sees only days that have ended (UTC).",
+                "Fee-split grade: API key, relay-bound links and matched on chain.",
+                "In brackets: link counts the payer's wallet registered, attribution grade.",
+                ...(notMatched ? [notMatched.privatePayments, notMatched.swaps] : []),
+              ]}
+            />
           </>
         }
       >
