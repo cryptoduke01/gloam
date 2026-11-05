@@ -1699,14 +1699,30 @@ export class GloamAgent {
     if (problem) return { status: "refused", code: problem.code, message: problem.message };
     const gross = BigInt(req.amount);
     const payTo = getAddress(req.payTo);
-    const out = await this.cashOutWei(asset, gross, payTo);
+    // One purchase per quote: its cash out note carries a key made from the quote, so the same quote asked again
+    // (a retry whose X-PAYMENT never reached the gateway) presents that cash out and is never paid twice.
+    const quoteLabel = `x402-cashout:${createHash("sha256").update(req.quoteId).digest("hex").slice(0, 32)}`;
+    const quoteKey = this.requestKeyOf(`cash_out:${payTo.toLowerCase()}`, asset, gross, quoteLabel);
+    const paid = this.store.list().find((x) => x.requestKey === quoteKey && x.chainId === this.network.chainId && x.status === "spent");
+    const out: Outcome = paid
+      ? {
+          status: "done",
+          action: "cash_out",
+          alreadyCashedOut: true,
+          network: this.network.key,
+          cashedOut: this.fmt(gross, asset),
+          to: payTo,
+          ...(paid.spentTx ? { hash: paid.spentTx, explorer: this.explorer(paid.spentTx) } : {}),
+          message: "This quote was already paid, so that cash out is presented and nothing new was paid.",
+        }
+      : await this.cashOutWei(asset, gross, payTo, quoteLabel);
     const tagged: Outcome = { ...out, action: "pay_x402_cashout", scheme: GLOAM_CASHOUT_SCHEME };
     if (out.status !== "done") return tagged;
     if (typeof out.hash !== "string") {
       return {
         ...tagged,
         status: "unconfirmed",
-        message: "The cash out landed, but its transaction hash is not known here, so there is no payment header yet. Refresh the balance and ask again: it is not sent twice.",
+        message: "The cash out landed, but its transaction hash is not known here, so there is no payment header for it. Find the cash out to payTo in the vault's Unshielded logs and present its hash. Asking again with this quote does not pay it twice.",
       };
     }
     return {
@@ -1718,14 +1734,14 @@ export class GloamAgent {
   }
 
   /** A cash out of exactly `amountWei` to `to`: behind cashOut() and payX402Cashout(). */
-  private async cashOutWei(asset: GloamAsset, amountWei: bigint, to: string): Promise<Outcome> {
+  private async cashOutWei(asset: GloamAsset, amountWei: bigint, to: string, keyLabel?: string): Promise<Outcome> {
     if (!isAddress(to)) throw new Error("Cash out to a 0x address.");
     // Here and not only in the builder: the split below would already have spent a note by then.
     const problem = cashOutTargetProblem(to, this.network);
     if (problem) throw new Error(problem);
     // The same cash out (address, asset, amount) whose answer was lost may still land: it is never paid twice.
     // Its notes carry this key: the split that makes the exact note, and the note being cashed out.
-    const requestKey = this.requestKeyOf(`cash_out:${to.toLowerCase()}`, asset, amountWei);
+    const requestKey = this.requestKeyOf(`cash_out:${to.toLowerCase()}`, asset, amountWei, keyLabel);
     const carrying = () => this.store.list().filter((x) => x.requestKey === requestKey && x.chainId === this.network.chainId && x.status !== "spent");
     const unconfirmedCashOut = (n: StoredNote): Outcome => ({
       status: "refused",
