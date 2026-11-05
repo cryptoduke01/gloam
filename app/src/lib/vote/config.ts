@@ -122,22 +122,22 @@ export const VOTES: VoteConfig[] = [
     end: FIRST_END,
   },
   {
-    // DRAFT: not published. Publish only after MigrateFun's Robinhood Chain terms are confirmed
-    // (their fee, where the new pool lives, a permanent liquidity lock, what happens to unclaimed
-    // tokens, support for holders on fomo and in the Gloam vault) and Orynth has been told.
+    // Published 5 Nov 2026. A yes is not a migration by itself: it goes ahead only on terms that keep
+    // supply fixed and lock the new liquidity forever, with holders on fomo and in the vault covered.
     id: "gloam-migration",
-    published: false,
+    published: true,
     question: "Should $GLOAM move to a new pool?",
     description:
       "$GLOAM trades on its Orynth pool, where every trade pays a 2% fee and the liquidity is locked forever. A migration would swap every $GLOAM one for one into a new token on a new pool. The team will only migrate if holders vote yes.",
     options: ["Stay on Orynth", "Migrate to a new pool"],
     details: [
       "Nothing changes: same token, same contract, same locked pool.",
-      "Swap old $GLOAM for new, one for one, in a set window. Fixed supply, liquidity locked forever. Miss the window and you can lose out.",
+      "Swap old $GLOAM for new, one for one, in a set window. Only on terms that keep supply fixed and lock the liquidity forever.",
     ],
-    snapshotBlock: 0,
+    snapshotBlock: 106_824_482,
     weighting: "close",
-    start: "2026-11-09T16:00:00Z",
-    end: "2026-11-12T23:00:00Z",
+    start: "2026-11-05T19:00:00Z",
+    // Sunday 8 November, 11pm UTC (midnight in Lagos)
+    end: "2026-11-08T23:00:00Z",
   },
 ];
