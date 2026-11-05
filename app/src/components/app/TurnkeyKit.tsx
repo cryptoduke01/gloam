@@ -86,7 +86,8 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
       ui: {
         darkMode: dark,
         logoLight: "/brand/logo.png",
-        logoDark: "/brand/logo.png",
+        // the ink tile disappears into the dark sheet; the white tile keeps the mark visible
+        logoDark: "/brand/kit/gloam-mark-white-1024.png",
         borderRadius: 16,
         preferLargeActionButtons: true,
         authModal: {
