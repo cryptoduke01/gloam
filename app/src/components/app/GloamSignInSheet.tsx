@@ -460,7 +460,7 @@ function StartStep({
         Sign in to Gloam
       </h2>
       <p id="gs-sub" className="mt-0.5 text-[14px] text-mute">
-        Email or passkey. No seed phrase.
+        {google ? "Email, Google or passkey. No seed phrase." : "Email or passkey. No seed phrase."}
       </p>
 
       {clientState === "error" ? (
