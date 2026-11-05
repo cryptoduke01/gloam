@@ -68,7 +68,7 @@ export function readPartnerFee(raw: unknown): { kind: FeeKind; asset: Address; a
   if (typeof raw !== "object") throw new FeeReportError("partnerFee must be { kind, asset, amount }.", "bad_partner_fee");
   const f = raw as Record<string, unknown>;
   if (Object.keys(f).some((key) => !["kind", "asset", "amount", "code"].includes(key))) {
-    throw new FeeReportError("partnerFee takes only kind, asset and amount.", "bad_partner_fee");
+    throw new FeeReportError("partnerFee takes only kind, asset, amount and (from a link) code.", "bad_partner_fee");
   }
   if (typeof f.kind !== "string" || !(FEE_KINDS as string[]).includes(f.kind)) {
     throw new FeeReportError('partnerFee.kind must be "private_payment", "cash_out" or "deposit".', "bad_partner_fee");

@@ -462,8 +462,9 @@ curl https://gloam.trade/api/v1/relay \
 
       <h3 id="fee-api">Charging your fee with your API key</h3>
       <p>
-        With your key, your app adds the fee. Before the user&apos;s payment, cash out
-        or deposit, build one private send of the fee from the user&apos;s note to your
+        With your key, your app adds the fee. Before the user&apos;s payment or cash
+        out (for a deposit, right after it, from the note it made), build one
+        private send of the fee from the user&apos;s note to your
         own Gloam address (<code>buildPrivateSendIntent</code> with your{" "}
         <code>gloamr1.</code> address as the payee), show it to the user, and relay it
         with <code>partnerFee</code> beside the proof. The relay checks it against
