@@ -25,6 +25,9 @@
  *             lead to it.
  *   x402      a pay to the 402 price's receive tag, handed back as the
  *             X-PAYMENT value instead of posted to the payment board.
+ *             Scheme gloam-cashout instead cashes out the quoted amount to
+ *             the price's public payTo: the payee and the amount show, the
+ *             agent's wallet and balance do not.
  *
  * With a partner API key, private payments, cash outs and payment messages go
  * through the partner relay and deposits are attributed, so the partner's
@@ -39,6 +42,7 @@ import {
   createWalletClient,
   encodeFunctionData,
   formatUnits,
+  getAddress,
   http,
   isAddress,
   isAddressEqual,
@@ -53,6 +57,10 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
+  GLOAM_CASHOUT_ASSET,
+  GLOAM_CASHOUT_CHAIN_ID,
+  GLOAM_CASHOUT_SCHEME,
+  GLOAM_CASHOUT_VAULT,
   GLOAM_X402_SCHEME,
   GLOAM_X402_VERSION,
   GloamApiClient,
@@ -70,9 +78,11 @@ import {
   cashOutTargetProblem,
   cleanPaymentNote,
   decodePaymentHeader,
+  encodeGloamCashoutHeader,
   encodeNotePackage,
   encodePaymentHeader,
   generateReceiveKey,
+  gloamCashoutProblem,
   isReceiveTag,
   networkName,
   normalizeRequestAmount,
@@ -86,6 +96,7 @@ import {
   sealToReceiveTag,
   sweepReceivedNote,
   type GloamAsset,
+  type GloamCashoutRequirement,
   type GloamIntent,
   type GloamPaymentPayload,
   type GloamPaymentRequirements,
@@ -1658,7 +1669,56 @@ export class GloamAgent {
   async cashOut(args: { amount: string; asset?: string; to: string; label?: string }): Promise<Outcome> {
     const asset = this.asset(args.asset);
     const amountWei = this.amount(args.amount, asset);
-    const to = String(args.to ?? "").trim();
+    return this.cashOutWei(asset, amountWei, String(args.to ?? "").trim());
+  }
+
+  /**
+   * Pay a 402 price with scheme gloam-cashout: a cash out of exactly the quoted
+   * gross amount G of USDG to the quote's public payTo (a gateway's splitter),
+   * on Robinhood Chain mainnet. The quote is checked first (network, asset,
+   * vault, payTo, amount, quoteId, expiry) and refused above `maxAmount`, which
+   * is required. Like any cash out it splits a note privately first when none
+   * holds exactly G, passes the owner's limits as a cash out to payTo, and is
+   * never sent twice for an answer that was lost.
+   *
+   * The X-PAYMENT value comes back as `paymentHeader`: base64 JSON
+   * { scheme, txHash, quoteId }. It carries a public tx hash and the gateway's
+   * own quoteId, never a note or a key.
+   */
+  async payX402Cashout(args: { requirement: GloamCashoutRequirement; maxAmount: string }): Promise<Outcome> {
+    const req = args.requirement;
+    if (this.network.chainId !== GLOAM_CASHOUT_CHAIN_ID || !isAddressEqual(this.network.pool, GLOAM_CASHOUT_VAULT)) {
+      throw new Error(`A ${GLOAM_CASHOUT_SCHEME} price is paid on Robinhood Chain mainnet, and this agent pays on ${this.where()}.`);
+    }
+    const asset = this.network.assets.find((a) => isAddressEqual(a.address, GLOAM_CASHOUT_ASSET));
+    if (!asset) throw new Error(`The ${this.where()} vault does not take USDG.`);
+    if (args.maxAmount === undefined || args.maxAmount === null || String(args.maxAmount).trim() === "") {
+      return { status: "refused", code: "no_max_amount", message: `A ${GLOAM_CASHOUT_SCHEME} payment needs a maxAmount, the most you will cash out for it. Not paying.` };
+    }
+    const problem = gloamCashoutProblem(req, { maxAmount: this.amount(args.maxAmount, asset) });
+    if (problem) return { status: "refused", code: problem.code, message: problem.message };
+    const gross = BigInt(req.amount);
+    const payTo = getAddress(req.payTo);
+    const out = await this.cashOutWei(asset, gross, payTo);
+    const tagged: Outcome = { ...out, action: "pay_x402_cashout", scheme: GLOAM_CASHOUT_SCHEME };
+    if (out.status !== "done") return tagged;
+    if (typeof out.hash !== "string") {
+      return {
+        ...tagged,
+        status: "unconfirmed",
+        message: "The cash out landed, but its transaction hash is not known here, so there is no payment header yet. Refresh the balance and ask again: it is not sent twice.",
+      };
+    }
+    return {
+      ...tagged,
+      paymentHeader: encodeGloamCashoutHeader({ txHash: out.hash as Hex, quoteId: req.quoteId }),
+      delivered: "Present paymentHeader as the X-PAYMENT header on the retry. It carries the cash out's tx hash and the quote's id, nothing private.",
+      public: `The chain shows ${this.fmt(gross, asset)} leaving the Gloam vault to ${payTo}, the payee's public address. Not ${this.submitMode === "relay" ? "this agent's wallet, or " : ""}which private payment funded it.`,
+    };
+  }
+
+  /** A cash out of exactly `amountWei` to `to`: behind cashOut() and payX402Cashout(). */
+  private async cashOutWei(asset: GloamAsset, amountWei: bigint, to: string): Promise<Outcome> {
     if (!isAddress(to)) throw new Error("Cash out to a 0x address.");
     // Here and not only in the builder: the split below would already have spent a note by then.
     const problem = cashOutTargetProblem(to, this.network);

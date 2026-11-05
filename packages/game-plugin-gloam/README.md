@@ -93,7 +93,7 @@ vault, the network's payment-message board, a token contract, a Gloam swap
 router and the zero address.
 
 The engine is `GloamAgent` (`plugin.agent`), usable without GAME: `add`, `pay`,
-`payX402`, `payByClaimLink`, `requestPayment`, `checkIncoming`, `claim`, `cashOut`,
+`payX402`, `payX402Cashout`, `payByClaimLink`, `requestPayment`, `checkIncoming`, `claim`, `cashOut`,
 `proveFunds`, `provePayment`, `verifyProof`, `refresh`. Import it from
 `@gloamtrade/game-plugin-gloam/engine` to load no GAME code. Two options are
 for agent kits: `noteBackend` keeps the encrypted note store somewhere other
@@ -101,7 +101,12 @@ than a local file (it only ever sees ciphertext), and `apiKey` (or
 `GLOAM_API_KEY`), a Gloam partner key, sends private payments and cash outs
 through the partner relay and attributes deposits, so they count on the partner
 dashboard. `payX402(requirements)` pays a Gloam x402 price privately and returns
-the `X-PAYMENT` value. The tool pack in
+the `X-PAYMENT` value. `payX402Cashout({ requirement, maxAmount })` pays an x402
+price with scheme `gloam-cashout` on Robinhood Chain: it cashes out exactly the
+quoted amount of USDG to the price's public `payTo` and returns the
+`X-PAYMENT` value (`{ scheme, txHash, quoteId }`, base64 JSON). The payee and
+the amount show on chain; the agent's wallet and private balance do not. The
+tool pack in
 [`examples/agent-kit-tools`](https://github.com/cryptoduke01/gloam/tree/main/examples/agent-kit-tools)
 is built on it.
 
