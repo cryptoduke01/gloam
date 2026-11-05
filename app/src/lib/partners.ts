@@ -48,7 +48,7 @@
  *   v2:<id>                 set once the account's older counters were replayed into stats2
  *
  * Counter fields: <network>|<source>|<kind>|<metric>, metric n (count), usd
- * (volume, USD micros), fee (would-be partner fee, USD micros), vf (the vault's
+ * (volume, USD micros), fee (the setting's fee, USD micros), vf (the vault's
  * fee, USD micros), unp (public edges with no price), vfu (vault fees with no
  * price); a|<chainId>|<asset>|<kind>|vt|ft|vft per asset (volume, partner fee and
  * vault fee, micro-units, all-time only); last|<tier>.
@@ -124,9 +124,9 @@ export type EdgeAmount = {
 };
 
 export type Commission = {
-  /** Would-be fee in micro-dollars, null when a public edge has no price. */
+  /** The setting's fee in micro-dollars, null when a public edge has no price. */
   feeUsdMicros: bigint | null;
-  /** Would-be fee in the transaction's own token (smallest units); public edges only. */
+  /** The setting's fee in the transaction's own token (smallest units); public edges only. */
   feeToken: bigint | null;
   /** USD value of a public edge in micro-dollars; null for private payments or no price. */
   volumeUsdMicros: bigint | null;
@@ -540,9 +540,9 @@ export type ActivityRecord = {
   amount: string | null;
   /** null on testnet, and for a token with no price. */
   volumeUsd: number | null;
-  /** Would-be fee in USD (null on testnet, or when a public edge has no price). */
+  /** The setting's fee in USD (null on testnet, or when a public edge has no price). */
   feeUsd: number | null;
-  /** Would-be fee in the transaction's own token, smallest units (public edges). */
+  /** The setting's fee in the transaction's own token, smallest units (public edges). */
   feeToken: string | null;
   /** The setting that produced the fee, e.g. "0.25% of each cash out". */
   feeBasis: string;
@@ -835,7 +835,7 @@ export type AssetTotals = {
   symbol: string;
   /** Whole tokens, as decimal strings (six places at most): what deposits and cash outs moved. */
   volume: string;
-  /** Would-be partner fees in this token. */
+  /** The setting's fees in this token. */
   commission: string;
   /** Whole tokens: the inputs of private swaps in this token. */
   swapVolume: string;
@@ -889,7 +889,7 @@ export type PartnerStats = {
     publicVolumeUsd: number;
     /** USD of the priced inputs of private swaps (each swap's asset and amount in). */
     swapVolumeUsd: number;
-    /** Would-be commissions in USD, every kind, priced only. */
+    /** The setting's fee in USD (what it puts on these, not proof it was paid), every kind, priced only. */
     commissionUsd: number;
     /** Deposits, cash outs and swaps with no USD price (counted, not valued): every one on testnet. */
     unpriced: number;
