@@ -3059,7 +3059,11 @@ export function MoveView() {
                           </p>
                         )}
                         {(() => {
-                          const f = cashOutLinkFee(cashOutTo, cashOutAmount);
+                          // the same base the cash out charges it on: in a plan, only the pieces paying the link's wallet
+                          const feeBase = planActive
+                            ? planPieceList.reduce((t, p, i) => (cashOutTo && pieceTargets[i]?.toLowerCase() === cashOutTo.toLowerCase() ? t + p : t), 0n)
+                            : cashOutAmount;
+                          const f = cashOutLinkFee(cashOutTo, feeBase);
                           if (!f) return null;
                           const short = coverProblem(selected, cashOutAmount, f.amount, f.name);
                           return (
