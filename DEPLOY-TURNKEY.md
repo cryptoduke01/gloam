@@ -229,9 +229,11 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
     6 boxes take a paste of the whole code and the browser's one-time-code fill (iOS
     Mail and Gmail suggestions), then sign in on the 6th digit. A wrong code says so and
     clears; Resend opens after 30 seconds; an old code says it expired and offers a new
-    one. Passkey signs in on a browser that has one; closing the passkey prompt changes
-    nothing. Back on the code step returns to the email with it still filled in. "Use a
-    browser wallet" in the footer closes the sheet and opens the usual wallet connect.
+    one. Passkey signs in on a browser that has one; closing the passkey prompt moves
+    to the passkey step (as in 15), signing nothing in. Back on the code step returns to
+    the email with it still filled in. The "Use a browser wallet" button under Google and
+    Passkey closes the sheet and opens the usual wallet connect; with no browser wallet
+    found it is not shown.
 15. Passkey on a browser with no Gloam passkey: the prompt finds none, and the sheet
     offers Create a passkey and "I have one. Try again". Create makes a new account.
 16. With Google set up: Google opens in a popup, and the sheet closes once you are signed
