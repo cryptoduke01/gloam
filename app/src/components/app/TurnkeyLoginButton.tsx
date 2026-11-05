@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { AuthState, useTurnkey } from "@turnkey/react-wallet-kit";
+import { openSignInSheet } from "@/lib/turnkeyBridge";
 
 /**
- * Passkey / email sign-in entry for the embedded wallet.
+ * Passkey / email sign-in entry for the embedded wallet: opens Gloam's sign-in sheet.
  * Only mount this inside TurnkeyEmbeddedProvider (i.e. when TURNKEY_ENABLED),
  * otherwise useTurnkey has no context.
  */
 export function TurnkeyLoginButton() {
-  const { authState, handleLogin, wallets } = useTurnkey();
-  const [busy, setBusy] = useState(false);
+  const { authState, wallets } = useTurnkey();
   const signedIn = authState === AuthState.Authenticated;
 
   if (signedIn) {
@@ -43,20 +42,8 @@ export function TurnkeyLoginButton() {
   }
 
   return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await handleLogin();
-        } finally {
-          setBusy(false);
-        }
-      }}
-      className="btn btn-ink btn-lg btn-block"
-    >
-      {busy ? "Opening…" : "Sign in with passkey"}
+    <button type="button" onClick={() => openSignInSheet()} className="btn btn-ink btn-lg btn-block">
+      Sign in with passkey
     </button>
   );
 }

@@ -1,0 +1,673 @@
+"use client";
+
+import Link from "next/link";
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ClipboardEvent,
+  type FormEvent,
+  type RefObject,
+} from "react";
+import { createPortal } from "react-dom";
+import { motion, useReducedMotion } from "framer-motion";
+import { AuthState, ClientState, OtpType, useTurnkey } from "@turnkey/react-wallet-kit";
+import { Mark } from "@/components/Logo";
+import { useModalFocus } from "@/hooks/useModalFocus";
+import { onSignInSheetRequest, type SignInSheetOptions } from "@/lib/turnkeyBridge";
+import {
+  SIGN_IN_START,
+  canClose,
+  canResend,
+  cleanEmail,
+  cleanOtp,
+  emailProblem,
+  needsNewCode,
+  otpAfterPaste,
+  otpComplete,
+  otpFormat,
+  resendSecondsLeft,
+  signInError,
+  signInReducer,
+  type OtpFormat,
+  type SignInState,
+} from "@/lib/signInSheet";
+
+const noopSubscribe = () => () => {};
+
+/**
+ * Gloam's sign-in sheet for Gloam wallets: an email code or a passkey, drawn in
+ * the app's own tokens instead of Turnkey's stock modal. Mounted once inside the
+ * Turnkey provider (TurnkeyKit) and opened from anywhere with openSignInSheet
+ * (lib/turnkeyBridge): the header and sidebar Sign in, and the partner portal.
+ *
+ * Every call goes through the kit's auth-proxy methods, so sign-up needs no
+ * backend: initOtp and completeOtp for the email code (completeOtp signs in an
+ * email that has an account and makes one for an email that doesn't),
+ * loginWithPasskey and signUpWithPasskey for a passkey. Once one succeeds the kit
+ * holds the session and the sheet closes; what follows (the wallet list, the
+ * Create wallet sheet, the wagmi connector) is unchanged.
+ */
+export function GloamSignInSheet() {
+  const { authState } = useTurnkey();
+  const [request, setRequest] = useState<{ n: number; opts: SignInSheetOptions }>({ n: 0, opts: {} });
+  const opened = request.n;
+  const setOpened = (n: 0) => setRequest({ n, opts: {} });
+  const signedIn = authState === AuthState.Authenticated;
+
+  useEffect(() => onSignInSheetRequest((opts) => setRequest((r) => ({ n: r.n + 1, opts }))), []);
+
+  // Signed in, by this sheet or another tab: close, so signing out never brings it back.
+  useEffect(() => {
+    if (!signedIn || !opened) return;
+    const t = window.setTimeout(() => setRequest({ n: 0, opts: {} }), 0);
+    return () => window.clearTimeout(t);
+  }, [signedIn, opened]);
+
+  if (!opened || signedIn) return null;
+  const { onUseWallet, walletLabel } = request.opts;
+  // keyed by the request: every open starts at the email step
+  return (
+    <LiveSheet
+      key={opened}
+      onClose={() => setOpened(0)}
+      walletLabel={walletLabel}
+      onUseWallet={
+        onUseWallet
+          ? () => {
+              setOpened(0);
+              onUseWallet();
+            }
+          : undefined
+      }
+    />
+  );
+}
+
+/** Ticks once a second while `active`, for the resend wait. */
+function useNow(active: boolean): [number, (t: number) => void] {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(t);
+  }, [active]);
+  return [now, setNow];
+}
+
+function LiveSheet({
+  onClose,
+  onUseWallet,
+  walletLabel,
+}: {
+  onClose: () => void;
+  onUseWallet?: () => void;
+  walletLabel?: string;
+}) {
+  const { clientState, config, initOtp, completeOtp, loginWithPasskey, signUpWithPasskey } = useTurnkey();
+  const format = otpFormat(config?.auth);
+  const [state, dispatch] = useReducer(signInReducer, SIGN_IN_START);
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [now, setNow] = useNow(state.kind === "code");
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+
+  const close = useCallback(() => {
+    if (canClose(state)) onClose();
+  }, [state, onClose]);
+
+  async function sendCode(again: boolean) {
+    if (state.busy || (again && !canResend(state, Date.now()))) return;
+    const to = again && state.kind === "code" ? state.email : cleanEmail(email);
+    if (!again) {
+      const problem = emailProblem(email);
+      setEmailError(problem);
+      if (problem) return;
+    }
+    dispatch({ type: again ? "resend" : "send" });
+    try {
+      const res = await initOtp({ otpType: OtpType.Email, contact: to });
+      if (!live.current) return;
+      const at = Date.now();
+      setNow(at);
+      setCode("");
+      dispatch({ type: "sent", email: to, otpId: res.otpId, bundle: res.otpEncryptionTargetBundle, at });
+    } catch (e) {
+      if (!live.current) return;
+      const at = Date.now();
+      setNow(at);
+      dispatch({ type: "sendFailed", error: signInError(e, "send"), at });
+    }
+  }
+
+  async function verify(value: string) {
+    // a spent code (expired, or too many tries) is never sent again: the sheet asks for a new one
+    if (state.kind !== "code" || state.busy || needsNewCode(state.error?.kind) || !otpComplete(value, format)) return;
+    dispatch({ type: "verify" });
+    try {
+      await completeOtp({
+        otpId: state.otpId,
+        otpCode: value,
+        otpEncryptionTargetBundle: state.bundle,
+        contact: state.email,
+        otpType: OtpType.Email,
+      });
+      if (live.current) onClose();
+    } catch (e) {
+      if (!live.current) return;
+      setCode("");
+      dispatch({ type: "verifyFailed", error: signInError(e, "verify") });
+    }
+  }
+
+  async function passkey(mode: "login" | "signup") {
+    if (state.kind !== "start" || state.busy) return;
+    dispatch({ type: "passkey", mode });
+    try {
+      if (mode === "login") await loginWithPasskey();
+      else await signUpWithPasskey();
+      if (live.current) onClose();
+    } catch (e) {
+      if (!live.current) return;
+      dispatch({ type: "passkeyFailed", error: signInError(e, mode === "login" ? "passkey-login" : "passkey-signup") });
+    }
+  }
+
+  return (
+    <SignInSheetView
+      state={state}
+      clientState={clientState === ClientState.Ready ? "ready" : clientState === ClientState.Error ? "error" : "starting"}
+      format={format}
+      now={now}
+      email={email}
+      onEmail={(v) => {
+        setEmail(v);
+        if (emailError) setEmailError(null);
+      }}
+      emailError={emailError}
+      code={code}
+      onCode={(v) => {
+        setCode(v);
+        if (otpComplete(v, format)) void verify(v);
+      }}
+      onSubmitEmail={() => void sendCode(false)}
+      onSubmitCode={() => void verify(code)}
+      onResend={() => void sendCode(true)}
+      onBack={() => {
+        setCode("");
+        dispatch({ type: "back" });
+      }}
+      onPasskey={(mode) => void passkey(mode)}
+      onUseWallet={onUseWallet}
+      walletLabel={walletLabel}
+      onClose={close}
+    />
+  );
+}
+
+/**
+ * The sheet itself, drawn from props only (the Turnkey wiring is in LiveSheet
+ * above), so every step can be looked at without a live sign-in.
+ */
+export function SignInSheetView({
+  state,
+  clientState,
+  format,
+  now,
+  email,
+  onEmail,
+  emailError,
+  code,
+  onCode,
+  onSubmitEmail,
+  onSubmitCode,
+  onResend,
+  onBack,
+  onPasskey,
+  onUseWallet,
+  walletLabel = "Use a browser wallet instead",
+  onClose,
+}: {
+  state: SignInState;
+  clientState: "starting" | "ready" | "error";
+  format: OtpFormat;
+  now: number;
+  email: string;
+  onEmail: (v: string) => void;
+  emailError: string | null;
+  code: string;
+  onCode: (v: string) => void;
+  onSubmitEmail: () => void;
+  onSubmitCode: () => void;
+  onResend: () => void;
+  onBack: () => void;
+  onPasskey: (mode: "login" | "signup") => void;
+  /** The opener's own wallet connect: shown as a link on the first step. */
+  onUseWallet?: () => void;
+  walletLabel?: string;
+  onClose: () => void;
+}) {
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  const reduce = useReducedMotion();
+  const dialog = useRef<HTMLDivElement>(null);
+  const emailField = useRef<HTMLInputElement>(null);
+  const codeField = useRef<HTMLInputElement>(null);
+  const closable = canClose(state);
+  useModalFocus(dialog, onClose, { initial: emailField });
+
+  // The field for the step: the code field when a code goes out (and again after a
+  // wrong one), the email field on the way back.
+  const step = state.kind;
+  const codeError = state.kind === "code" ? state.error : null;
+  useEffect(() => {
+    const el = step === "code" ? codeField.current : emailField.current;
+    // only when focus is in the sheet, or was dropped to the page by a button that went busy
+    const at = document.activeElement;
+    if (el && (!at || at === document.body || dialog.current?.contains(at))) el.focus({ preventScroll: true });
+  }, [step, codeError]);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      ref={dialog}
+      tabIndex={-1}
+      className="fixed inset-0 z-[210] flex items-end justify-center outline-none sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="gs-title"
+      aria-describedby="gs-sub"
+    >
+      <motion.button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        aria-label="Close"
+        onClick={onClose}
+        initial={reduce ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
+      />
+      <motion.div
+        className="relative z-[1] max-h-[92dvh] w-full max-w-[420px] overflow-y-auto rounded-t-[24px] bg-panel px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-6 shadow-pop sm:rounded-[24px] sm:px-8 sm:pb-6 sm:pt-8"
+        initial={reduce ? false : { opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 420, damping: 36 }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={!closable}
+          aria-label="Close"
+          className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-50 sm:right-4 sm:top-4"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+
+        {state.kind === "start" ? (
+          <StartStep
+            state={state}
+            clientState={clientState}
+            email={email}
+            onEmail={onEmail}
+            emailError={emailError}
+            emailField={emailField}
+            onSubmitEmail={onSubmitEmail}
+            onPasskey={onPasskey}
+            onUseWallet={onUseWallet}
+            walletLabel={walletLabel}
+          />
+        ) : (
+          <CodeStep
+            state={state}
+            format={format}
+            now={now}
+            code={code}
+            onCode={onCode}
+            codeField={codeField}
+            onSubmitCode={onSubmitCode}
+            onResend={onResend}
+            onBack={onBack}
+          />
+        )}
+
+        <p className="mt-7 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-line pt-4 text-[12px] text-faint">
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldGlyph />
+            Secured by Turnkey
+          </span>
+          <span aria-hidden>·</span>
+          <Link href="/terms" target="_blank" rel="noopener" className="underline-offset-2 transition-colors hover:text-foreground hover:underline">
+            Terms
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/privacy" target="_blank" rel="noopener" className="underline-offset-2 transition-colors hover:text-foreground hover:underline">
+            Privacy
+          </Link>
+        </p>
+      </motion.div>
+    </div>,
+    document.body
+  );
+}
+
+function StartStep({
+  state,
+  clientState,
+  email,
+  onEmail,
+  emailError,
+  emailField,
+  onSubmitEmail,
+  onPasskey,
+  onUseWallet,
+  walletLabel,
+}: {
+  state: Extract<SignInState, { kind: "start" }>;
+  clientState: "starting" | "ready" | "error";
+  email: string;
+  onEmail: (v: string) => void;
+  emailError: string | null;
+  emailField: RefObject<HTMLInputElement | null>;
+  onSubmitEmail: () => void;
+  onPasskey: (mode: "login" | "signup") => void;
+  onUseWallet?: () => void;
+  walletLabel: string;
+}) {
+  const ready = clientState === "ready";
+  const busy = state.busy;
+  const passkeyBusy = busy === "passkey-login" || busy === "passkey-signup";
+  const sendError = state.error?.during === "send" ? state.error : null;
+  const passkeyError = state.error && state.error.during !== "send" ? state.error : null;
+
+  return (
+    <div>
+      <Mark size={40} />
+      <h2 id="gs-title" className="mt-5 text-[22px] font-medium tracking-[-0.015em] text-foreground">
+        Sign in to Gloam
+      </h2>
+      <p id="gs-sub" className="mt-1 text-[14px] leading-relaxed text-mute">
+        Email or passkey. No seed phrase.
+      </p>
+
+      {clientState === "error" ? (
+        <p role="alert" className="mt-6 text-[13.5px] leading-relaxed text-danger">
+          Email and passkey sign-in isn&apos;t available here right now. Close this and connect a wallet instead.
+        </p>
+      ) : (
+        <>
+          <form
+            className="mt-6"
+            noValidate
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault();
+              if (ready && !busy) onSubmitEmail();
+            }}
+          >
+            <label htmlFor="gs-email" className="block text-[13px] text-mute">
+              Email
+            </label>
+            <input
+              id="gs-email"
+              ref={emailField}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="you@example.com"
+              className="gl-input mt-2"
+              value={email}
+              disabled={busy === "send"}
+              onChange={(e) => onEmail(e.target.value)}
+              aria-invalid={Boolean(emailError || sendError)}
+              aria-describedby={emailError || sendError ? "gs-email-error" : undefined}
+            />
+            {(emailError || sendError) && (
+              <p id="gs-email-error" role="alert" className="mt-2 text-[12.5px] leading-relaxed text-danger">
+                {emailError ?? sendError?.text}
+              </p>
+            )}
+            <button type="submit" disabled={!ready || busy !== null} className="btn btn-ink btn-lg btn-block mt-4">
+              {busy === "send" ? "Sending code…" : "Continue"}
+            </button>
+          </form>
+
+          <div className="my-5 flex items-center gap-3 text-[12px] text-faint" aria-hidden>
+            <span className="h-px flex-1 bg-line" />
+            or
+            <span className="h-px flex-1 bg-line" />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onPasskey("login")}
+            disabled={!ready || busy !== null}
+            className="btn btn-ghost btn-lg btn-block"
+          >
+            <KeyGlyph />
+            {passkeyBusy ? "Check your passkey…" : "Use a passkey"}
+          </button>
+          <p className="mt-3 text-center text-[13px] text-mute">
+            New here?{" "}
+            <button
+              type="button"
+              onClick={() => onPasskey("signup")}
+              disabled={!ready || busy !== null}
+              className="rounded text-foreground underline underline-offset-2 transition-opacity hover:opacity-80 disabled:opacity-50"
+            >
+              Create a passkey
+            </button>
+          </p>
+          {passkeyError && (
+            <p role="alert" className="mt-3 text-center text-[12.5px] leading-relaxed text-danger">
+              {passkeyError.text}
+            </p>
+          )}
+          {!ready && (
+            <p role="status" className="mt-3 text-center text-[12.5px] text-mute">
+              Getting sign-in ready…
+            </p>
+          )}
+        </>
+      )}
+      {onUseWallet && (
+        <div className="mt-5 text-center">
+          <button
+            type="button"
+            onClick={onUseWallet}
+            disabled={busy !== null && busy !== "send"}
+            className="gl-arrowlink disabled:opacity-50"
+          >
+            {walletLabel}
+            <ArrowGlyph />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CodeStep({
+  state,
+  format,
+  now,
+  code,
+  onCode,
+  codeField,
+  onSubmitCode,
+  onResend,
+  onBack,
+}: {
+  state: Extract<SignInState, { kind: "code" }>;
+  format: OtpFormat;
+  now: number;
+  code: string;
+  onCode: (v: string) => void;
+  codeField: RefObject<HTMLInputElement | null>;
+  onSubmitCode: () => void;
+  onResend: () => void;
+  onBack: () => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  const verifying = state.busy === "verify";
+  const wait = resendSecondsLeft(state.sentAt, now);
+  const resendOpen = canResend(state, now);
+  const spent = needsNewCode(state.error?.kind);
+  const unit = format.alphanumeric ? "character" : "digit";
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={verifying}
+        className="-ml-2 -mt-1 inline-flex h-10 items-center gap-1 rounded-full pl-1.5 pr-3 text-[13.5px] text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-50"
+      >
+        <BackGlyph />
+        Back
+      </button>
+      <h2 id="gs-title" className="mt-4 text-[22px] font-medium tracking-[-0.015em] text-foreground">
+        Check your email
+      </h2>
+      <p id="gs-sub" className="mt-1 text-[14px] leading-relaxed text-mute [overflow-wrap:anywhere]">
+        Enter the {format.length}-{unit} code sent to <span className="text-foreground">{state.email}</span>
+      </p>
+
+      <form
+        className="mt-6"
+        noValidate
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault();
+          onSubmitCode();
+        }}
+      >
+        <div className="relative">
+          <input
+            id="gs-code"
+            ref={codeField}
+            type="text"
+            inputMode={format.alphanumeric ? "text" : "numeric"}
+            pattern={format.alphanumeric ? undefined : "[0-9]*"}
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="go"
+            aria-label={`${format.length}-${unit} code`}
+            aria-invalid={Boolean(state.error)}
+            aria-describedby={state.error ? "gs-code-error" : undefined}
+            disabled={verifying}
+            value={code}
+            onChange={(e) => onCode(cleanOtp(e.target.value, format))}
+            onPaste={(e: ClipboardEvent<HTMLInputElement>) => {
+              e.preventDefault();
+              onCode(otpAfterPaste(code, e.clipboardData.getData("text"), format));
+            }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            className="absolute inset-0 z-[1] h-full w-full cursor-text bg-transparent text-transparent caret-transparent outline-none selection:bg-transparent disabled:cursor-not-allowed"
+          />
+          <div aria-hidden className="grid gap-2" style={{ gridTemplateColumns: `repeat(${format.length}, minmax(0, 1fr))` }}>
+            {Array.from({ length: format.length }, (_, i) => {
+              const ch = code[i] ?? "";
+              const active = focused && !verifying && i === Math.min(code.length, format.length - 1);
+              return (
+                <span
+                  key={i}
+                  className={`tnum grid h-14 place-items-center rounded-[14px] border bg-panel text-[22px] font-medium text-foreground transition-[border-color,box-shadow] duration-200 ${
+                    state.error
+                      ? "border-danger"
+                      : active
+                        ? "border-[color-mix(in_srgb,var(--navy-500)_65%,var(--line-strong))] shadow-[0_0_0_4px_color-mix(in_srgb,var(--navy-500)_12%,transparent)]"
+                        : "border-line-strong"
+                  } ${verifying ? "opacity-60" : ""}`}
+                >
+                  {ch || (active ? <span className="h-6 w-px animate-pulse bg-foreground" /> : null)}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        {state.error ? (
+          <p id="gs-code-error" role="alert" className="mt-3 text-[12.5px] leading-relaxed text-danger">
+            {state.error.text}
+          </p>
+        ) : (
+          <p role="status" aria-live="polite" className="mt-3 min-h-[1lh] text-[12.5px] leading-relaxed text-mute">
+            {verifying ? "Signing you in…" : state.resent && state.busy === null ? "A new code is on its way." : ""}
+          </p>
+        )}
+
+        <button type="submit" disabled={verifying || !otpComplete(code, format) || spent} className="btn btn-ink btn-lg btn-block mt-4">
+          {verifying ? "Signing in…" : "Continue"}
+        </button>
+      </form>
+
+      <div className="mt-3 flex flex-col items-stretch gap-1">
+        <button type="button" onClick={onResend} disabled={!resendOpen} className="btn btn-quiet btn-block">
+          {state.busy === "resend" ? "Sending…" : resendOpen ? (spent ? "Send a new code" : "Resend code") : `Resend code in ${wait}s`}
+        </button>
+        <button type="button" onClick={onBack} disabled={verifying} className="btn btn-quiet btn-block text-mute">
+          Use a different email
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BackGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="m15 6-6 6 6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ArrowGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden >
+      <path d="M5 12h14m-5-6 6 6-6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function KeyGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="8" cy="15" r="4" stroke="currentColor" strokeWidth="1.7" />
+      <path d="m11 12 8.5-8.5M16.5 6.5 19 9M14 9l2 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ShieldGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3.5 5 6.2v5.3c0 4.3 2.9 7.7 7 9 4.1-1.3 7-4.7 7-9V6.2L12 3.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}

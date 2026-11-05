@@ -9,6 +9,7 @@ import {
   getActiveTurnkeyAccount,
   onEmbeddedSignerState,
   onTurnkeyAccountChange,
+  openSignInSheet,
   retryEmbeddedSigner,
   signOutEmbedded,
 } from "@/lib/turnkeyBridge";
@@ -24,7 +25,9 @@ const signFailed = () => new PortalError("Your Gloam wallet did not sign. Try ag
 
 /**
  * Partner sign-in with an email, through a Gloam wallet (Turnkey). Mounted only
- * when Gloam wallets are on, inside TurnkeyEmbeddedProvider. The email sign-in
+ * when Gloam wallets are on, inside TurnkeyEmbeddedProvider. Sign in with email
+ * opens Gloam's sign-in sheet (GloamSignInSheet); closing it, or choosing a
+ * browser wallet from it, comes back to this Sign in card. The email sign-in
  * opens or makes the person's Gloam wallet; that wallet then signs the same
  * partner sign-in message a browser wallet does (lib/partnersAuth), so the
  * session is the usual one. Nothing new on the server.
@@ -36,6 +39,7 @@ export default function PartnerEmailSignIn({
   onError,
   disabled,
   autoStart,
+  onUseWallet,
 }: {
   onSignedIn: () => void;
   onError: (message: string | null) => void;
@@ -43,8 +47,10 @@ export default function PartnerEmailSignIn({
   disabled: boolean;
   /** Open the email sheet as soon as the kit is ready (the landing page's Sign in with email). */
   autoStart: boolean;
+  /** The card's browser-wallet sign-in, offered from inside the sheet. */
+  onUseWallet?: () => void;
 }) {
-  const { authState, clientState, handleLogin, wallets, createWallet, refreshWallets, session } = useTurnkey();
+  const { authState, clientState, wallets, createWallet, refreshWallets, session } = useTurnkey();
   const signedIn = authState === AuthState.Authenticated;
   /** The wallet list is read once per sign-in: a new sign-in starts the reads over. */
   const sessionKey = signedIn ? (session?.organizationId ?? "signed-in") : "signed-out";
@@ -57,7 +63,7 @@ export default function PartnerEmailSignIn({
   const setList = (next: WalletListState) => setReads({ key: sessionKey, list: next, tries: 0 });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"open" | "sign" | "out" | null>(null);
+  const [busy, setBusy] = useState<"sign" | "out" | null>(null);
   /** Started from this page: once the wallet is ready, sign in without another click. */
   const [started, setStarted] = useState(false);
   const autoOpened = useRef(false);
@@ -76,8 +82,10 @@ export default function PartnerEmailSignIn({
   });
 
   const refresh = useRef(refreshWallets);
+  const walletRef = useRef(onUseWallet);
   useEffect(() => {
     refresh.current = refreshWallets;
+    walletRef.current = onUseWallet;
   });
 
   // After an email sign-in, read the wallet list, so someone with a wallet never sees "Create".
@@ -104,17 +112,11 @@ export default function PartnerEmailSignIn({
     };
   }, [signedIn, sessionKey, list, tries]);
 
-  async function open() {
-    setBusy("open");
+  function open() {
     onError(null);
     setStarted(true);
-    try {
-      await handleLogin();
-    } catch {
-      /* closed */
-    } finally {
-      setBusy(null);
-    }
+    // read when tapped, so the card's latest wallet list is the one used
+    openSignInSheet({ onUseWallet: () => walletRef.current?.() });
   }
 
   async function create() {
@@ -164,11 +166,18 @@ export default function PartnerEmailSignIn({
     }
   }
 
-  // from the landing page's Sign in with email: open the sheet once the kit is up
+  // from the landing page's Sign in with email: open the sheet once the kit is up.
+  // Once, and the ?with=email comes off the address, so a reload or a Back lands
+  // on this Sign in card with both ways in.
   useEffect(() => {
     if (!autoStart || autoOpened.current || clientState !== ClientState.Ready || signedIn) return;
     autoOpened.current = true;
-    const t = window.setTimeout(() => void open(), 0);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("with")) {
+      url.searchParams.delete("with");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+    const t = window.setTimeout(() => open(), 0);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, clientState, signedIn]);
@@ -190,8 +199,8 @@ export default function PartnerEmailSignIn({
 
   if (!signedIn) {
     return (
-      <button type="button" disabled={disabled || busy !== null || clientState !== ClientState.Ready} onClick={() => void open()} className={main}>
-        {busy === "open" ? "Opening…" : "Sign in with email"}
+      <button type="button" disabled={disabled || busy !== null || clientState !== ClientState.Ready} onClick={open} className={main}>
+        Sign in with email
       </button>
     );
   }

@@ -7,12 +7,13 @@ import {
 } from "@turnkey/react-wallet-kit";
 import { TURNKEY_AUTH_PROXY_CONFIG_ID, TURNKEY_ORGANIZATION_ID, embeddedRpId } from "@/lib/embeddedWallet";
 import { TurnkeyWagmiSync } from "./TurnkeyWagmiSync";
+import { GloamSignInSheet } from "./GloamSignInSheet";
 import { ClientOnly } from "./ClientOnly";
 
 /**
- * Turnkey's modal renders outside our token system, so it takes literal
- * colours. These mirror the Gloam tokens in globals.css: ink on paper with cool
- * greys, and the sealed green only for the success state.
+ * Sign-in is Gloam's own sheet (GloamSignInSheet), so nothing opens the kit's
+ * modal today. Its colours stay set in case a kit screen ever shows: they take
+ * literal values, mirroring the Gloam tokens in globals.css.
  */
 const TURNKEY_COLORS: NonNullable<
   NonNullable<TurnkeyProviderConfig["ui"]>["colors"]
@@ -122,6 +123,7 @@ export default function TurnkeyKitProvider({ children }: { children: ReactNode }
     >
       <ClientOnly>
         <TurnkeyWagmiSync />
+        <GloamSignInSheet />
       </ClientOnly>
       {children}
     </TurnkeyProvider>

@@ -90,6 +90,16 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
     };
   }, []);
 
+  /**
+   * The card's wallet button, from inside the email sheet: one wallet signs in, more
+   * open the list, none leaves the card saying so.
+   */
+  function pickBrowserWallet() {
+    if (!wallets?.length || busy !== null) return;
+    if (wallets.length === 1) void go(wallets[0]!);
+    else setPicking(true);
+  }
+
   async function go(w: WalletChoice) {
     setBusy(w.id);
     setErr(null);
@@ -157,7 +167,13 @@ function SignIn({ onSignedIn, initialError }: { onSignedIn: () => void; initialE
               </div>
             )}
             {EMBEDDED_WALLETS && (
-              <PartnerEmailSignIn onSignedIn={onSignedIn} onError={setErr} disabled={busy !== null} autoStart={emailFirst} />
+              <PartnerEmailSignIn
+                onSignedIn={onSignedIn}
+                onError={setErr}
+                disabled={busy !== null}
+                autoStart={emailFirst}
+                onUseWallet={pickBrowserWallet}
+              />
             )}
           </div>
           {err && (

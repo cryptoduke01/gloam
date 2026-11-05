@@ -157,6 +157,15 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
 13. Partner portal: on `/partners`, Sign in with email opens the portal and the email
     sheet. A new email gets Create Gloam wallet, then lands signed in. Sign out, sign in
     again: the same partner account. With the flag off, only Connect wallet shows.
+    Closing the email sheet, or "Use a browser wallet instead" in it, lands back on the
+    Sign in card with both ways in, and `?with=email` is gone from the address.
+14. The sign-in sheet (Gloam's own, `GloamSignInSheet`): the code email arrives and the
+    6 boxes take a paste of the whole code and the browser's one-time-code fill (iOS
+    Mail and Gmail suggestions), then sign in on the 6th digit. A wrong code says so and
+    clears; Resend opens after 30 seconds; an old code says it expired and offers a new
+    one. Use a passkey signs in on a browser that has one; New here? Create a passkey
+    makes a new account; closing the passkey prompt says so and changes nothing. Back on
+    the code step returns to the email with it still filled in.
 
 ## Rolling back
 

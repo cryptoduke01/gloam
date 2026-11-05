@@ -90,6 +90,37 @@ export async function signOutEmbedded(): Promise<void> {
   await signOut?.();
 }
 
+/* ---------------------------------------------------------------- sign-in */
+
+/** What the place that opened the sign-in sheet offers beside it. */
+export type SignInSheetOptions = {
+  /**
+   * Its own browser-wallet connect. The sheet then shows "Use a browser wallet
+   * instead", which closes the sheet and calls this.
+   */
+  onUseWallet?: () => void;
+  /** The words for that link, when they differ (a wallet app on a phone). */
+  walletLabel?: string;
+};
+
+type SignInListener = (opts: SignInSheetOptions) => void;
+const signInListeners = new Set<SignInListener>();
+
+/**
+ * Opens Gloam's sign-in sheet (email code or passkey), drawn by
+ * components/app/GloamSignInSheet inside the Turnkey provider. Says whether a
+ * sheet was there to open: none is when Gloam wallets are off on this page.
+ */
+export function openSignInSheet(opts: SignInSheetOptions = {}): boolean {
+  signInListeners.forEach((fn) => fn(opts));
+  return signInListeners.size > 0;
+}
+
+export function onSignInSheetRequest(fn: SignInListener): () => void {
+  signInListeners.add(fn);
+  return () => signInListeners.delete(fn);
+}
+
 /* ---------------------------------------------------------------- the sheet */
 
 export type EmbeddedSheetRequest = "create" | "funding";
