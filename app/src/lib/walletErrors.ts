@@ -105,9 +105,11 @@ export function walletErrorText(e: unknown): string {
  * short first line of the error. Never viem's long message, which lists the account,
  * the contract and the calldata.
  */
+export const WALLET_DECLINED_TEXT = "You declined it in your wallet, so it wasn't sent.";
+
 export function walletErrorForPeople(e: unknown, fallback = "It didn't go through. Try again."): string {
-  if (walletDeclined(e)) return "You declined it in your wallet. Nothing moved.";
+  if (walletDeclined(e)) return WALLET_DECLINED_TEXT;
   const text = walletErrorText(e).trim();
   if (!text) return fallback;
-  return text.length > 180 ? `${text.slice(0, 177).trimEnd()}…` : text;
+  return text.length > 280 ? `${text.slice(0, 277).trimEnd()}…` : text;
 }

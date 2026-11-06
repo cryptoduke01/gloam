@@ -19,8 +19,13 @@ function check(name: string, fn: () => void) {
 
 check("a declined prompt reads as a decline", () => {
   const e = new UserRejectedRequestError(new Error("User rejected the request."));
-  assert.equal(walletErrorForPeople(e), "You declined it in your wallet. Nothing moved.");
-  assert.equal(walletErrorForPeople({ code: 4001, message: "MetaMask Tx Signature: User denied transaction signature." }), "You declined it in your wallet. Nothing moved.");
+  assert.equal(walletErrorForPeople(e), "You declined it in your wallet, so it wasn't sent.");
+  assert.equal(walletErrorForPeople({ code: 4001, message: "MetaMask Tx Signature: User denied transaction signature." }), "You declined it in your wallet, so it wasn't sent.");
+});
+
+check("a plain one-line message (the relay's, say) is kept whole", () => {
+  const m = "Not enough in the shared vault to cash out right now (12 USDG available, 40 USDG needed). It opens up once more of this asset is added.";
+  assert.equal(walletErrorForPeople(new Error(m)), m);
 });
 
 check("viem's long message is cut to its short first line", () => {
@@ -37,7 +42,7 @@ check("viem's long message is cut to its short first line", () => {
 
 check("a long single-line message is shortened", () => {
   const shown = walletErrorForPeople(new Error("x".repeat(400)));
-  assert.ok(shown.length <= 180, String(shown.length));
+  assert.ok(shown.length <= 280, String(shown.length));
   assert.ok(shown.endsWith("…"));
 });
 
