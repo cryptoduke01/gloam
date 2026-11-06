@@ -99,3 +99,15 @@ export function walletErrorText(e: unknown): string {
   const text = first?.shortMessage || first?.message || "";
   return text.split("\n")[0] ?? "";
 }
+
+/**
+ * What a person reads when a wallet send fails: a decline in plain words, else the
+ * short first line of the error. Never viem's long message, which lists the account,
+ * the contract and the calldata.
+ */
+export function walletErrorForPeople(e: unknown, fallback = "It didn't go through. Try again."): string {
+  if (walletDeclined(e)) return "You declined it in your wallet. Nothing moved.";
+  const text = walletErrorText(e).trim();
+  if (!text) return fallback;
+  return text.length > 180 ? `${text.slice(0, 177).trimEnd()}…` : text;
+}

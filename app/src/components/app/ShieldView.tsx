@@ -32,7 +32,9 @@ import { formatUsd } from "@/lib/markets";
 import { addableTokensFor, approvalsBeforeDeposit, isDollarStable, isNativeAddable } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
-import { surelyNotSent } from "@/lib/walletErrors";
+import { surelyNotSent, walletErrorForPeople } from "@/lib/walletErrors";
+import { publicClientFor } from "@/lib/rhClient";
+
 import { isNoLimit } from "@gloamtrade/sdk";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
@@ -58,6 +60,12 @@ import { TempoFaucetButton } from "./TempoFaucetButton";
 
 type TxKind = "shield" | "approve" | "pull" | null;
 type AssetChoice = "eth" | string; // eth | token id
+
+/** The receipt wait gave up; the deposit may still land. */
+const DEPOSIT_SLOW =
+  "Your deposit was sent, but the network is slow to confirm it. It's saved in this browser and shows in your private balance as soon as it lands. Check the link below.";
+const DEPOSIT_REVERTED =
+  "This deposit didn't go through on chain, so nothing was added to your private balance. Only the network fee was spent. Check the link below.";
 
 /** A wallet error that may have come after the deposit went out (a timeout, a lost reply): the note is kept. */
 export const DEPOSIT_MAYBE_SENT =
@@ -586,10 +594,8 @@ export function ShieldView() {
     const overLimit = limitProblem(value);
     if (overLimit) return overLimit;
     if (!selectedToken && ethBal) {
-      if (
-        value > ethBal.value - 50_000_000_000_000n &&
-        ethBal.value > value
-      ) {
+      // value is at most the balance here (checked above), so this also catches the whole balance
+      if (value > ethBal.value - 50_000_000_000_000n) {
         return "Leave a little ETH for gas.";
       }
     }
@@ -677,8 +683,11 @@ export function ShieldView() {
           chainId: networkNow.current.chainId,
         } as Parameters<typeof writeContract>[0]);
       } catch (err) {
+        // The note store's own words say what to do; a prover or chunk-load error is no use to read.
         setFormError(
-          err instanceof Error ? err.message : "Could not prepare your private deposit. Try again."
+          err instanceof Error && err.name === "NoteSaveError"
+            ? err.message
+            : "Could not prepare your private deposit. Try again."
         );
         stopDeposit(note);
       }
@@ -731,6 +740,9 @@ export function ShieldView() {
     let ready: { note: LocalNote; commitment: Hex; steps: bigint[] } | null = null;
     try {
       ready = await prepareDeposit(value, network.pool, address);
+    } catch {
+      // nothing is saved or sent before prepareDeposit returns
+      setFormError("Could not prepare your private deposit. Try again.");
     } finally {
       submitting.current = false;
       setChecking(false);
@@ -894,12 +906,22 @@ export function ShieldView() {
     setApproved(false);
     pendingShieldArgs.current = null;
     depositProof.current = null;
-    setFormError(
-      "Your deposit was sent, but the network is slow to confirm it. It's saved in this browser and shows in your private balance as soon as it lands. Check the link below."
-    );
+    setFormError(DEPOSIT_SLOW);
+    // The wait also gives up when the deposit reverted (wagmi throws on a reverted
+    // receipt). Read the receipt once more and say so then: only the message changes.
+    if (hash) {
+      void publicClientFor(network)
+        .getTransactionReceipt({ hash })
+        .then(
+          (r) => {
+            if (r.status === "reverted") setFormError((cur) => (cur === DEPOSIT_SLOW ? DEPOSIT_REVERTED : cur));
+          },
+          () => undefined
+        );
+    }
     const t = window.setTimeout(() => refreshNotes(), 15_000);
     return () => window.clearTimeout(t);
-  }, [receiptLost, hash, pendingKind, refreshNotes, txLog]);
+  }, [receiptLost, hash, pendingKind, refreshNotes, txLog, network]);
 
   // The wait for an approval's receipt gave up (a busy RPC). It may have landed
   // anyway: read the allowance and go on to the deposit when it covers it,
@@ -1307,7 +1329,7 @@ export function ShieldView() {
               {formError ||
                 (writeError?.message.includes("OverDepositLimit")
                   ? "This deposit is over the vault's beta limit. Try a smaller amount."
-                  : writeError?.message.slice(0, 180))}
+                  : walletErrorForPeople(writeError))}
             </p>
           )}
           {hash && !isSuccess && (
