@@ -500,6 +500,17 @@ export function PayrollView() {
   const [proving, setProving] = useState<PayrollBatch | null>(null);
   const stopRef = useRef(false);
 
+  // An open run belongs to its network: its claim links, explorer links and labels are
+  // built from the network shown. A switch closes it (it stays in that network's history);
+  // a run still going is left alone and closes once it ends.
+  const shownChain = useRef(network.chainId);
+  useEffect(() => {
+    if (shownChain.current === network.chainId || running) return;
+    shownChain.current = network.chainId;
+    setActive(null);
+    setProving(null);
+  }, [network.chainId, running]);
+
   const reloadBatches = useCallback(() => {
     // A demo keeps its runs in memory only.
     if (!pool || demo) return Promise.resolve();
