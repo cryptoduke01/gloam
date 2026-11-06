@@ -15,6 +15,8 @@ import { RecoverySync } from "./RecoverySync";
 
 // The Gloam wallet sheet uses the Turnkey kit: it loads only when Gloam wallets are on.
 const EmbeddedWalletFlow = dynamic(() => import("./EmbeddedWalletFlow"), { ssr: false });
+// Brings the private balance back on a new device after sign-in. Loaded apart from the page.
+const AutoRestore = dynamic(() => import("./AutoRestore"), { ssr: false });
 
 export function Web3Provider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -44,6 +46,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
           )}
           <CashOutProofRefresh />
           <RecoverySync />
+          <AutoRestore />
           <PeopleCount />
           {children}
         </NetworkProvider>

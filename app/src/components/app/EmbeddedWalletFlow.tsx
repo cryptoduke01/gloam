@@ -35,6 +35,8 @@ import {
 } from "@/lib/embeddedWallet";
 import { networkName } from "@/lib/networks";
 import { getActiveTurnkeyAccount, onEmbeddedSheetRequest, setEmbeddedNeedsWallet } from "@/lib/turnkeyBridge";
+import { autoRestoreSyncing } from "@/lib/autoRestore";
+import { useAutoRestoreStatus } from "@/hooks/useAutoRestoreStatus";
 import { subscribeToUpdates } from "@/lib/updatesClient";
 import { useNetwork } from "./NetworkProvider";
 import { Spinner } from "@/components/ui/Spinner";
@@ -247,10 +249,13 @@ function useBackup(address: string | null, embeddedConnected: boolean, justCreat
     };
   }, []);
 
-  // What this browser holds, read once the Gloam wallet is the connected one.
+  // What this browser holds, read once the Gloam wallet is the connected one. Recovery
+  // turning on afterwards (the restore that runs by itself after sign-in, lib/autoRestore)
+  // takes the offer away.
   useEffect(() => {
     if (!address || !embeddedConnected) return;
     let live = true;
+    let stop: (() => void) | null = null;
     void (async () => {
       const recovery = await import("@/lib/recovery");
       const vault = await import("@/lib/noteVault");
@@ -267,14 +272,23 @@ function useBackup(address: string | null, embeddedConnected: boolean, justCreat
         for: address,
       });
       setAsked(backupAsked(address));
+      stop = recovery.subscribeRecovery(() => {
+        const on = recovery.recoveryState().on;
+        setState((s) => (s && s.on !== on ? { ...s, on } : s));
+      });
+      if (!live) stop();
     })();
     return () => {
       live = false;
+      stop?.();
     };
   }, [address, embeddedConnected]);
 
+  // While the backup may still come back by itself, offering to start one would be early.
+  const restoring = autoRestoreSyncing(useAutoRestoreStatus(address));
+
   const offer: BackupOffer | null =
-    address && passkey && state?.for === address
+    address && passkey && state?.for === address && !restoring
       ? backupOffer({
           on: state.on,
           turnedOff: state.turnedOff,
