@@ -26,8 +26,12 @@ type View =
   | { kind: "missing" }
   | { kind: "ready"; code: string; net: NetworkKey; amount: string | null; locked: boolean; note?: string };
 
-/** A claim view for a code, with its amount and note when the code is not locked. */
-async function readyView(code: string, linkNet: NetworkKey): Promise<View> {
+/**
+ * A claim view for a code, with its amount and note when the code is not locked.
+ * "damaged": an unlocked code that doesn't open (cut short on the way), so the
+ * page asks for the whole message instead of offering a claim that will fail.
+ */
+async function readyView(code: string, linkNet: NetworkKey): Promise<View | "damaged"> {
   let amount: string | null = null;
   let note: string | undefined;
   let net = linkNet;
@@ -41,7 +45,7 @@ async function readyView(code: string, linkNet: NetworkKey): Promise<View> {
       const own = pack.chainId === undefined ? undefined : NETWORK_KEYS.find((k) => getNetwork(k).chainId === pack.chainId);
       if (own) net = own;
     } catch {
-      amount = null;
+      return "damaged";
     }
   }
   return { kind: "ready", code, net, amount, locked, note };
@@ -106,7 +110,7 @@ export default function ClaimPage() {
       if (current()) {
         setWalletBrowser(wb);
         setLinkNet(known);
-        setView(ready);
+        setView(ready === "damaged" ? { kind: "missing" } : ready);
       }
     };
     const onHash = () => {
@@ -136,7 +140,12 @@ export default function ClaimPage() {
     countLinkOpened(code, net);
     setLinkNet(netIn(pasted) ?? linkNet);
     const ready = await readyView(code, net);
-    if (n === reads.current) setView(ready);
+    if (n !== reads.current) return;
+    if (ready === "damaged") {
+      setPasteError("That payment code is cut off or damaged. Paste the whole message the link came in, or ask the sender to send it again.");
+      return;
+    }
+    setView(ready);
   }
 
   async function copyLink() {
