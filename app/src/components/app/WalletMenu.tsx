@@ -28,6 +28,7 @@ import {
 import { isTempoWallet, preloadTempoWallet } from "@/lib/tempoWallet";
 import { WALLETCONNECT_ID, prefersWalletConnect } from "@/lib/walletConnect";
 import { EMBEDDED_CONNECTOR_ID } from "@/lib/embeddedWallet";
+import { walletDeclined } from "@/lib/walletErrors";
 import { embeddedAvailability, onEmbeddedAvailability, openEmbeddedSheet, signOutEmbedded } from "@/lib/turnkeyBridge";
 import { useNetwork } from "./NetworkProvider";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
@@ -80,7 +81,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   // A Gloam wallet signs out of Turnkey: disconnecting alone would connect it again.
   const disconnect = demo ? exitDemo : () => (embedded ? void signOutEmbedded() : wagmiDisconnect());
   const { network } = useNetwork();
-  const { switchChain, isPending: switching } = useSwitchChain();
+  const { switchChainAsync, isPending: switching } = useSwitchChain();
   // Gloam wallets: offered while the Turnkey kit can work on this page.
   const embeddedState = useSyncExternalStore(onEmbeddedAvailability, embeddedAvailability, () => "starting" as const);
   const offerEmbedded = TURNKEY_ENABLED && embeddedState !== "unavailable";
@@ -155,16 +156,18 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
     setSwitchFailed(false);
     try {
       try {
-        await switchChain({ chainId: network.chainId });
-      } catch {
+        await switchChainAsync({ chainId: network.chainId });
+      } catch (e) {
+        // turned down in the wallet: no second prompt, no error
+        if (walletDeclined(e)) return;
         // Robinhood Chain testnet keeps its old fallback; every other network adds its own chain
         await (network.key === "robinhood" ? ensureRhTestnetWallet() : ensureWalletOnChain(network.chain));
-        await switchChain({ chainId: network.chainId });
+        await switchChainAsync({ chainId: network.chainId });
       }
-    } catch {
+    } catch (e) {
       // A wallet app connected before it had this chain refuses the switch
       // until it connects again; say so instead of doing nothing.
-      setSwitchFailed(true);
+      if (!walletDeclined(e)) setSwitchFailed(true);
     } finally {
       setBusy(false);
     }
@@ -172,10 +175,13 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
 
   function onCopy() {
     if (!address) return;
-    void navigator.clipboard?.writeText(address).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    });
+    void navigator.clipboard?.writeText(address).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1400);
+      },
+      () => undefined
+    );
   }
 
   const v: WalletMenuVariant = variant ?? env.auto;
@@ -602,8 +608,14 @@ function connectErrorText(error: Error): string {
   if (error.name === "ProviderNotFoundError") {
     return "No wallet found in this browser. Add one such as MetaMask or Rabby, or open this page in your wallet app.";
   }
+  // MetaMask answers -32002 while an earlier connect request is still open in it
+  const code = (error as Error & { code?: number; cause?: { code?: number } }).code ?? (error as { cause?: { code?: number } }).cause?.code;
+  if (code === -32002 || /already pending/i.test(error.message)) {
+    return "Your wallet already has a request open. Check it, then try again.";
+  }
   const short = (error as Error & { shortMessage?: string }).shortMessage;
-  return (short ?? error.message).slice(0, 100);
+  const line = (short ?? error.message).split("\n")[0]!.trim();
+  return line ? line.slice(0, 100) : "Couldn't connect. Try again.";
 }
 
 /**
