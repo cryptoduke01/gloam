@@ -39,6 +39,7 @@ import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { buildNotePackage, decodeNotePackage, encodeNotePackage } from "@/lib/notePackage";
 import type { PayrollNote } from "@/lib/proofs";
 import { readAmountText } from "@/lib/amountText";
+import { walletErrorForPeople } from "@/lib/walletErrors";
 import { encryptTicketForTag, isReceiveTag, isValidReceiveTag } from "@/lib/receiveTag";
 import { ticketToMemoBytes } from "@/lib/payMemo";
 import { cleanPaymentNote } from "@/lib/paymentNote";
@@ -250,7 +251,11 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
   // shifted, so the row is refused rather than read.
   const width = looksLikeHeader ? first.length : first.length === 2 ? 2 : Math.min(Math.max(first.length, 3), 4);
 
-  const body = lines.slice(start);
+  // A spreadsheet's empty rows come out as ",,," (or tabs): nothing to pay, so not an error row either.
+  const body = lines.slice(start).filter(({ l }) => {
+    const cells = splitCsvLine(l, delimiter);
+    return !cells || cells.some((c) => c.trim().length > 0);
+  });
   if (body.length > PAYROLL_MAX_ROWS) {
     return { rows: [], error: `Up to ${PAYROLL_MAX_ROWS} people per run. Split the list into smaller batches.` };
   }
@@ -1022,7 +1027,8 @@ async function payRow(
       return;
     } catch (e) {
       if (e instanceof PayrollStop) throw e;
-      const msg = e instanceof Error ? e.message : "Payment failed";
+      // a wallet's or viem's long text (account, contract, calldata) is cut to plain words
+      const msg = walletErrorForPeople(e, "Payment failed");
       if (row.spendNullifier && declined && !row.sentAt) {
         // Turned down before this payment ever went out: nothing can land.
         discardPending(row);
