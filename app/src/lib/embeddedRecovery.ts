@@ -13,8 +13,11 @@
  *    authenticator only for the person, and never leaves their device
  *  - a wallet-signature backup is offered only where this browser can't make a
  *    passkey backup, and only with a plain warning that Turnkey could open it
- *  - nothing turns on by itself: each needs the person's tap (a passkey can't be
- *    asked for without one anyway)
+ *  - nothing new turns on by itself: each needs the person's tap (a passkey can't
+ *    be asked for without one anyway). The one exception is a backup that already
+ *    exists under this wallet's signature: after sign-in on a new device it is
+ *    opened silently and this browser joins it (lib/autoRestore), since the person
+ *    chose that backup already and Turnkey already holds that signature
  *  - it is offered once per wallet per browser, only while the Gloam wallet is
  *    the connected wallet, never when recovery is already on or was turned off
  *    here, and on a browser that holds other wallets' notes the offer says
