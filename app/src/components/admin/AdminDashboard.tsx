@@ -796,9 +796,8 @@ export function AdminDashboard() {
                 caption={`Daily deposits and cash-outs in dollars, ${isMain ? "mainnet" : "testnet"}`}
               />
               <p className="mt-4 text-[13px] leading-relaxed text-mute">
-                UTC days, {money}. Deposits rise above the line, cash-outs drop below it. Priced at today&apos;s prices:
-                dollar stablecoins at $1, ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "not priced right now"}
-                {isMain ? ", $GLOAM from DEX Screener" : ""}
+                UTC days, {money}. Deposits rise above the line, cash-outs drop below it.{" "}
+                {oc ? flowPricing(oc, isMain, rev?.atToday) : "Priced once the chains are read"}
                 {noPrice ? `. Not in dollars: ${noPrice}` : ""}.
               </p>
             </Panel>
@@ -899,9 +898,9 @@ export function AdminDashboard() {
                 empty="Nothing held or moved yet"
               />
               <p className="mt-4 text-[13px] leading-relaxed text-mute">
-                Dollar stablecoins count as $1{heldNoPrice ? `; ${heldNoPrice} have no dollar price and are left out of dollar totals` : ""}. ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "is not priced right now"};
+                Held now is at today&apos;s prices. Dollar stablecoins count as $1{heldNoPrice ? `; ${heldNoPrice} have no dollar price and are left out of dollar totals` : ""}. ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "is not priced right now"};
                 stock tokens at live equity marks{oc?.prices.stocks === "live" ? "" : ", not available right now"}.
-                Counts in brackets.
+                Deposited and cashed out are token amounts, counts in brackets; private swaps are not in them.
               </p>
             </Panel>
             <Panel title="By network, in detail">
@@ -911,7 +910,7 @@ export function AdminDashboard() {
                   ["Deposits", ...byNetwork((m) => n(m.deposits), (c) => n(c.deposits))],
                   ["Private transfers", ...byNetwork((m) => n(m.transfers), (c) => n(c.transfers))],
                   ["Cash-outs", ...byNetwork((m) => n(m.cashouts), (c) => n(c.cashouts))],
-                  ["Private trades", ...byNetwork((m) => n(m.trades), (c) => n(c.trades))],
+                  ["Private swaps and trades", ...byNetwork((m) => n(m.trades), (c) => n(c.trades))],
                   ["Payment messages", ...byNetwork((m) => n(m.memos), (c) => n(c.memos))],
                   ["Depositor wallets", ...byNetwork((m) => n(m.depositors), (c) => n(c.depositors))],
                   ["Active wallets", ...byNetwork((m) => n(m.activeWallets), (c) => n(c.activeWallets))],
@@ -1614,6 +1613,21 @@ function PartnersPanel({ tier }: { tier: "mainnet" | "testnet" }) {
   );
 }
 
+/**
+ * How the money figures are priced, for the notes under them. A mainnet
+ * snapshot prices each deposit, cash-out and fee at the time it happened;
+ * a testnet one (and a snapshot cached before that) at today's prices.
+ */
+function flowPricing(oc: OnchainMetrics, isMain: boolean, atToday: string[] | undefined): string {
+  if (isMain && oc.prices.flowsAtTime) {
+    const late = atToday?.length ? `; ${atToday.join(", ")} at today's price until its price at the time is read` : "";
+    return `Priced at the time of each transaction (CoinGecko's hourly price); dollar stablecoins at $1${late}`;
+  }
+  return `Priced at today's prices: dollar stablecoins at $1, ETH ${oc.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "not priced right now"}${
+    isMain ? ", $GLOAM from DEX Screener" : ""
+  }`;
+}
+
 /** "EURC (Base)": what these networks moved with no dollar price, or "" when everything was priced. */
 function notInDollars(ms: NetworkMetrics[], name: (m: NetworkMetrics) => string): string {
   return [...new Set(ms.flatMap((m) => (m.revenue?.unpriced ?? []).map((s) => `${s} (${name(m)})`)))].join(", ");
@@ -1767,10 +1781,10 @@ function RevenuePanel({
         />
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           {isMain
-            ? "Mainnet only, counted from the mainnet launch (21 Oct 2026, 13:00 UTC). $GLOAM creator fees are trading fees on the token's launchpad, not Gloam revenue, so they are shown on their own below. Priced at today's prices: dollar stablecoins at $1, "
-            : "Testnet fees from testing are not revenue. $GLOAM creator fees exist on mainnet only. Priced at today's prices: dollar stablecoins at $1, "}
-          ETH {oc.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "not priced right now"}
-          {isMain ? ", $GLOAM from DEX Screener" : ""}
+            ? "Mainnet only, counted from the mainnet launch (21 Oct 2026, 13:00 UTC). $GLOAM creator fees are trading fees on the token's launchpad, not Gloam revenue, so they are shown on their own below. "
+            : "Testnet fees from testing are not revenue. $GLOAM creator fees exist on mainnet only. "}
+          {flowPricing(oc, isMain, rev.atToday)}
+          {isMain && oc.prices.flowsAtTime ? ". Fees waiting to collect are at today's prices" : ""}
           {noPrice ? `. Not in dollars: ${noPrice}` : ""}. Windows are the last 24 hours, 7 days and 30 days.
         </p>
       </Panel>
@@ -1846,9 +1860,13 @@ function RevenuePanel({
         />
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           UTC days, newest first, {isMain ? "mainnet only, from the launch at 13:00 UTC on 21 Oct" : "testnets only"}. Revenue is
-          cash-out fees. Deposits and cash-outs are dollar volume; transactions count deposits, private transfers,
-          cash-outs and trades.
-          {isMain ? " Creator fees on launch day include trades from before 13:00, and are placed in days by block." : ""}
+          cash-out fees, a private swap&apos;s included. Deposits and cash-outs are dollar volume; transactions count
+          deposits, private transfers, cash-outs and private swaps (one each).
+          {isMain
+            ? ` Creator fees on launch day include trades from before 13:00, and are placed in days by block${
+                oc.prices.flowsAtTime ? "; each day's are priced at that day's average ETH price" : ""
+              }.`
+            : ""}
         </p>
       </Panel>
     </>
