@@ -15,7 +15,7 @@ export async function GET() {
         ? "Authorization: Bearer gloam_live_... on mainnet, gloam_test_... on testnet (keys from https://gloam.trade/partners)"
         : "Authorization: Bearer gloam_test_... (keys from https://gloam.trade/partners)",
       testnet: !MAINNET_ENABLED,
-      // Partner fees are counted, not collected, on every network (mainnet included).
+      // Gloam adds no partner fee itself: a partner's interface fee is a private payment its own app sends (relay { partnerFee }).
       charged: false,
       endpoints: [
         { method: "GET", path: "/api/v1/me", what: "The partner and key behind your key" },
@@ -24,7 +24,7 @@ export async function GET() {
         { method: "GET", path: "/api/v1/swaps", what: "Private swaps per network: router, assets, earlier routers kept for refunds" },
         { method: "POST", path: "/api/v1/swaps/quote", what: "Quote a private swap (read only): price, route, and anything that would stop it" },
         { method: "POST", path: "/api/v1/deposits", what: "Attribute a deposit your app made, by transaction hash" },
-        { method: "GET", path: "/api/v1/activity", what: "Your attributed volume and would-be commissions" },
+        { method: "GET", path: "/api/v1/activity", what: "Your attributed volume and the fees you charged" },
         { method: "GET", path: "/api/v1/vaults", what: "Vault status on every network" },
         { method: "GET", path: "/api/v1/vaults/{network}", what: "Vault status on one network" },
         { method: "GET", path: "/api/v1/vaults/{network}/leaves", what: "The vault's public leaf list, to rebuild the tree" },

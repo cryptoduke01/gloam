@@ -8,6 +8,7 @@ import { kvBackend } from "@/lib/partnersKv";
 import { linkCodeState, listLinkCodes } from "@/lib/partnerLinks";
 import { countAddresses, getPartnerAddresses } from "@/lib/partnerAddresses";
 import { removePartner } from "@/lib/partnerRemove";
+import { readAllFeesCharged } from "@/lib/partnerFees";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
       Promise.all(ids.map((id) => getPartnerAddresses(id))),
     ]);
     const notes = await Promise.all(ids.map((id) => migrationNote(id)));
+    const fees = await readAllFeesCharged(ids, tier);
     return {
       data: {
         backend,
@@ -47,6 +49,7 @@ export async function GET(req: NextRequest) {
           addresses: countAddresses(addrs[i]!),
           totals: totals.byPartner[p.id] ?? null,
           migration: notes[i],
+          feesCharged: fees[p.id] ?? null,
         })),
         totals: totals.program,
       },

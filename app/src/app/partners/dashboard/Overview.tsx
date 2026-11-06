@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { SealDots } from "@/components/ui/SealDots";
-import { useMainnetLive } from "@/components/MainnetCountdown";
 import { getNetwork } from "@/lib/networks";
 import type { Activity, FeeSetting, Stats } from "./client";
 import { ago, ArrowIcon, Card, fmtInt, fmtUnits, fmtUsd, fullDate, Kpi, LockIcon } from "./ui";
@@ -61,7 +60,7 @@ function DailyBars({ daily }: { daily: Stats["daily"] }) {
               <button
                 key={day.day}
                 type="button"
-                aria-label={`${fmtDay(day.day, true)}: ${plural(day.privatePayments, "private payment", "private payments")}, ${plural(day.cashOuts, "cash out", "cash outs")}, ${plural(day.deposits, "deposit", "deposits")}, ${plural(day.swaps, "private swap", "private swaps")}, ${fmtUsd(day.commissionUsd)} in would-be fees`}
+                aria-label={`${fmtDay(day.day, true)}: ${plural(day.privatePayments, "private payment", "private payments")}, ${plural(day.cashOuts, "cash out", "cash outs")}, ${plural(day.deposits, "deposit", "deposits")}, ${plural(day.swaps, "private swap", "private swaps")}`}
                 onMouseEnter={() => setHover(i)}
                 onFocus={() => setHover(i)}
                 onBlur={() => setHover(null)}
@@ -89,7 +88,6 @@ function DailyBars({ daily }: { daily: Stats["daily"] }) {
               {plural(d.cashOuts, "cash out", "cash outs")}, {plural(d.deposits, "deposit", "deposits")}
             </span>
             {d.swaps > 0 && <span className="block">{plural(d.swaps, "private swap", "private swaps")}</span>}
-            <span className="block">{fmtUsd(d.commissionUsd)} would-be fees</span>
           </div>
         )}
       </div>
@@ -119,11 +117,6 @@ function ActivityList({ items }: { items: Activity[] }) {
       {items.map((a) => {
         const net = getNetwork(a.network);
         const pub = a.kind !== "private_payment";
-        const fee = pub
-          ? a.feeToken != null && a.symbol
-            ? `${fmtUnits(a.feeToken, a.decimals)} ${a.symbol}`
-            : fmtUsd(a.feeUsd)
-          : fmtUsd(a.feeUsd);
         return (
           <li key={a.id} className="flex min-h-[68px] items-center gap-2.5 px-4 py-2.5 sm:gap-3 sm:px-6">
             <KindBadge kind={a.kind} />
@@ -147,10 +140,6 @@ function ActivityList({ items }: { items: Activity[] }) {
                   <span className="text-[12px]">Hidden</span>
                 </span>
               )}
-            </span>
-            <span className="tnum w-[80px] shrink-0 text-right text-[14px] text-foreground sm:w-[120px]">
-              {fee}
-              <span className="block text-[11.5px] text-mute">would-be fee</span>
             </span>
             <a
               href={net.explorerTx(a.txHash)}
@@ -205,7 +194,6 @@ export function Overview({
   tier: "mainnet" | "testnet";
   onTier: (t: "mainnet" | "testnet") => void;
 }) {
-  const mainnetLive = useMainnetLive();
   if (!stats) {
     return (
       <div aria-busy="true" className="space-y-3">
@@ -236,9 +224,9 @@ export function Overview({
           sub={`${fmtInt(publicCount)} cash outs and deposits${!testnet && t.unpriced ? `, ${t.unpriced} unpriced` : ""}`}
         />
         <Kpi
-          label="Would-be fees"
-          value={testnet ? "Not priced" : fmtUsd(t.commissionUsd)}
-          sub={testnet ? "testnet, nothing charged" : mainnetLive ? "nothing charged yet" : "nothing charged"}
+          label="Fees charged"
+          value={testnet ? fmtInt(stats.feesCharged?.count ?? 0) : fmtUsd(stats.feesCharged?.usd ?? 0)}
+          sub={testnet ? "testnet fees, counted, not valued" : `${fmtInt(stats.feesCharged?.count ?? 0)} fees, as reported`}
         />
         <Kpi label="Active keys" value={fmtInt(activeKeys)} sub={stats.lastActivity ? `last cash out, deposit or swap ${ago(stats.lastActivity)}` : "nothing public yet"} />
       </div>
@@ -250,7 +238,7 @@ export function Overview({
         <Card
           title="Your fee, right now"
           flush
-          foot="New payments use your current setting. Earlier ones keep the fee they were counted with."
+          foot="Your users pay it on top, as one private payment to your Gloam address. Set it and your addresses in Settings."
         >
           <ul className="divide-y divide-line">
             {(
@@ -286,7 +274,7 @@ export function Overview({
         title="Recent cash outs, deposits and swaps"
         flush
         action={<span className="text-[12.5px] text-mute">{loading ? "Checking…" : "Updates every 20 seconds"}</span>}
-        foot="Cash outs, deposits and swaps are public on chain, so they are listed with their transaction. Private payments are never listed one by one, and are counted only once their day (UTC) has ended, so no hidden payment can be tied to an invoice, a link or a moment. Fees on cash outs and deposits would be paid in the same token."
+        foot="Cash outs, deposits and swaps are public on chain, so they are listed with their transaction. Private payments are never listed one by one, and are counted only once their day (UTC) has ended, so no hidden payment can be tied to an invoice, a link or a moment. Fees arrive in your Gloam app as private payments."
       >
         {stats.recent.length === 0 ? (
           <div className="px-5 py-12 text-center sm:px-6">
@@ -310,13 +298,17 @@ export function Overview({
         csv={{ daily: "/api/partners/export?type=daily", transactions: "/api/partners/export?type=transactions" }}
       />
 
-      {stats.byAsset.length > 0 && (
-        <Card title="Would-be fees by token" flush foot="Whole tokens. Fees would be paid in the token the user moved, to your payout address on that network.">
+      {(stats.feesCharged?.byToken.length ?? 0) > 0 && (
+        <Card
+          title="Fees charged by token"
+          flush
+          foot="Each fee is counted once its private payment to you landed, with the amount your user's app reported: a private payment's amount is hidden on chain. Fees arrive at your Gloam address and show in your Gloam app."
+        >
           <div className="overflow-x-auto">
             <table className="tnum w-full text-left text-[14px]">
               <thead className="border-b border-line bg-surface">
                 <tr>
-                  {["Token", "Network", "Public volume", "Would-be fees"].map((h) => (
+                  {["Token", "Network", "On", "Fees", "Amount"].map((h) => (
                     <th key={h} className={`px-4 py-3 text-[12.5px] font-medium text-mute sm:px-6 ${h === "Network" ? "max-sm:hidden" : ""}`}>
                       {h}
                     </th>
@@ -324,15 +316,19 @@ export function Overview({
                 </tr>
               </thead>
               <tbody>
-                {stats.byAsset.map((a) => (
-                  <tr key={`${a.chainId}-${a.asset}`} className="border-b border-line last:border-0">
+                {stats.feesCharged.byToken.map((a) => (
+                  <tr key={`${a.chainId}-${a.asset}-${a.kind}`} className="border-b border-line last:border-0">
                     <td className="h-[52px] px-4 text-foreground sm:px-6">
                       {a.symbol}
-                      <span className="block text-[12px] text-mute sm:hidden">{getNetwork(a.network).label}</span>
+                      <span className="block text-[12px] text-mute sm:hidden">{getNetwork(a.network as never).label}</span>
                     </td>
-                    <td className="px-4 text-soft max-sm:hidden sm:px-6">{getNetwork(a.network).label}</td>
-                    <td className="px-4 text-soft sm:px-6">{Number(a.volume).toLocaleString("en-US", { maximumFractionDigits: 6 })}</td>
-                    <td className="px-4 text-foreground sm:px-6">{Number(a.commission).toLocaleString("en-US", { maximumFractionDigits: 6 })}</td>
+                    <td className="px-4 text-soft max-sm:hidden sm:px-6">{getNetwork(a.network as never).label}</td>
+                    <td className="px-4 text-soft sm:px-6">{KIND_LABEL[a.kind]}</td>
+                    <td className="px-4 text-soft sm:px-6">{fmtInt(a.count)}</td>
+                    <td className="px-4 text-foreground sm:px-6">
+                      {Number(a.amount).toLocaleString("en-US", { maximumFractionDigits: 6 })}
+                      {a.usd != null && <span className="block text-[12px] text-mute">{fmtUsd(a.usd)}</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

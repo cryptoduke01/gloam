@@ -3,19 +3,20 @@ import { ApiError, portal, sessionWallet } from "@/lib/partnersApi";
 import { getPartnerByOwner, isTier, readPartnerStats, STATS_DAYS } from "@/lib/partners";
 import { PRIVATE_PAYMENTS_NOT_MATCHED, SWAPS_NOT_MATCHED } from "@/lib/partnerBackfill";
 import { MAINNET_ENABLED } from "@/lib/networks";
+import { readFeesCharged } from "@/lib/partnerFees";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Volume and would-be commissions for the signed-in partner, and only theirs, for
+ * Volume and fees charged for the signed-in partner, and only theirs, for
  * one tier (?tier=mainnet, the default, or testnet; never added together): totals,
  * by kind, by source (API key, link, matched on chain), by network, by asset, the
  * vault's own fee, the last 14 days (?days=30 or 90 for more), and the latest 50
  * cash outs, deposits and swaps. Private payments show only as counts per day,
  * never one by one, so no hidden payment can be tied to an invoice.
- * Partner fees are not collected on any network yet, mainnet included: nothing
- * is charged; fees show what the setting would have earned.
+ * feesCharged: the partner's interface fees, each counted once its own private
+ * payment landed, with the amount the client reported (lib/partnerFees).
  */
 export async function GET(req: NextRequest) {
   return portal(async () => {
@@ -25,13 +26,14 @@ export async function GET(req: NextRequest) {
     const asked = Number(q.get("days"));
     const days = [30, 90].includes(asked) ? asked : STATS_DAYS;
     const tier = isTier(q.get("tier")) ? (q.get("tier") as "mainnet" | "testnet") : "mainnet";
-    const stats = await readPartnerStats(partner.id, { recent: 50, days, tier, forPartner: true });
+    const [stats, feesCharged] = await Promise.all([readPartnerStats(partner.id, { recent: 50, days, tier, forPartner: true }), readFeesCharged(partner.id, tier)]);
     // Where the counts come from: the testnets, plus the mainnets once a mainnet pool is in.
     return {
       data: {
         ...stats,
         days,
         charged: false,
+        feesCharged,
         network: MAINNET_ENABLED ? "mainnet and testnet" : "testnet",
         notMatched: { privatePayments: PRIVATE_PAYMENTS_NOT_MATCHED, swaps: SWAPS_NOT_MATCHED },
       },

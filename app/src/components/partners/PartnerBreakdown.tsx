@@ -132,7 +132,7 @@ export function PartnerBreakdown({
         }
         foot={
           <>
-            {testnet ? "Testnet: counted, never valued." : "Nothing is charged to partners."} Private payments show only as counts.
+            {testnet ? "Testnet: counted, never valued." : "Gloam charges partners nothing."} Private payments show only as counts.
             <HowItWorks
               items={[
                 testnet ? "Test tokens have no price." : "Volume: the dollar value of deposits, cash outs and each swap's input.",

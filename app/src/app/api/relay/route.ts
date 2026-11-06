@@ -2,6 +2,8 @@ import { NextResponse, after } from "next/server";
 import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
 import { afterRelaySend, bindRelaySpend, relayFlowOf, unbindRelaySpend, type BoundSpend } from "@/lib/partnerAttribution";
+import { FeeReportError, feeProblem, readPartnerFee, settleFeeAfterSend } from "@/lib/partnerFees";
+import { resolveLinkCode } from "@/lib/partnerLinks";
 import {
   RelayError,
   checkChainRateLimit,
@@ -48,6 +50,12 @@ export async function GET() {
  * send is out, the code is bound to the transaction's hash, and the transaction is
  * counted when it lands, after the response (lib/partnerAttribution). None of
  * this ever fails or delays a send.
+ *
+ * A transfer that is a partner's interface fee carries { partnerFee: { code, kind,
+ * asset, amount } } instead (lib/partnerFees): the partner behind the live code,
+ * with a name Gloam approved, must have that fee set and a Gloam address for fees
+ * on this network, or nothing is sent. Once it lands it counts as a fee charged,
+ * with the amount reported here. It is never counted as one of the partner's payments.
  */
 export async function POST(req: Request) {
   try {
@@ -59,6 +67,26 @@ export async function POST(req: Request) {
     const net = networkForChain(body.chainId);
     const requester = clientIp(req);
     await checkRateLimit(requester);
+    // a partner's fee: checked before anything is sent, counted once it lands
+    let partnerFee: { partner: NonNullable<Awaited<ReturnType<typeof resolveLinkCode>>>["partner"]; fee: NonNullable<ReturnType<typeof readPartnerFee>> } | null = null;
+    if (body.partnerFee !== undefined) {
+      if (body.action !== "transfer" || partnerCode !== undefined) throw new RelayError("A partner fee is a transfer of its own, sent without a link code.", 400, "bad_partner_fee");
+      try {
+        const fee = readPartnerFee(body.partnerFee);
+        if (!fee) throw new FeeReportError("partnerFee must be { code, kind, asset, amount }.", "bad_partner_fee");
+        const code = (body.partnerFee as { code?: unknown }).code;
+        const r = await resolveLinkCode(code);
+        if (!r || !r.partner.approvedName) throw new FeeReportError("That link's partner can't take a fee.", "fee_not_set");
+        const problem = feeProblem(r.partner, net, fee);
+        if (problem) throw new FeeReportError(problem, "fee_not_set");
+        partnerFee = { partner: r.partner, fee };
+      } catch (e) {
+        if (e instanceof FeeReportError) throw new RelayError(`${e.message} Nothing was sent.`, 400, e.code);
+        // a storage error while checking: surely not sent, so never the "internal" the app reads as maybe sent
+        console.error("gloam_relay_fee_check", logSafe(e));
+        throw new RelayError("Could not check this partner fee right now. Nothing was sent. Try again shortly.", 503, "fee_check_failed");
+      }
+    }
     // payment messages have budgets of their own (lib/relay/server holdMemoSlot)
     if (body.action !== "memo") await checkChainRateLimit(net, requester);
     // bound only once the relay's checks, dry run and holds passed (beforeBroadcast), never waited on
@@ -79,6 +107,11 @@ export async function POST(req: Request) {
     switch (body.action) {
       case "transfer": {
         hash = await relayTransfer(net, body, requester, hooks);
+        if (partnerFee) {
+          const sent = hash;
+          const f = partnerFee;
+          after(() => settleFeeAfterSend({ partner: f.partner, net, hash: sent, fee: f.fee, source: "link" }).then(() => undefined));
+        }
         if (partnerCode !== undefined) {
           const sent = hash;
           after(() => afterRelaySend({ net, hash: sent, code: partnerCode, flow: relayFlowOf(body), at: takenAt, bound }));

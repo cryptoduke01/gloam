@@ -449,8 +449,11 @@ export async function verifyGloamCashout(args: {
         as <code>apiKey</code> to the tool pack or the seller helper. Private
         payments, cash outs and sweeps then go through the partner relay, and
         deposits are attributed once they land, so the dashboard counts what
-        your kit or marketplace brings in. Partner fees are not charged yet. See
-        the <Link href="/docs/partners">Partner API</Link>.
+        your kit or marketplace brings in. To charge your own fee, your app sends
+        it as one private payment to your Gloam address before the payment and
+        relays it with <code>partnerFee</code>; the user pays it on top, and the
+        vault does not enforce it. See the{" "}
+        <Link href="/docs/partners#interface-fee">Partner API</Link>.
       </p>
 
       <h2 id="public">What is public, fees and networks</h2>

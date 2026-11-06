@@ -85,7 +85,9 @@ import { gasHighMessage } from "@/lib/relay/gasCeiling";
 import { RelayToggle } from "./RelayToggle";
 import { RelayGasNotice } from "./RelayGasNotice";
 import { PaymentRequestBanner, RequestPaymentCard } from "./PaymentRequest";
-import { queuePartnerJobs, registerLinkSpend, settlePartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
+import { queuePartnerJobs, registerLinkSpend, settlePartnerTx, usePartnerLink } from "@/lib/partnerLinkClient";
+import { feeAssetOf, linkFee } from "@/lib/partnerFeeMath";
+import { coverProblem, feeLine, payPartnerFee } from "@/lib/partnerFeeClient";
 import {
   claimNetworkProblem,
   isWalletRequest,
@@ -222,7 +224,8 @@ export function MoveView() {
         )
   );
   // A partner's link code (p=): their name from their Gloam account, once the server says the code is live.
-  const partnerName = usePartnerName(request?.partnerCode ?? null);
+  const partnerLink = usePartnerLink(request?.partnerCode ?? null);
+  const partnerName = partnerLink.name;
   // The first-payment nudge (FirstPaymentCard) opens Send with a small amount
   // in one stablecoin (?suggest=5&suggestAsset=0x…). A request link wins over
   // it. Read once; the URL is cleaned up below so a refresh starts blank.
@@ -1024,6 +1027,23 @@ export function MoveView() {
     savePrivatePref({ on });
   }
 
+  /**
+   * A partner's interface fee on a flow from its link (lib/partnerFeeMath): set by
+   * the partner, paid by the user on top, as one private payment to the partner
+   * before the payment or cash out. Shown in the review before anything is sent.
+   */
+  function payLinkCode(): string | null {
+    return request?.partnerCode && request.toKind === "gloam" && payStyle === "direct" && recipientTag.trim() === request.to ? request.partnerCode : null;
+  }
+  function sendLinkFee(amount: bigint | null) {
+    if (!selected || !payLinkCode() || amount == null || amount <= 0n) return null;
+    return linkFee(partnerLink.terms, "private_payment", network, feeAssetOf(network.chainId, selected.asset), amount);
+  }
+  function cashOutLinkFee(to: Address | null | undefined, amount: bigint) {
+    if (!selected || !requestPartner(to) || amount <= 0n) return null;
+    return linkFee(partnerLink.terms, "cash_out", network, feeAssetOf(network.chainId, selected.asset), amount);
+  }
+
   async function onCashOut() {
     if (!selected || !address || !network.pool || !poseidonMode) return;
     // never prove or send a balance of another chain (several vaults share one address)
@@ -1073,6 +1093,13 @@ export function MoveView() {
       void refetchFee();
       return;
     }
+    // the partner's fee from this link: the balance must cover the cash out and the fee
+    const partnerFee = cashOutLinkFee(to, amount);
+    const cantCover = partnerFee ? coverProblem(selected, amount, partnerFee.amount, partnerFee.name) : null;
+    if (cantCover) {
+      setError(cantCover);
+      return;
+    }
 
     setBusy(true);
     setPaidPrivately(false);
@@ -1084,18 +1111,41 @@ export function MoveView() {
     setCashedOut(null);
 
     let splitDone = false;
+    let feePaid = false;
     try {
+      // The partner's fee first, as its own private payment: the rest comes back as a fresh note.
+      let base: LocalNote = selected;
+      if (partnerFee) {
+        const feePath = await pathForLeaf(selected.leafIndex!);
+        if (!feePath) throw new Error("Could not read your private balance. Refresh and try again.");
+        base = await payPartnerFee({
+          note: selected,
+          path: feePath as PoseidonMerklePath,
+          fee: partnerFee.amount,
+          to: partnerFee.to,
+          code: requestPartner(to)!.code,
+          kind: "cash_out",
+          owner: address as Address,
+          net: network,
+          relayAvailable,
+          onStatus: setStatus,
+        });
+        feePaid = true;
+        refreshNotes();
+      }
+      const basePath = async () =>
+        base === selected ? ((await pathForLeaf(selected.leafIndex!)) as PoseidonMerklePath | null) : ((await freshPath(base.commitment, network))?.path ?? null);
       // A part of the balance: set it aside in its own private note first. A balance that
       // backed a proof of funds moves whole to a fresh note first, so the proof can't point
       // at this cash out, and so does one whose last swap reverted (lib/cashOutSplit spendPlanFor).
-      let target: LocalNote = selected;
+      let target: LocalNote = base;
       let path: PoseidonMerklePath | null;
-      const plan = spendPlanFor(selected, amount);
+      const plan = spendPlanFor(base, amount);
       if (plan !== "direct") {
-        const startPath = await pathForLeaf(selected.leafIndex!);
+        const startPath = await basePath();
         if (!startPath) throw new Error("Could not read your private balance. Refresh and try again.");
         target = await splitForCashOut({
-          note: selected,
+          note: base,
           amount,
           path: startPath as PoseidonMerklePath,
           owner: address as Address,
@@ -1116,7 +1166,7 @@ export function MoveView() {
         refreshNotes();
         path = (await freshPath(target.commitment, network))?.path ?? null;
       } else {
-        path = (await pathForLeaf(selected.leafIndex!)) as PoseidonMerklePath | null;
+        path = await basePath();
       }
       if (!path) throw new Error("Could not read your private balance. Refresh and try again.");
       spentNoteId.current = target.id;
@@ -1176,7 +1226,13 @@ export function MoveView() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Cash out failed";
       // The first step landed: the amount is its own note in the balance now.
-      setError(splitDone ? `${msg} The amount is set aside in your private balance, so you can cash it out from there.` : msg);
+      setError(
+        splitDone
+          ? `${msg} The amount is set aside in your private balance, so you can cash it out from there.`
+          : feePaid
+            ? `${msg} The partner fee is paid; the rest is in your private balance, so you can cash out from there.`
+            : msg
+      );
       setBusy(false);
       setStatus(null);
       refreshNotes();
@@ -1287,7 +1343,18 @@ export function MoveView() {
       return;
     }
 
-    const note = selected;
+    // From a partner's link: the pieces that pay the request's own wallet carry its code to the relay as they are scheduled.
+    const fromLink = requestPartner(cashOutTo);
+    const toRequest = (a: Address) => Boolean(fromLink && cashOutTo && a.toLowerCase() === cashOutTo.toLowerCase());
+    // the partner's fee from this link, on what the pieces pay the request's wallet
+    const linkedOut = pieces.reduce((t, piece, i) => (toRequest(targets[i]!) ? t + piece : t), 0n);
+    const partnerFee = fromLink ? cashOutLinkFee(cashOutTo, linkedOut) : null;
+    const cantCover = partnerFee ? coverProblem(selected, amount, partnerFee.amount, partnerFee.name) : null;
+    if (cantCover) {
+      setError(cantCover);
+      return;
+    }
+    let note = selected;
     setBusy(true);
     setPaidPrivately(false);
     reset();
@@ -1296,11 +1363,33 @@ export function MoveView() {
     pendingAction.current = "cashout";
     pendingChange.current = null;
     setCashedOut(null);
+    try {
+      if (partnerFee && fromLink) {
+        const feePath = await pathForLeaf(selected.leafIndex!);
+        if (!feePath) throw new Error("Could not read your private balance. Refresh and try again.");
+        note = await payPartnerFee({
+          note: selected,
+          path: feePath as PoseidonMerklePath,
+          fee: partnerFee.amount,
+          to: partnerFee.to,
+          code: fromLink.code,
+          kind: "cash_out",
+          owner: address as Address,
+          net: network,
+          relayAvailable,
+          onStatus: setStatus,
+        });
+        refreshNotes();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The partner fee did not go out.");
+      setBusy(false);
+      setStatus(null);
+      refreshNotes();
+      return;
+    }
     setPlanRun(pieces.map((p, i) => ({ amount: p, to: targets[i]!, state: "waiting" })));
     setRunNote(note);
-    // From a partner's link: the pieces that pay the request's own wallet carry its code to the relay as they are scheduled.
-    const fromLink = requestPartner(cashOutTo);
-    const toRequest = (a: Address) => Boolean(fromLink && cashOutTo && a.toLowerCase() === cashOutTo.toLowerCase());
     try {
       const r = await runPrivateCashOut({
         note,
@@ -1467,15 +1556,39 @@ export function MoveView() {
         throw new Error("That Gloam address is incomplete or mistyped. Copy it again from their Receive page.");
       }
 
-      const path = await pathForLeaf(selected.leafIndex!);
+      // From a partner's link: its fee first, as its own private payment; the payment then spends the rest.
+      let src: LocalNote = selected;
+      const partnerFee = sendLinkFee(amountPay);
+      if (partnerFee) {
+        const cantCover = coverProblem(selected, amountPay, partnerFee.amount, partnerFee.name);
+        if (cantCover) throw new Error(cantCover);
+        const feePath = await pathForLeaf(selected.leafIndex!);
+        if (!feePath) throw new Error("Could not read your private balance. Refresh and try again.");
+        src = await payPartnerFee({
+          note: selected,
+          path: feePath as PoseidonMerklePath,
+          fee: partnerFee.amount,
+          to: partnerFee.to,
+          code: payLinkCode()!,
+          kind: "private_payment",
+          owner: address as Address,
+          net: network,
+          relayAvailable,
+          onStatus: setStatus,
+        });
+        spentNoteId.current = src.id;
+        refreshNotes();
+      }
+
+      const path = src === selected ? await pathForLeaf(selected.leafIndex!) : ((await freshPath(src.commitment, network))?.path ?? null);
       if (!path) throw new Error("Could not read your private balance. Refresh and try again.");
 
       setStatus("Proving your payment privately…");
       const w = await buildTransferWitness({
-        secretHex: selected.secret,
-        amountIn: BigInt(selected.amountWei),
+        secretHex: src.secret,
+        amountIn: BigInt(src.amountWei),
         amountPay,
-        asset: selected.asset,
+        asset: src.asset,
         path: path as PoseidonMerklePath,
       });
       if (w.blocker) throw new Error(w.blocker);
@@ -1484,8 +1597,7 @@ export function MoveView() {
       // anything is sent. Through the relay, the code goes with the send. From the wallet, it is
       // registered now, before proving, bound to this payment's new note commitment, which only
       // this send has.
-      const linkCode =
-        request?.partnerCode && request.toKind === "gloam" && payStyle === "direct" && recipientTag.trim() === request.to ? request.partnerCode : null;
+      const linkCode = payLinkCode();
       partnerSend.current = linkCode ? { chainId: network.chainId } : null;
       if (linkCode && !relayOn) {
         registerLinkSpend({
@@ -1504,7 +1616,7 @@ export function MoveView() {
           id: `chg-${Date.now()}`,
           chainId: network.chainId,
           pool: network.pool,
-          asset: selected.asset,
+          asset: src.asset,
           amountWei: w.changeNote.amountWei,
           commitment: w.changeNote.commitment,
           secret: w.changeNote.secret,
@@ -2700,6 +2812,20 @@ export function MoveView() {
                       </button>
                     </div>
                     <AmountProblem value={sendAmount} decimals={selected ? assetDecimals(selected.asset) : undefined} />
+                    {(() => {
+                      const amt = selected ? parseAssetAmount(sendAmount, selected.asset) : null;
+                      const f = sendLinkFee(amt);
+                      if (!f || !selected || amt == null) return null;
+                      const short = coverProblem(selected, amt, f.amount, f.name);
+                      return (
+                        <p className={`tnum mt-2 text-[13px] ${short ? "text-warn" : "text-foreground"}`}>
+                          {feeLine(f.name, f.amount, selected.asset)}
+                          <span className="block text-[12px] text-mute">
+                            {short ? "Your balance can't cover the payment and this fee." : `Set by ${f.name} (${f.label}), paid privately before the payment.`}
+                          </span>
+                        </p>
+                      );
+                    })()}
                     <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
                       The amount never shows up on the explorer. Anything left
                       over stays in your private balance.
@@ -2932,6 +3058,23 @@ export function MoveView() {
                             {formatFeePercent(cashOutFeeBps)} fee{planActive ? " in total" : ""}: {formatAssetLabel(outFee, selected.asset)}
                           </p>
                         )}
+                        {(() => {
+                          // the same base the cash out charges it on: in a plan, only the pieces paying the link's wallet
+                          const feeBase = planActive
+                            ? planPieceList.reduce((t, p, i) => (cashOutTo && pieceTargets[i]?.toLowerCase() === cashOutTo.toLowerCase() ? t + p : t), 0n)
+                            : cashOutAmount;
+                          const f = cashOutLinkFee(cashOutTo, feeBase);
+                          if (!f) return null;
+                          const short = coverProblem(selected, cashOutAmount, f.amount, f.name);
+                          return (
+                            <p className={`tnum mt-1 text-[13px] ${short ? "text-warn" : "text-foreground"}`}>
+                              {feeLine(f.name, f.amount, selected.asset)}
+                              <span className="block text-[12px] text-mute">
+                                {short ? "Your balance can't cover the cash out and this fee." : `Set by ${f.name} (${f.label}), paid privately from your balance before the cash out.`}
+                              </span>
+                            </p>
+                          );
+                        })()}
                       </div>
                       <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3 text-[13px]">
                         <span className="text-mute">

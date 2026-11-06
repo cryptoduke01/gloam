@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { isAddress } from "viem";
-import { useMainnetLive } from "@/components/MainnetCountdown";
 import { getNetwork } from "@/lib/networks";
+import { FEE_CHAINS } from "@/lib/partnerFeeMath";
+import { isValidReceiveTag } from "@/lib/receiveTag";
 import { portal, PortalError, type PartnerAccount } from "./client";
 import { Card, Field, fmtUsd, Notice } from "./ui";
 
@@ -17,23 +17,25 @@ function toHundredths(raw: string, max: number): number | null {
 
 const hundredths = (n: number) => (n / 100).toFixed(2);
 
+const feeToOf = (p: PartnerAccount) => Object.fromEntries(FEE_CHAINS.map((c) => [c, p.feeTo?.[c] ?? ""])) as Record<string, string>;
+
 export function SettingsPanel({ partner, onSaved }: { partner: PartnerAccount; onSaved: (p: PartnerAccount) => void }) {
   const [name, setName] = useState(partner.name);
   const [website, setWebsite] = useState(partner.website ?? "");
   const [flat, setFlat] = useState(hundredths(partner.fees.privatePaymentCents));
   const [cashout, setCashout] = useState(hundredths(partner.fees.cashoutBps));
   const [deposit, setDeposit] = useState(hundredths(partner.fees.depositBps));
-  const [rh, setRh] = useState(partner.payout.robinhood ?? "");
-  const [tempo, setTempo] = useState(partner.payout.tempo ?? "");
+  const [feeTo, setFeeTo] = useState<Record<string, string>>(() => feeToOf(partner));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const mainnetLive = useMainnetLive();
 
   const cents = toHundredths(flat, 100);
   const cBps = toHundredths(cashout, 100);
   const dBps = toHundredths(deposit, 100);
-  const badAddr = (v: string) => v.trim() !== "" && !isAddress(v.trim(), { strict: false });
+  const badTag = (v: string) => v.trim() !== "" && !isValidReceiveTag(v.trim());
+  const anyFee = (cents ?? 0) > 0 || (cBps ?? 0) > 0 || (dBps ?? 0) > 0;
+  const noAddress = anyFee && FEE_CHAINS.every((c) => !feeTo[c]?.trim());
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -41,7 +43,7 @@ export function SettingsPanel({ partner, onSaved }: { partner: PartnerAccount; o
     setSaved(false);
     if (cents == null) return setErr("The fee per private payment must be between $0.00 and $1.00.");
     if (cBps == null || dBps == null) return setErr("Cash out and deposit fees must be between 0% and 1%, in steps of 0.01%.");
-    if (badAddr(rh) || badAddr(tempo)) return setErr("A payout address is not a valid wallet address.");
+    if (Object.values(feeTo).some(badTag)) return setErr("A fee address is not a Gloam address. Copy it from Receive in the Gloam app (it starts with gloamr1.).");
     setBusy(true);
     try {
       const r = await portal<{ partner: PartnerAccount }>("/account", {
@@ -50,15 +52,14 @@ export function SettingsPanel({ partner, onSaved }: { partner: PartnerAccount; o
           name,
           website,
           fees: { privatePaymentCents: cents, cashoutBps: cBps, depositBps: dBps },
-          payout: { robinhood: rh.trim(), tempo: tempo.trim() },
+          feeTo: Object.fromEntries(Object.entries(feeTo).map(([k, v]) => [k, v.trim()])),
         },
       });
       onSaved(r.partner);
       // Show what was stored (checksummed addresses, cleaned name and link).
       setName(r.partner.name);
       setWebsite(r.partner.website ?? "");
-      setRh(r.partner.payout.robinhood ?? "");
-      setTempo(r.partner.payout.tempo ?? "");
+      setFeeTo(feeToOf(r.partner));
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -74,14 +75,10 @@ export function SettingsPanel({ partner, onSaved }: { partner: PartnerAccount; o
     <form onSubmit={save} className="space-y-4">
       <Card
         title="Your fee"
-        foot={
-          mainnetLive
-            ? "Partner fees are not charged yet, on mainnet or testnet. Your dashboard counts what this setting would earn on each payment."
-            : "Testnet: nothing is charged. Your dashboard counts what this setting would earn on each payment."
-        }
+        foot="Your users pay this on top, as one private payment to your Gloam address, before their payment or cash out. The Gloam app adds it on flows from your links and shows it before they confirm. With your API key, your app adds it. Private swaps carry no fee."
       >
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-          <Field label="Per private payment" htmlFor="fee-flat" hint="A flat amount, up to $1.00. The payment's amount is hidden, even from us.">
+          <Field label="Per private payment" htmlFor="fee-flat" hint="A flat amount, up to $1.00, on dollar stablecoins. The payment's amount is hidden, even from us.">
             <div className="relative">
               <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-mute">$</span>
               <input id="fee-flat" inputMode="decimal" className="gl-input tnum pl-8" value={flat} onChange={(e) => setFlat(e.target.value)} />
@@ -101,37 +98,43 @@ export function SettingsPanel({ partner, onSaved }: { partner: PartnerAccount; o
           </Field>
         </div>
         <div className="mt-6 rounded-xl bg-surface px-4 py-3 text-[13.5px] leading-relaxed text-soft">
-          You would earn <span className="tnum text-foreground">{cents == null ? "?" : fmtUsd(cents / 100)}</span> on every private payment,{" "}
+          Your users pay <span className="tnum text-foreground">{cents == null ? "?" : fmtUsd(cents / 100)}</span> on a private payment,{" "}
           <span className="tnum text-foreground">{example(1000, cBps)}</span> on a $1,000 cash out and{" "}
-          <span className="tnum text-foreground">{example(1000, dBps)}</span> on a $1,000 deposit, paid in the token your user moved.
+          <span className="tnum text-foreground">{example(1000, dBps)}</span> on a $1,000 deposit, in the token they moved.
         </div>
       </Card>
 
-      <Card title="Payout addresses" foot="Fees would be paid here, in the token of each payment, once fees are live on mainnet.">
+      <Card
+        title="Where your fees arrive"
+        foot="Your Gloam address on each chain, from Receive in the Gloam app. Fees arrive there privately, like any payment to you, and show in that app. No address on a chain: no fee is added there."
+      >
+        {noAddress && (
+          <div className="mb-5">
+            <Notice tone="warn">Add a Gloam address on at least one chain, or your fee is never added.</Notice>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {(
-            [
-              ["robinhood", rh, setRh],
-              ["tempo", tempo, setTempo],
-            ] as const
-          ).map(([key, value, set]) => (
-            <Field
-              key={key}
-              label={getNetwork(key).label}
-              htmlFor={`payout-${key}`}
-              hint={badAddr(value) ? <span className="text-danger">Not a valid wallet address.</span> : "A wallet you control on this network."}
-            >
-              <input
-                id={`payout-${key}`}
-                className="gl-input tnum text-[14px]"
-                placeholder="0x…"
-                spellCheck={false}
-                autoComplete="off"
-                value={value}
-                onChange={(e) => set(e.target.value)}
-              />
-            </Field>
-          ))}
+          {FEE_CHAINS.map((key) => {
+            const value = feeTo[key] ?? "";
+            return (
+              <Field
+                key={key}
+                label={getNetwork(key).label}
+                htmlFor={`fee-to-${key}`}
+                hint={badTag(value) ? <span className="text-danger">Not a Gloam address.</span> : "Starts with gloamr1."}
+              >
+                <input
+                  id={`fee-to-${key}`}
+                  className="gl-input tnum text-[14px]"
+                  placeholder="gloamr1.…"
+                  spellCheck={false}
+                  autoComplete="off"
+                  value={value}
+                  onChange={(e) => setFeeTo((f) => ({ ...f, [key]: e.target.value }))}
+                />
+              </Field>
+            );
+          })}
         </div>
       </Card>
 
@@ -153,7 +156,7 @@ export function SettingsPanel({ partner, onSaved }: { partner: PartnerAccount; o
         </button>
         {saved && (
           <span role="status" className="text-[13.5px] text-mute">
-            Saved. New payments use this setting.
+            Saved. New payments use this fee.
           </span>
         )}
       </div>

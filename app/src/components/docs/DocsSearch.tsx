@@ -204,7 +204,7 @@ const PAGE_META: Record<string, PageMeta> = {
     headings: [
       "How the program works",
       "What you can charge, and why",
-      "Partner fees: not charged yet",
+      "How your fee is charged",
       "Authentication and limits",
       "Responses and errors",
       "Relay a payment",

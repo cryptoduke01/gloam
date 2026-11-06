@@ -8,17 +8,18 @@
  *          receiving addresses (lib/partnerBackfill)
  * Server only.
  *
- * How fees can work, honestly:
+ * How fees work (lib/partnerFeeMath, lib/partnerFees):
  *  - A private payment hides its amount from everyone, the relay included. So
- *    a partner's fee on one can only be a flat amount per payment.
+ *    a partner's fee on one is a flat amount per payment.
  *  - Deposits and cash outs cross between a public wallet and the vault, so
  *    their amount is public, and a fee can be a share of it (basis points).
- *  - Collecting a fee for real needs a fee output inside the circuits and the
- *    vault contract, which the mainnet pools do not have yet. So nothing is
- *    charged on any network, mainnet or testnet: this file records what each
- *    partner's key brought in and the fee that would have applied under the
- *    partner's setting at the time. The only fee taken on mainnet is Gloam's
- *    own 0.5% on cash outs, kept by the pool.
+ *  - It is an interface fee: the user pays it on top, as one extra private
+ *    payment to the partner's Gloam address (feeTo), added by the client (the
+ *    Gloam app for a partner's link, the partner's own app for its API key). The
+ *    vault does not enforce it. A fee counts as charged once its transfer lands,
+ *    with the amount the client reported (lib/partnerFees). The fee each record
+ *    below carries (feeUsd, feeToken) is what the setting puts on that payment,
+ *    not proof that it was paid.
  *
  * What is recorded per transaction: network, kind, tx hash, time, where it was
  * seen (source), and for public edges only the asset and amount (both already
@@ -47,7 +48,7 @@
  *   v2:<id>                 set once the account's older counters were replayed into stats2
  *
  * Counter fields: <network>|<source>|<kind>|<metric>, metric n (count), usd
- * (volume, USD micros), fee (would-be partner fee, USD micros), vf (the vault's
+ * (volume, USD micros), fee (the setting's fee, USD micros), vf (the vault's
  * fee, USD micros), unp (public edges with no price), vfu (vault fees with no
  * price); a|<chainId>|<asset>|<kind>|vt|ft|vft per asset (volume, partner fee and
  * vault fee, micro-units, all-time only); last|<tier>.
@@ -60,6 +61,8 @@ import { readSwapRef } from "./swapLink";
 import { hashNumbers, jsonOf, k, kv, kv1, type KvCommand } from "./partnersKv";
 import { randomId } from "./apiKeys";
 import { isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
+import { isValidReceiveTag } from "./receiveTag";
+import { FEE_CHAINS, type FeeAddresses } from "./partnerFeeMath";
 
 // ---------------------------------------------------------------- fees
 
@@ -121,9 +124,9 @@ export type EdgeAmount = {
 };
 
 export type Commission = {
-  /** Would-be fee in micro-dollars, null when a public edge has no price. */
+  /** The setting's fee in micro-dollars, null when a public edge has no price. */
   feeUsdMicros: bigint | null;
-  /** Would-be fee in the transaction's own token (smallest units); public edges only. */
+  /** The setting's fee in the transaction's own token (smallest units); public edges only. */
   feeToken: bigint | null;
   /** USD value of a public edge in micro-dollars; null for private payments or no price. */
   volumeUsdMicros: bigint | null;
@@ -213,9 +216,15 @@ export type Partner = {
   owner: Address;
   name: string;
   website: string | null;
-  /** Where fees would be paid, per network. */
+  /** Public payout addresses per network (kept; fees arrive privately at feeTo). */
   payout: PayoutAddresses;
   fees: PartnerFees;
+  /**
+   * The partner's Gloam address (gloamr1.…) where its fees arrive, by chain
+   * ("robinhood", "tempo", "base", "ethereum") or network key. No address on a
+   * network: no fee is added there.
+   */
+  feeTo?: FeeAddresses;
   /**
    * Set by a Gloam admin, never by the partner, and kept under its own key apart
    * from the record, so a save of the record never changes it. Payment messages from
@@ -300,6 +309,31 @@ export function validatePayout(input: unknown, base: PayoutAddresses = {}): Payo
   return out;
 }
 
+/** Gloam addresses (gloamr1.…) where fees arrive, per chain or network. Empty strings clear one. */
+export function validateFeeTo(input: unknown, base: FeeAddresses = {}): FeeAddresses {
+  if (input == null) return { ...base };
+  if (typeof input !== "object") throw new PartnerError("Fee addresses must be an object.", 400, "bad_fee_to");
+  const out: FeeAddresses = { ...base };
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!isNetworkKey(key) && !(FEE_CHAINS as readonly string[]).includes(key)) {
+      throw new PartnerError(`Unknown network "${key.slice(0, 24)}".`, 400, "bad_fee_to");
+    }
+    if (value === null || value === "") {
+      delete out[key];
+      continue;
+    }
+    if (typeof value !== "string" || !isValidReceiveTag(value)) {
+      throw new PartnerError(
+        `The ${getNetwork(key as NetworkKey).label} fee address must be a Gloam address (gloamr1.…). Copy it from Receive in the Gloam app.`,
+        400,
+        "bad_fee_to"
+      );
+    }
+    out[key] = value.trim();
+  }
+  return out;
+}
+
 /** A stored record with its approvals, which live under their own keys. */
 function withApproval(raw: unknown, approved: unknown, nameOk: unknown = null): Partner | null {
   const p = jsonOf<Partner>(raw);
@@ -348,6 +382,7 @@ export type PartnerInput = {
   website?: unknown;
   payout?: unknown;
   fees?: unknown;
+  feeTo?: unknown;
 };
 
 /** Throws a PartnerError for what a new account would refuse, making nothing. */
@@ -357,6 +392,7 @@ export function checkNewPartner(input: PartnerInput): void {
   cleanWebsite(input.website);
   validatePayout(input.payout, {});
   validateFees(input.fees, DEFAULT_FEES);
+  validateFeeTo(input.feeTo, {});
 }
 
 /** Creates the wallet's partner account, or updates it. Never changes its approval (setRelayApproved). */
@@ -372,9 +408,10 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
   const website = input.website === undefined && existing ? existing.website : cleanWebsite(input.website);
   const payout = validatePayout(input.payout, existing?.payout ?? {});
   const fees = validateFees(input.fees, existing?.fees ?? DEFAULT_FEES);
+  const feeTo = validateFeeTo(input.feeTo, existing?.feeTo ?? {});
 
   if (existing) {
-    const next: Partner = { ...existing, name, website, payout, fees, updatedAt: now };
+    const next: Partner = { ...existing, name, website, payout, fees, feeTo, updatedAt: now };
     await kv1(["SET", k("partner", existing.id), recordOf(next)]);
     return next;
   }
@@ -385,6 +422,7 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
     website,
     payout,
     fees,
+    feeTo,
     createdAt: now,
     updatedAt: now,
   };
@@ -502,9 +540,9 @@ export type ActivityRecord = {
   amount: string | null;
   /** null on testnet, and for a token with no price. */
   volumeUsd: number | null;
-  /** Would-be fee in USD (null on testnet, or when a public edge has no price). */
+  /** The setting's fee in USD (null on testnet, or when a public edge has no price). */
   feeUsd: number | null;
-  /** Would-be fee in the transaction's own token, smallest units (public edges). */
+  /** The setting's fee in the transaction's own token, smallest units (public edges). */
   feeToken: string | null;
   /** The setting that produced the fee, e.g. "0.25% of each cash out". */
   feeBasis: string;
@@ -797,7 +835,7 @@ export type AssetTotals = {
   symbol: string;
   /** Whole tokens, as decimal strings (six places at most): what deposits and cash outs moved. */
   volume: string;
-  /** Would-be partner fees in this token. */
+  /** The setting's fees in this token. */
   commission: string;
   /** Whole tokens: the inputs of private swaps in this token. */
   swapVolume: string;
@@ -851,7 +889,7 @@ export type PartnerStats = {
     publicVolumeUsd: number;
     /** USD of the priced inputs of private swaps (each swap's asset and amount in). */
     swapVolumeUsd: number;
-    /** Would-be commissions in USD, every kind, priced only. */
+    /** The setting's fee in USD (what it puts on these, not proof it was paid), every kind, priced only. */
     commissionUsd: number;
     /** Deposits, cash outs and swaps with no USD price (counted, not valued): every one on testnet. */
     unpriced: number;
@@ -1217,6 +1255,7 @@ export function partnerView(p: Partner) {
     website: p.website,
     payout: p.payout,
     fees: p.fees,
+    feeTo: p.feeTo ?? {},
     relayApproved: p.relayApproved === true,
     approvedName: p.approvedName ?? null,
     nameAwaitingApproval: (p.approvedName ?? null) !== p.name,

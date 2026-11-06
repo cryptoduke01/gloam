@@ -6,6 +6,7 @@
 import { getAddress, toHex, type Address } from "viem";
 import { createSiweMessage } from "viem/siwe";
 import type { ActivityRecord, PartnerStats } from "@/lib/partners";
+import type { FeesCharged } from "@/lib/partnerFees";
 
 type Eip1193 = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
 
@@ -140,8 +141,10 @@ export type PartnerAccount = {
   owner: Address;
   name: string;
   website: string | null;
-  payout: Partial<Record<"robinhood" | "tempo", Address>>;
+  payout: Partial<Record<string, Address>>;
   fees: FeeSetting;
+  /** The partner's Gloam addresses (gloamr1.…) where fees arrive, by chain or network key. */
+  feeTo?: Partial<Record<string, string>>;
   /** The name Gloam approved to show in links, or null. */
   approvedName?: string | null;
   /** The account's name differs from the approved one (or none is approved yet). */
@@ -169,6 +172,8 @@ export type Stats = PartnerStats & {
   recent: Activity[];
   days: number;
   charged: false;
+  /** Fees charged: each fee's own private payment once it landed, with the amount the client reported. */
+  feesCharged: FeesCharged;
   notMatched?: { privatePayments: string; swaps: string };
 };
 

@@ -15,8 +15,8 @@ export const metadata: Metadata = {
   title: "Partners",
   // Fixed at build time: names mainnet once a mainnet pool is filled in (lib/mainnet.ts).
   description: MAINNET_CONFIGURED
-    ? "Add private payments to your app with one API key. Set your own fee and see every payment your app brings in. Partner fees are not charged yet, on mainnet or testnet."
-    : "Add private payments to your app with one API key. Set your own fee and see every payment your app brings in. On testnet nothing is charged.",
+    ? "Add private payments to your app with one API key. Set your own fee, paid privately by your users on top, and see every payment your app brings in."
+    : "Add private payments to your app with one API key. Set your own fee, paid privately by your users on top, and see every payment your app brings in. On testnet fees are in test tokens.",
   alternates: { canonical: "/partners" },
 };
 
@@ -97,13 +97,13 @@ function Statement() {
         ))}
       </ul>
       <div className="mt-2 flex items-center justify-between gap-3 rounded-[10px] bg-surface px-3.5 py-2.5 text-[13px]">
-        <span className="text-mute">Would have earned</span>
+        <span className="text-mute">Fees charged</span>
         <span className="tnum text-foreground">$2.10</span>
       </div>
       <p className="mt-3 text-[12px] leading-relaxed text-mute">
         <MainnetCopy
-          live="Nothing charged yet. Fees show what your setting would earn."
-          before="Testnet, nothing charged. Fees show what your setting would earn."
+          live="Paid by your users on top, privately, to your Gloam address."
+          before="Testnet: fees in test tokens, paid privately to your Gloam address."
         />
       </p>
     </div>
@@ -279,9 +279,9 @@ export default function PartnersPage() {
                   <p className="text-[14px] text-mute">Your fee</p>
                   <h2 className="t-display-l mt-4">What you can charge, and why</h2>
                   <p className="mt-5 max-w-[54ch] text-[16px] leading-relaxed text-mute">
-                    Fees follow what the chain can see. You are paid in the same
-                    token your user moved, to the payout address you choose for
-                    each network.
+                    Fees follow what the chain can see. Your user pays yours on top,
+                    in the token they moved, as one private payment to your Gloam
+                    address on that network.
                   </p>
                 </div>
               </div>
@@ -313,55 +313,24 @@ export default function PartnersPage() {
               </div>
 
               <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <MainnetCopy
-                  live={
-                    <>
-                      <div className="rounded-[18px] bg-panel p-6 sm:p-7">
-                        <p className="text-[16px] text-foreground">Partner fees are not charged yet</p>
-                        <p className="mt-2 text-[14px] leading-relaxed text-mute">
-                          Gloam is live on mainnet, and the testnet stays open for
-                          practice. On both, your portal counts every payment your
-                          key brings in and shows the fee your setting would have
-                          earned, labeled as such. No partner fee is taken from
-                          anyone. Use a live key (gloam_live_) on mainnet and a test
-                          key (gloam_test_) on testnet.
-                        </p>
-                      </div>
-                      <div className="rounded-[18px] bg-panel p-6 sm:p-7">
-                        <p className="text-[16px] text-foreground">Real partner fees come later</p>
-                        <p className="mt-2 text-[14px] leading-relaxed text-mute">
-                          Taking a fee for real needs a fee output inside the
-                          zero-knowledge circuits and the vault contract, so the fee
-                          is paid by the proof itself and nobody can skip it. The
-                          mainnet pools do not have one yet. The only fee on mainnet
-                          today is Gloam&apos;s own 0.5% on cash outs.
-                        </p>
-                      </div>
-                    </>
-                  }
-                  before={
-                    <>
-                      <div className="rounded-[18px] bg-panel p-6 sm:p-7">
-                        <p className="text-[16px] text-foreground">Testnet: nothing is charged</p>
-                        <p className="mt-2 text-[14px] leading-relaxed text-mute">
-                          Gloam runs on Robinhood Chain testnet and Tempo testnet today.
-                          Your portal counts every payment your key brings in and shows
-                          the fee your setting would have earned, labeled as such. No
-                          money is taken from anyone.
-                        </p>
-                      </div>
-                      <div className="rounded-[18px] bg-panel p-6 sm:p-7">
-                        <p className="text-[16px] text-foreground">Real fees come with mainnet</p>
-                        <p className="mt-2 text-[14px] leading-relaxed text-mute">
-                          Taking a fee for real needs a fee output inside the
-                          zero-knowledge circuits and the vault contract, so the fee is
-                          paid by the proof itself and nobody can skip it. That ships
-                          with the mainnet ceremony and audit.
-                        </p>
-                      </div>
-                    </>
-                  }
-                />
+                <div className="rounded-[18px] bg-panel p-6 sm:p-7">
+                  <p className="text-[16px] text-foreground">Paid privately, shown first</p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-mute">
+                    Before a payment or cash out from your link, the Gloam app sends
+                    your fee as one private payment to your Gloam address, and shows
+                    it in the review step first: &quot;Partner fee to your app: amount&quot;.
+                    It arrives in your Gloam app like any payment to you.
+                  </p>
+                </div>
+                <div className="rounded-[18px] bg-panel p-6 sm:p-7">
+                  <p className="text-[16px] text-foreground">Enforced by the app, not the vault</p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-mute">
+                    It is an interface fee, like a front end&apos;s. The Gloam app adds
+                    it on your links; with your API key, your app adds it. The vault
+                    contract does not enforce it. Amounts are hidden on chain, so the
+                    portal counts each fee once it lands, as reported.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -433,7 +402,7 @@ export default function PartnersPage() {
                 },
                 {
                   title: "Your account",
-                  body: "Your wallet address, app name, website, fee setting and payout addresses. Sign-in is a free signature; it moves no money.",
+                  body: "Your wallet address, app name, website, fee setting and the Gloam addresses your fees arrive at. Sign-in is a free signature; it moves no money.",
                 },
               ].map((t) => (
                 <div key={t.title} className="border-t border-foreground pt-5">

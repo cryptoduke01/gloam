@@ -1,10 +1,14 @@
 /**
  * The partner relay (POST /api/v1/relay): one proven action sent through the Gloam
  * relay's own functions (lib/relay/server), then counted to the partner whose key sent
- * it (lib/partners recordActivity). Nothing is ever charged.
+ * it (lib/partners recordActivity).
  *
  * What is counted, and from what:
- *   transfer  a private payment, with nothing about it but that it happened
+ *   transfer  a private payment, with nothing about it but that it happened; or,
+ *             with { partnerFee: { kind, asset, amount } }, the partner's own
+ *             interface fee on a payment of its user (lib/partnerFees): checked
+ *             against the partner's setting before it is sent, never counted as a
+ *             payment, and counted as a fee charged once it lands (the route does that)
  *   unshield  a cash out, with its asset and amount (public inputs of its proof)
  *   swap      a private swap, with its input's asset and amount (public inputs of
  *             its unshield proof), but only when the vault read the note as unspent
@@ -24,6 +28,7 @@
 import type { Address, Hex } from "viem";
 import { logSafe } from "./logSafe";
 import { claimTransaction, recordActivity, type ActivityKind, type ActivityRecord, type Partner } from "./partners";
+import { FeeReportError, feeProblem, readPartnerFee } from "./partnerFees";
 import type { GloamNetwork } from "./networks";
 import { swapRouterFor } from "./vaultSwap";
 import {
@@ -122,17 +127,33 @@ export async function relayForPartner(
   /** `sender`: who holds a share of the network's cap for the send (the partner account, and the calling IP for an account no admin approved), as the relay takes it. */
   args: { net: GloamNetwork; body: Record<string, unknown>; partner: Partner; keyId: string; sender?: Sender },
   deps: PartnerRelayDeps = partnerRelayDeps
-): Promise<{ hash: Hex; action: PartnerRelayAction; attribution: Attribution }> {
+): Promise<{ hash: Hex; action: PartnerRelayAction; attribution: Attribution; partnerFee: NonNullable<ReturnType<typeof readPartnerFee>> | null }> {
   const { net, body, partner, keyId, sender } = args;
   let hash: Hex;
   let kind: ActivityKind | null = null;
   let edge: { asset: Address; amount: bigint } | null = null;
   /** Sent and not counted, but claimed for this partner (a refund, an exit). */
   let claimed: Hex | null = null;
+  let partnerFee: NonNullable<ReturnType<typeof readPartnerFee>> | null = null;
+  if (body.partnerFee !== undefined) {
+    // the partner's own fee: a transfer of its own, checked before anything is sent
+    if (body.action !== "transfer") throw new RelayError("A partner fee is a transfer of its own.", 400, "bad_partner_fee");
+    try {
+      partnerFee = readPartnerFee(body.partnerFee);
+      if (partnerFee && (body.partnerFee as { code?: unknown }).code !== undefined) throw new FeeReportError("With an API key, partnerFee takes no code: it is your key's.", "bad_partner_fee");
+      const problem = partnerFee ? feeProblem(partner, net, partnerFee) : null;
+      if (problem) throw new FeeReportError(problem, "fee_not_set");
+    } catch (e) {
+      if (e instanceof FeeReportError) throw new RelayError(`${e.message} Nothing was sent.`, 400, e.code);
+      throw e;
+    }
+  }
   switch (body.action) {
     case "transfer":
       hash = await deps.relayTransfer(net, body, sender);
-      kind = "private_payment";
+      // a fee is the partner's own income, not a payment it brought in: claimed, never counted
+      if (partnerFee) claimed = hash;
+      else kind = "private_payment";
       break;
     case "unshield":
       hash = await deps.relayUnshield(net, body, sender);
@@ -194,5 +215,5 @@ export async function relayForPartner(
       attribution = { recorded: false, kind, reason: "storage_error" };
     }
   }
-  return { hash, action: body.action as PartnerRelayAction, attribution };
+  return { hash, action: body.action as PartnerRelayAction, attribution, partnerFee };
 }

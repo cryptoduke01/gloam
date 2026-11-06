@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
-import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+import { mainnetPool } from "@/lib/mainnet";
 import { SWAP_REF_MAX, SWAP_REF_WORDS, swapNetworks } from "@/lib/swapLink";
 
 /** Where a swap link fills in a swap now (lib/swapLink): the docs follow each network's switch. */
@@ -10,7 +10,7 @@ const SWAP_NETWORKS = swapNetworks();
 export const metadata: Metadata = {
   title: "Partner program and API",
   description:
-    "Add private payments to your app with a Gloam API key or a link with your partner code, set your own fee, and see attributed volume by source. Full v1 API reference with curl examples. Partner fees are not charged yet, on mainnet or testnet.",
+    "Add private payments to your app with a Gloam API key or a link with your partner code, set your own fee, which your users pay privately on top, and see attributed volume by source. Full v1 API reference with curl examples.",
 };
 
 const ERRORS: [string, number | string, string][] = [
@@ -56,12 +56,12 @@ export default function DocsPartnersPage() {
   return (
     <DocsLayout
       title="Partner program and API"
-      lede="Add private payments to your app with one API key, or send people to Gloam with a link that carries your partner code. You set your own fee, and what your key or your links bring in is counted to you, checked on chain. Partner fees are not charged yet, on mainnet or testnet."
+      lede="Add private payments to your app with one API key, or send people to Gloam with a link that carries your partner code. You set your own fee, which your users pay on top as one private payment to you, and what your key or your links bring in is counted to you, checked on chain."
       glance={[
         { label: "Base URL", value: "https://gloam.trade/api/v1" },
         { label: "Auth", value: "Bearer API key" },
         { label: "Format", value: "JSON, version 1" },
-        { label: "Partner fees", value: "Not charged yet" },
+        { label: "Partner fee", value: "Yours, paid by users" },
       ]}
       quickLinks={[
         { href: "/partners", label: "Partner program" },
@@ -90,11 +90,11 @@ export default function DocsPartnersPage() {
           revoke it any time.
         </li>
         <li>
-          <strong>Set your fee</strong> and a payout address per network.
+          <strong>Set your fee</strong> and your Gloam address (from Receive in the Gloam app) on each chain where you want fees.
         </li>
         <li>
           <strong>Relay payments with the key.</strong> The portal shows your
-          volume, your would-be fees and every payment, updated every 20 seconds.
+          volume, the fees you charged and every payment, updated every 20 seconds.
         </li>
         <li>
           <strong>Or send people with a link.</strong> Make a link code in the
@@ -150,32 +150,53 @@ export default function DocsPartnersPage() {
         </table>
       </div>
       <p>
-        Fees are in the token the user moved, paid to your payout address on that
-        network. A payment message (the encrypted heads-up after a private
-        payment) carries no fee. A change to your setting applies to new payments;
-        earlier ones keep the fee they were counted with.
+        Fees are in the token the user moved, paid privately to your Gloam
+        address on that network. A flat fee is in dollars, so it applies to
+        dollar stablecoins only. A payment message (the encrypted heads-up after a
+        private payment) carries no fee. A change to your setting applies to new
+        payments.
       </p>
 
-      <h2>Partner fees: not charged yet</h2>
+      <h2 id="interface-fee">How your fee is charged</h2>
       <p>
-        Gloam runs on {liveMainnetNames()} mainnet, and on the testnets.
-        On every network, the portal records what your key brought in and the fee
-        your setting would have earned, and every figure is labeled that way. No
-        partner fee is taken from anyone, and every API response says{" "}
-        <code>&quot;charged&quot;: false</code>.
+        Your fee is an interface fee, like a front end&apos;s own fee. You set it,
+        your user pays it on top of their payment, and it reaches you privately.
+        Gloam&apos;s own fees are separate: on mainnet a cash out costs 0.5%, kept by
+        the vault; direct deposits and private payments are free.
       </p>
-      <p>
-        Gloam&apos;s own fee is separate. On mainnet a cash out costs 0.5%, kept
-        by the vault; direct deposits and private payments are free. Your partner fee is
-        not added on top of that yet.
-      </p>
-      <p>
-        Taking a partner fee for real needs a fee output inside the
-        zero-knowledge circuits and the vault contract, so the fee is part of the
-        proof and nobody can skip or change it. The mainnet pools do not have
-        that yet (see the <Link href="/docs/production">production gate</Link>).
-        Until then, a dashboard figure is an attribution count, not money owed.
-      </p>
+      <ul>
+        <li>
+          <strong>One extra private payment.</strong> Before the payment or cash
+          out, the user&apos;s app sends your fee as its own private payment (a vault
+          transfer, which is free) to your Gloam address on that network, in the
+          same token. The rest comes back to the user as a fresh private balance,
+          and the payment or cash out spends that. Your Gloam app finds the fee
+          under Receive, like any payment to you.
+        </li>
+        <li>
+          <strong>Shown before anyone confirms.</strong> On a flow from your link,
+          the Gloam app shows &quot;Partner fee to {"<your name>"}: amount&quot; in the
+          review step, and says so if the balance can&apos;t cover the payment and the
+          fee. Only a partner whose name Gloam approved for links can add one.
+        </li>
+        <li>
+          <strong>Enforced by the app, not the vault.</strong> The vault contract
+          does not know about partner fees and does not enforce them. The Gloam app
+          adds yours on flows from your links; with your API key, your own app adds
+          it (see <Link href="#fee-api">below</Link>). Anyone who builds their own
+          proofs can leave it out, the same as with any front end&apos;s fee.
+        </li>
+        <li>
+          <strong>Counted once it lands, as reported.</strong> A private
+          payment&apos;s amount is hidden on chain, Gloam included. So a fee counts as
+          charged once its own transfer landed in the vault, with the amount the
+          app reported beside it, and the portal labels it that way.
+        </li>
+        <li>
+          <strong>Private swaps carry no fee</strong> for now.
+        </li>
+      </ul>
+
       <p>
         USD figures use $1 for dollar stablecoins and the live ETH price at the time of the
         payment. EURC (a euro stablecoin) and stock tokens are counted but not valued.
@@ -260,7 +281,7 @@ export default function DocsPartnersPage() {
       <pre>
         <code>{`# a live key on mainnet (4663, 4217), a test key on testnet (46630, 42431)
 
-# a private payment (transfer): counted as a private payment, flat fee
+# a private payment (transfer): counted as a private payment
 curl https://gloam.trade/api/v1/relay \\
   -H "Authorization: Bearer $GLOAM_API_KEY" \\
   -H "Content-Type: application/json" \\
@@ -294,6 +315,7 @@ curl https://gloam.trade/api/v1/relay \\
         "feeUsd": 0.05, "feeToken": null, "feeBasis": "$0.05 per private payment"
       }
     },
+    "partnerFee": null,
     "charged": false
   },
   "requestId": "req_..."
@@ -354,11 +376,11 @@ curl https://gloam.trade/api/v1/relay \
       </pre>
       <p>
         A swap is counted to you as <code>private_swap</code>, with its input
-        token and amount, which the chain shows, and no partner fee. Whether it is
+        token and amount, which the chain shows, and carries no partner fee. Whether it is
         a new swap is read from the vault just before it is sent: a note that is
         already spent can only take the refund path, and a refund or an exit is
         sent but not counted. Its transaction is still claimed for you, so no one
-        can count it later as a deposit or a swap. Nothing is charged.
+        can count it later as a deposit or a swap.
       </p>
       <p>
         <code>GET /api/v1/swaps</code> lists each network&apos;s swaps: whether they
@@ -438,11 +460,44 @@ curl https://gloam.trade/api/v1/relay \
 # 201: { "v": 1, "ok": true, "data": { "activity": { "kind": "deposit", "symbol": "USDG", "amount": "250000000", ... }, "charged": false } }`}</code>
       </pre>
 
+      <h3 id="fee-api">Charging your fee with your API key</h3>
+      <p>
+        With your key, your app adds the fee. Before the user&apos;s payment or cash
+        out (for a deposit, right after it, from the note it made), build one
+        private send of the fee from the user&apos;s note to your
+        own Gloam address (<code>buildPrivateSendIntent</code> with your{" "}
+        <code>gloamr1.</code> address as the payee), show it to the user, and relay it
+        with <code>partnerFee</code> beside the proof. The relay checks it against
+        your setting before it sends anything: a flat fee must be exactly yours, and
+        you need a Gloam address for fees on that network. The fee transfer is never
+        counted as one of your payments; once it lands it counts as a fee charged.
+        Then send the main action from the change note.
+      </p>
+      <pre>
+        <code>{`curl https://gloam.trade/api/v1/relay \\
+  -H "Authorization: Bearer $GLOAM_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "chainId": 4663, "action": "transfer",
+    "proof": "0x...", "root": "0x...", "nullifier": "0x...", "commitments": ["0x...", "0x..."],
+    "partnerFee": { "kind": "cash_out", "asset": "0x5fc5...", "amount": "2500000" }
+  }'
+
+# 200: { ..., "partnerFee": { "kind": "cash_out", "amount": "2500000", "status": "counted_once_landed", "reported": true }, "charged": false }`}</code>
+      </pre>
+      <p>
+        <code>&quot;charged&quot;: false</code> stays on every response: Gloam itself
+        adds no partner fee. Yours is the transfer your app sent.
+      </p>
+
       <h2>Your volume and fees</h2>
       <p>
         <code>GET /api/v1/activity?limit=50</code> returns what the portal shows:
-        totals, counts by kind and network, public volume and would-be fees by
-        token, the last 14 days, and up to 200 recent payments.
+        totals, counts by kind and network, public volume by token, the last 14
+        days, up to 200 recent payments, and <code>feesCharged</code>: the fees you
+        charged by token, as reported. <code>commissionUsd</code> and each
+        item&apos;s <code>feeUsd</code> are the fee your setting puts on that payment,
+        not proof it was paid.
       </p>
       <pre>
         <code>{`{
@@ -454,6 +509,8 @@ curl https://gloam.trade/api/v1/relay \
                "volumeUsd": 250, "commissionUsd": 1.23 } ],
   "recent": [ ... ],
   "fees": { "privatePaymentCents": 5, "cashoutBps": 25, "depositBps": 0 },
+  "feesCharged": { "reported": true, "count": 14, "usd": 3.45,
+                   "byToken": [ { "network": "robinhood-mainnet", "symbol": "USDG", "kind": "cash_out", "amount": "2.75", "count": 3 } ] },
   "charged": false
 }`}</code>
       </pre>
@@ -719,7 +776,7 @@ https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716
           invoice or a moment, even if you make one code per invoice.
         </li>
         <li>
-          <strong>Nothing is charged,</strong> the same as for your API key.
+          <strong>Your fee is added by the Gloam app</strong> on payments and cash outs from your links, and shown to the payer before they confirm (<Link href="#interface-fee">how</Link>).
         </li>
       </ul>
 

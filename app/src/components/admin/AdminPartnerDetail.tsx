@@ -33,7 +33,55 @@ type Detail = {
   chains: { chainId: number; key: string; name: string }[];
   migration: string | null;
   notMatched: { privatePayments: string; swaps: string };
+  /** Interface fees charged (lib/partnerFees): amounts as reported with each fee's own private payment. */
+  feesCharged?: { count: number; usd: number; byToken: { network: string; chainId: number; asset: string; symbol: string; kind: string; amount: string; count: number; usd: number | null }[] };
+  feeLog?: { id: string; network: string; kind: string; symbol: string; amount: string; decimals: number; txHash: string; source: string; ts: number }[];
 };
+
+const FEE_KIND: Record<string, string> = { private_payment: "Private payment", cash_out: "Cash out", deposit: "Deposit" };
+
+/** The partner's interface fees charged, by token, and the latest ones (admin sees the transactions). */
+function FeesCharged({ d }: { d: Detail }) {
+  const f = d.feesCharged;
+  if (!f) return null;
+  return (
+    <Box title="Fees charged">
+      <p className="mb-3 text-[12.5px] leading-relaxed text-mute">
+        Paid by users on top, as one private payment to the partner&apos;s Gloam address. Counted once that payment landed, with the
+        amount reported beside it: a private payment&apos;s amount is hidden on chain.
+      </p>
+      {f.byToken.length === 0 ? (
+        <p className="text-[13px] text-mute">None yet.</p>
+      ) : (
+        <ul className="divide-y divide-line text-[13.5px]">
+          {f.byToken.map((r) => (
+            <li key={`${r.chainId}-${r.asset}-${r.kind}`} className="tnum flex items-center justify-between gap-3 py-2">
+              <span className="text-soft">
+                {r.symbol} · {FEE_KIND[r.kind] ?? r.kind} · chain {r.chainId}
+              </span>
+              <span className="text-foreground">
+                {Number(r.amount).toLocaleString("en-US", { maximumFractionDigits: 6 })} ({r.count})
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {d.feeLog && d.feeLog.length > 0 && (
+        <details className="mt-3 text-[12.5px] text-mute">
+          <summary className="cursor-pointer select-none underline decoration-line-strong underline-offset-4 hover:text-foreground">Latest fees</summary>
+          <ul className="mt-2 space-y-1">
+            {d.feeLog.map((x) => (
+              <li key={x.id} className="tnum">
+                {new Date(x.ts).toLocaleString()} · {FEE_KIND[x.kind] ?? x.kind} · {Number(x.amount) / 10 ** x.decimals} {x.symbol} · {x.source === "api" ? "API key" : "link"} ·{" "}
+                {x.txHash.slice(0, 10)}…
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </Box>
+  );
+}
 
 type Envelope<T> = { ok?: boolean; data?: T; error?: { message?: string } };
 
@@ -120,6 +168,7 @@ export function AdminPartnerDetail({ id, tier, onChanged }: { id: string; tier: 
           transactions: `/api/partners/admin/export?id=${encodeURIComponent(d.partner.id)}&type=transactions&tier=${tier}`,
         }}
       />
+      <FeesCharged d={d} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Codes id={d.partner.id} codes={d.codes} onChanged={changed} />
         <Addresses id={d.partner.id} addresses={d.addresses} count={d.addressCount} chains={d.chains} onChanged={changed} />

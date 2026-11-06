@@ -11,9 +11,10 @@ export async function GET(req: Request) {
     const p = partnerView(partner);
     return {
       data: {
-        partner: { id: p.id, name: p.name, website: p.website, fees: p.fees, payout: p.payout },
+        partner: { id: p.id, name: p.name, website: p.website, fees: p.fees, feeTo: p.feeTo, payout: p.payout },
         key: { id: key.id, env: key.env },
         rateLimit: { limit: KEY_RATE_LIMIT, windowSec: KEY_RATE_WINDOW_SEC, remaining: rate.remaining },
+        // false: Gloam adds no partner fee itself. Your fee is the private payment your app sends (relay { partnerFee })
         charged: false,
       },
     };

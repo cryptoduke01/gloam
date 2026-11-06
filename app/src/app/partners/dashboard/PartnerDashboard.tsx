@@ -411,8 +411,8 @@ function Dashboard({
             <h1 className="t-display-m truncate">{partner.name}</h1>
             <p className="mt-2 text-[14px] text-mute">
               {mainnetLive
-                ? "Nothing is charged yet, on mainnet or testnet. Fees show what your setting would have earned."
-                : "Testnet. Nothing is charged. Fees show what your setting would have earned."}
+                ? "Your users pay your fee privately, on top, to your Gloam address. Fees charged show once they land."
+                : "Testnet. Fees are in test tokens, counted, never valued."}
             </p>
           </div>
           <div
