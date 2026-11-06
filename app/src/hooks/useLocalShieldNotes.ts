@@ -5,7 +5,7 @@ import type { Address } from "viem";
 import { publicClientFor } from "@/lib/rhClient";
 import { useDemoLive } from "@/lib/demo";
 import { readDemo } from "@/lib/demoFlag";
-import { unlockNoteVault, syncFromDisk, NOTES_KEY } from "@/lib/noteVault";
+import { unlockNoteVault, syncFromDisk, onNotesSaved, NOTES_KEY } from "@/lib/noteVault";
 import { reconcileClaims, reconcileUnfunded, reopenGhostEthNotes } from "@/lib/claimSweep";
 import { reconcileCashOuts } from "@/lib/cashOutLater";
 import { markSpentNotes } from "@/lib/spentCheck";
@@ -170,6 +170,11 @@ export function useLocalShieldNotes(address?: string | null) {
     // Start on the next microtask so the effect body itself sets no state.
     void Promise.resolve().then(() => syncChain());
   }, [syncChain]);
+
+  // Notes saved in this tab by something other than this hook (a restore from the
+  // backup, a pull of what another device saved): show them at once. Another tab's
+  // save arrives as a storage event below.
+  useEffect(() => onNotesSaved(refreshLocal), [refreshLocal]);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {

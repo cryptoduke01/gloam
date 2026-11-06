@@ -27,7 +27,7 @@
  */
 import { getAddress, hexToBytes, keccak256, type Address, type Hex } from "viem";
 import { readDemo } from "./demoFlag";
-import { getAllNotes, onNotesSaved, openJson, sealJson, setAllNotes, storedNotesOpen, syncFromDisk, unlockNoteVault } from "./noteVault";
+import { dataKeyLocked, getAllNotes, onNotesSaved, openJson, sealJson, setAllNotes, storedNotesOpen, syncFromDisk, unlockNoteVault } from "./noteVault";
 import { PROMPT_DID_NOT_OPEN } from "./passkey";
 import type { PayrollBatch } from "./payroll";
 import { PAYROLL_SAVED_EVENT, pendingPayrollRuns, restorePayrollRuns } from "./payrollStore";
@@ -767,12 +767,17 @@ function retryDelay(e: unknown, tries: number): number {
   return Math.min(BACKOFF_START_MS * 2 ** tries, BACKOFF_MAX_MS);
 }
 
-/** Saves this browser's private balance to the backup. One retry after a conflict. */
-async function upload(c: Config): Promise<void> {
+/**
+ * Saves this browser's private balance to the backup. One retry after a conflict.
+ * With `skipSame`, a save holding exactly what the backup already holds (the last
+ * save, or a pull that found it all there) isn't sent.
+ */
+async function upload(c: Config, { skipSame = false }: { skipSame?: boolean } = {}): Promise<void> {
   let current = c;
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!stillOn(current) || savesPaused(current)) return;
     const payload = await collect();
+    if (skipSame && attempt === 0 && localStorage.getItem(MARK_KEY) === (await contentMark(payload))) return;
     const blob = await seal(current, payload);
     if (!stillOn(current)) return;
     const res = await putBackup(current, blob, current.n + 1);
@@ -967,7 +972,7 @@ async function runSync(trigger: "change" | "retry" | "button"): Promise<Recovery
   return alone(async () => {
     try {
       if (save && config) {
-        await upload(config);
+        await upload(config, { skipSame: trigger === "change" && !saveOwed(config) });
         failures = 0;
         setState({ error: null });
       }
@@ -995,6 +1000,62 @@ function resume() {
   armRetry();
   // a wait in the settings has its own timer, and a save now would only go twice
   if (unfinished(config) && !config.retryAt && !config.next) schedule();
+  void pullBackup();
+}
+
+/** How often coming back to the tab reads the backup for what other devices saved. */
+const PULL_EVERY_MS = 30_000;
+let lastPull = 0;
+
+/**
+ * Brings in what another device saved to this backup since this browser last
+ * saw it, so the balance is the same on every device without a save here first.
+ * Uses the keys already in the settings: no prompt. Read only: the backup is
+ * opened here and nothing about it changes on the server. A newer copy is taken
+ * in the way a save conflict takes one in (absorb), and a change it brings is
+ * saved back up as usual. Quiet on any failure: the next focus tries again.
+ */
+export async function pullBackup({ force = false }: { force?: boolean } = {}): Promise<number> {
+  if (typeof window === "undefined" || readDemo()) return 0;
+  const c = config ?? (await loadConfig());
+  // A vault behind its passkey opens only when the person unlocks it, and a pull must not hold the saves up meanwhile.
+  if (!c || stopping || dataKeyLocked()) return 0;
+  if (!force && Date.now() - lastPull < PULL_EVERY_MS) return 0;
+  lastPull = Date.now();
+  try {
+    // A look first, outside `alone`: most of the time nothing is newer, and nothing should show as busy.
+    const peek = await fetchRemote(c.id);
+    if (!peek || peek.n <= c.n || !stillOn(c)) return 0;
+    return await alone(async () => {
+      const now = config;
+      if (!now || !stillOn(now)) return 0;
+      const remote = await fetchRemote(now.id);
+      if (!remote || remote.n <= now.n) return 0;
+      const theirs = await open(now, remote.c);
+      const added = await absorb(theirs);
+      if (!stillOn(now)) return added;
+      await saveConfig({ ...config!, n: remote.n, savedAt: remote.t, gone: undefined });
+      // Everything here is already in the backup: say so, so the change this pull made saves nothing.
+      // Anything the backup lacks still goes up, as a change always does.
+      const mine = await collect().catch(() => null);
+      if (mine && holdsAll(theirs, mine)) localStorage.setItem(MARK_KEY, await contentMark(mine));
+      return added;
+    });
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Whether `backup` already holds everything `here` would save: every note (or
+ * this browser has seen it spent), every receive key, every open sent code and
+ * every payroll run.
+ */
+function holdsAll(backup: Payload, here: Payload): boolean {
+  if (!carriedOver(here, backup)) return false;
+  const codes = new Set((backup.links ?? []).map((l) => l.code));
+  const runs = new Set((backup.payroll ?? []).map((b) => b.id));
+  return (here.links ?? []).every((l) => codes.has(l.code)) && (here.payroll ?? []).every((b) => runs.has(b.id));
 }
 
 /**
