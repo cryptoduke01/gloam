@@ -42,7 +42,7 @@ const READ_MORE: { label: string; href: string }[] = [
   { label: "Check a proof", href: "/verify" },
   { label: "The pool on Robinhood Chain", href: `https://robin.etherscan.io/address/${POOL}` },
   { label: "The pool on Tempo", href: `https://explore.tempo.xyz/address/${POOL}` },
-  { label: "Trusted setup transcript", href: "https://github.com/cryptoduke01/gloam/releases/tag/ceremony-final" },
+  { label: "Trusted setup transcript", href: "https://github.com/gloamtrade/gloam/releases/tag/ceremony-final" },
 ];
 
 export default function LiveOnMainnetPost() {

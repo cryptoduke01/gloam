@@ -6,7 +6,7 @@
   "version": "1.4.0",
   "websiteUrl": "https://gloam.trade/docs/agents",
   "repository": {
-    "url": "https://github.com/cryptoduke01/gloam",
+    "url": "https://github.com/gloamtrade/gloam",
     "source": "github"
   },
   "remotes": [

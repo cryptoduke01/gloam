@@ -20,7 +20,7 @@ const REPORT_PDF = "/audits/gloam-kann-security-review-2026-11-01.pdf";
 const REPORT_LIVE = true;
 
 const COMMIT = "aac9e185bbeaa6b74311236c1cc57077d928f407";
-const REPO = "https://github.com/cryptoduke01/gloam";
+const REPO = "https://github.com/gloamtrade/gloam";
 
 /**
  * The findings, as the report counts them. This is the only place the counts

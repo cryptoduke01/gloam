@@ -13,20 +13,20 @@ Code, Codex and Cursor.
 ## Install
 
 This directory is the root of a marketplace. Publish it as its own repository (see
-[Publishing](#publishing)); with `cryptoduke01/gloam-plugins` as that repository:
+[Publishing](#publishing)); with `gloamtrade/gloam-plugins` as that repository:
 
 ```sh
 # Claude Code
-claude plugin marketplace add cryptoduke01/gloam-plugins
+claude plugin marketplace add gloamtrade/gloam-plugins
 claude plugin install gloam@gloam
 
 # Codex
-codex plugin marketplace add cryptoduke01/gloam-plugins
+codex plugin marketplace add gloamtrade/gloam-plugins
 codex plugin add gloam@gloam
 
 # GitHub Agent Skills (skills only, no MCP server)
-gh skill install cryptoduke01/gloam-plugins gloam
-gh skill install cryptoduke01/gloam-plugins gloam-setup
+gh skill install gloamtrade/gloam-plugins gloam
+gh skill install gloamtrade/gloam-plugins gloam-setup
 ```
 
 Cursor reads `.cursor-plugin/marketplace.json` once the repository is submitted at
@@ -94,7 +94,7 @@ npx -y @gloamtrade/mcp authorize-access-key --check --network tempo-mainnet --ow
 ```
 
 In Claude Code, `/gloam:gloam-setup` walks through this. The full reference, including what the cap
-does and does not cover, is in the [server README](https://github.com/cryptoduke01/gloam/tree/main/mcp#onchain-limits-with-a-tempo-access-key).
+does and does not cover, is in the [server README](https://github.com/gloamtrade/gloam/tree/main/mcp#onchain-limits-with-a-tempo-access-key).
 
 ## Layout
 
@@ -120,7 +120,7 @@ registry/gloam/server.json          Official MCP Registry entry (npm package, st
    Use pnpm, not npm, so workspace versions are rewritten. Check `npx -y @gloamtrade/mcp --version`.
 2. Make the marketplace repository from this directory, keeping history:
    `git subtree split --prefix integrations/plugins -b gloam-plugins`, then push that branch to a new
-   repository `cryptoduke01/gloam-plugins` as `main`. Repeat the split and push to update it.
+   repository `gloamtrade/gloam-plugins` as `main`. Repeat the split and push to update it.
 3. Validate: `claude plugin validate .` in the new repository.
 4. Optional listings:
    - Claude directory: submit the plugin folder (`plugins/gloam`) as a plugin bundle, and the hosted

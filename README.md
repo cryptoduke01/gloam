@@ -10,7 +10,7 @@
 
 </div>
 
-![Gloam: private money on public chains](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-home.jpg)
+![Gloam: private money on public chains](https://raw.githubusercontent.com/gloamtrade/gloam/main/app/public/media/readme-home.jpg)
 
 ---
 
@@ -39,7 +39,7 @@ The vault app is the reference implementation, not the whole product.
 | **Vault** | The live app on all four mainnets that proves the whole path works. | [`app/`](./app) |
 | **Partner API** | Apps add private payments with an API key, set their own fee (flat per private payment, a share of cash outs and deposits), and see attributed volume and would-be fees live in the partner portal. Partner fees are not collected yet, on mainnet either: every response says `"charged": false` and the portal shows what the setting would earn. Only Gloam's own 0.5% cash-out fee is taken on mainnet. Live keys (`gloam_live_`) are for the mainnets, test keys (`gloam_test_`) for the testnets. | [`/partners`](https://gloam.trade/partners) · [`/docs/partners`](https://gloam.trade/docs/partners) · `GloamApiClient` |
 
-![The Gloam app: a private balance only you can see](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-app.jpg)
+![The Gloam app: a private balance only you can see](https://raw.githubusercontent.com/gloamtrade/gloam/main/app/public/media/readme-app.jpg)
 
 All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle tree, circom witness builders, real Groth16 verification, and one canonical intent shape.
 

@@ -17,7 +17,7 @@ Critical, High or Medium issues (report: gloam.trade/security).
 ## What it runs, reads and contacts
 
 - **Runs:** the `@gloamtrade/mcp` package from npm, pinned to 0.8.0. Source:
-  https://github.com/cryptoduke01/gloam/tree/main/mcp
+  https://github.com/gloamtrade/gloam/tree/main/mcp
 - **Reads:** settings from `~/.gloam/agent.env` on your machine (agent key, Tempo account,
   spending limits, note store key). Nothing secret is stored in the plugin's files.
 - **Contacts:** the public Tempo, Robinhood Chain, Base and Ethereum RPC nodes (mainnet and testnet, or your own

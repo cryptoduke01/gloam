@@ -51,7 +51,7 @@ Any other client (Claude Desktop, Cursor, Gemini CLI, Windsurf):
 { "mcpServers": { "gloam": { "command": "npx", "args": ["-y", "@gloamtrade/mcp"] } } }
 ```
 
-As a plugin, with the skills that teach the agent to use it safely: `claude plugin marketplace add cryptoduke01/gloam-plugins`, then `claude plugin install gloam@gloam` (Codex and Cursor too, see [integrations/plugins](../integrations/plugins)).
+As a plugin, with the skills that teach the agent to use it safely: `claude plugin marketplace add gloamtrade/gloam-plugins`, then `claude plugin install gloam@gloam` (Codex and Cursor too, see [integrations/plugins](../integrations/plugins)).
 
 Nothing to install: paste `https://www.gloam.trade/mcp` into Claude (Settings, Connectors, Add custom connector), ChatGPT, Cursor or any client that connects by URL. That hosted server only reads and plans (networks, vault stats, payment request links, proof checks, MPP how-to) and never takes a key; to sign and pay, run this one.
 

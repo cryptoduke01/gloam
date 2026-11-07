@@ -246,7 +246,7 @@ export default function AgentsPage() {
                 Spending limits
               </Link>
               <a
-                href="https://github.com/cryptoduke01/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts"
+                href="https://github.com/gloamtrade/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts"
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-soft transition-colors hover:text-foreground"

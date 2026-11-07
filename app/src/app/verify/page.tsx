@@ -73,7 +73,7 @@ function assetAddress(asset: string): string {
   }
 }
 
-const GITHUB = "https://github.com/cryptoduke01/gloam";
+const GITHUB = "https://github.com/gloamtrade/gloam";
 
 type Fact = { title: string; body: string; link?: { href: string; label: string } };
 

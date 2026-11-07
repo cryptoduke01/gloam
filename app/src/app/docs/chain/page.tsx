@@ -318,7 +318,7 @@ export default function DocsNetworksPage() {
           <strong>Proving keys</strong>, the final keys from the 13-contributor
           trusted setup (drand round 6561386, release{" "}
           <a
-            href="https://github.com/cryptoduke01/gloam/releases/tag/ceremony-final"
+            href="https://github.com/gloamtrade/gloam/releases/tag/ceremony-final"
             target="_blank"
             rel="noreferrer"
           >

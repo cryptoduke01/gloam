@@ -65,7 +65,7 @@ normative:
       ShieldPoolCore: the Gloam shielded pool contract (ShieldPoolPayments
       on mainnet, ShieldPoolPoseidon on testnet)
     target: >
-      https://github.com/cryptoduke01/gloam/blob/main/contracts/src/ShieldPoolCore.sol
+      https://github.com/gloamtrade/gloam/blob/main/contracts/src/ShieldPoolCore.sol
     author:
       - org: Gloam
     date: 2026

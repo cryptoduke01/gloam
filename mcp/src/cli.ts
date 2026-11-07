@@ -50,7 +50,7 @@ Settings
                             GLOAM_LIMIT_NETWORK=tempo-mainnet makes them name mainnet assets.
   GLOAM_RPC_URL_<chainId>   Use another RPC for a network, e.g. GLOAM_RPC_URL_4217 for Tempo mainnet.
 
-Docs: https://github.com/cryptoduke01/gloam/tree/main/mcp#readme
+Docs: https://github.com/gloamtrade/gloam/tree/main/mcp#readme
 `;
 
 export const ACCESS_KEY_HELP = `gloam-mcp authorize-access-key: an access key for the agent on Tempo (mainnet or testnet).

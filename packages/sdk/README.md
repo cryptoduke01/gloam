@@ -5,11 +5,11 @@
 Add shielded balances, private payments, and selective disclosure to any app or agent on Robinhood Chain, Tempo, Base or Ethereum. Live on all four mainnets, on the trusted setup's final keys. Real zero-knowledge proofs, no proving stack to build from scratch.
 
 [![npm version](https://img.shields.io/npm/v/@gloamtrade/sdk?color=0B0C0E&label=npm)](https://www.npmjs.com/package/@gloamtrade/sdk)
-[![license](https://img.shields.io/npm/l/@gloamtrade/sdk?color=0B0C0E)](https://github.com/cryptoduke01/gloam/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@gloamtrade/sdk?color=0B0C0E)](https://github.com/gloamtrade/gloam/blob/main/LICENSE)
 [![types](https://img.shields.io/npm/types/@gloamtrade/sdk?color=0B0C0E)](https://www.npmjs.com/package/@gloamtrade/sdk)
 [![Networks](https://img.shields.io/badge/mainnet-Robinhood%20Chain%204663%20%C2%B7%20Tempo%204217%20%C2%B7%20Base%208453%20%C2%B7%20Ethereum%201-2E7D53)](https://gloam.trade/docs/chain)
 
-![The Gloam SDK](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-hero.jpg)
+![The Gloam SDK](https://raw.githubusercontent.com/gloamtrade/gloam/main/app/public/media/readme-hero.jpg)
 
 ---
 
@@ -486,7 +486,7 @@ if (v.ok && markUsed(txHash)) serve();                                     // th
 
 With both `gloam-private` and `gloam-cashout` offered, `chooseGloamX402Scheme` keeps `gloam-private` unless the caller prefers `gloam-cashout`; with only `gloam-cashout` (alone or next to `exact`), it picks `gloam-cashout`. `gloamCashoutProblem` refuses a wrong network, asset or vault, a `payTo` a cash out cannot reach, a zero or fractional amount, a missing `quoteId`, a missing or exceeded `maxAmount`, and an expired quote.
 
-**This is not a Tempo Zone.** A Zone is operator-visible: the zone operator sees every transaction inside it. Gloam is private from the public and from any operator; only the payer and the payee learn the amount. Compliance visibility is opt-in per payment via `buildComplianceDisclosure`, an issuer-scoped disclosure that reuses the shield-circuit proof rather than handing an operator a blanket view. See [`TEMPO_EXPANSION.md`](https://github.com/cryptoduke01/gloam/blob/main/TEMPO_EXPANSION.md).
+**This is not a Tempo Zone.** A Zone is operator-visible: the zone operator sees every transaction inside it. Gloam is private from the public and from any operator; only the payer and the payee learn the amount. Compliance visibility is opt-in per payment via `buildComplianceDisclosure`, an issuer-scoped disclosure that reuses the shield-circuit proof rather than handing an operator a blanket view. See [`TEMPO_EXPANSION.md`](https://github.com/gloamtrade/gloam/blob/main/TEMPO_EXPANSION.md).
 
 ## Take payments and read their notes
 
@@ -532,7 +532,7 @@ for (const p of payments) {
 }
 ```
 
-**Every network has a board,** every mainnet included (since October 2026), so `scanIncomingPayments` finds payments to your key on its own. A payer can also hand you the sealed code (`gloam2t.…`) their app shows after paying; check it with `openIncomingPayment`, which says whether it is ready, has not landed yet, or was already spent. The full runnable version is [`examples/receive-and-credit.ts`](https://github.com/cryptoduke01/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts).
+**Every network has a board,** every mainnet included (since October 2026), so `scanIncomingPayments` finds payments to your key on its own. A payer can also hand you the sealed code (`gloam2t.…`) their app shows after paying; check it with `openIncomingPayment`, which says whether it is ready, has not landed yet, or was already spent. The full runnable version is [`examples/receive-and-credit.ts`](https://github.com/gloamtrade/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts).
 
 ## Commerce with commitments
 
@@ -771,7 +771,7 @@ RH_TESTNET_CHAIN_ID, TEMPO_TESTNET_CHAIN_ID, RH_MAINNET_CHAIN_ID, TEMPO_MAINNET_
 
 The full surface, with every parameter interface, is documented at [gloam.trade/docs/sdk/reference](https://gloam.trade/docs/sdk/reference).
 
-![The Gloam docs](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-docs.jpg)
+![The Gloam docs](https://raw.githubusercontent.com/gloamtrade/gloam/main/app/public/media/readme-docs.jpg)
 
 ## Framework integration
 
@@ -794,7 +794,7 @@ const nextConfig = {
 export default nextConfig;
 ```
 
-**Vite / tsx / node.** Works out of the box with a bundler or a TypeScript-aware runner. `snarkjs` and `circomlibjs` have no bundled types, so if your `tsconfig` is strict, add ambient shims (`declare module "snarkjs"` and `declare module "circomlibjs"`); the [web example](https://github.com/cryptoduke01/gloam/tree/main/examples/web-shield) includes a copy you can drop in.
+**Vite / tsx / node.** Works out of the box with a bundler or a TypeScript-aware runner. `snarkjs` and `circomlibjs` have no bundled types, so if your `tsconfig` is strict, add ambient shims (`declare module "snarkjs"` and `declare module "circomlibjs"`); the [web example](https://github.com/gloamtrade/gloam/tree/main/examples/web-shield) includes a copy you can drop in.
 
 ## Examples
 
@@ -802,14 +802,14 @@ Runnable references, one for each shape a builder starts from:
 
 | Example | Runtime | What it shows |
 | --- | --- | --- |
-| [agent-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/agent-shield) | Node | The smallest agent: mint a note, prove, deposit privately. |
-| [pay-bot](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-bot) | Node | A private payment end to end: shield, sync, send. |
-| [pay-x402](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-x402) | Node | A private agent payment over x402: price, pay sealed to the payee, sweep, serve. |
-| [web-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/web-shield) | Browser | Shield in the browser, read the balance back from chain. |
-| [receive-and-credit](https://github.com/cryptoduke01/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts) | Node | Take payments by request link, read each payment's note, secure it, credit the account it names. |
-| [san-verano](https://github.com/cryptoduke01/gloam/tree/main/examples/san-verano) | Node | Commerce with commitments: pay a supplier privately, sweep, prove, put the receipt leaf in a nightly root; a dry run by default. |
+| [agent-shield](https://github.com/gloamtrade/gloam/tree/main/examples/agent-shield) | Node | The smallest agent: mint a note, prove, deposit privately. |
+| [pay-bot](https://github.com/gloamtrade/gloam/tree/main/examples/pay-bot) | Node | A private payment end to end: shield, sync, send. |
+| [pay-x402](https://github.com/gloamtrade/gloam/tree/main/examples/pay-x402) | Node | A private agent payment over x402: price, pay sealed to the payee, sweep, serve. |
+| [web-shield](https://github.com/gloamtrade/gloam/tree/main/examples/web-shield) | Browser | Shield in the browser, read the balance back from chain. |
+| [receive-and-credit](https://github.com/gloamtrade/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts) | Node | Take payments by request link, read each payment's note, secure it, credit the account it names. |
+| [san-verano](https://github.com/gloamtrade/gloam/tree/main/examples/san-verano) | Node | Commerce with commitments: pay a supplier privately, sweep, prove, put the receipt leaf in a nightly root; a dry run by default. |
 
-![Add money privately in the browser](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-browser.jpg)
+![Add money privately in the browser](https://raw.githubusercontent.com/gloamtrade/gloam/main/app/public/media/readme-browser.jpg)
 
 ## Pinned public inputs
 
@@ -837,7 +837,7 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 - Quickstart: [gloam.trade/docs/quickstart](https://gloam.trade/docs/quickstart)
 - API reference: [gloam.trade/docs/sdk/reference](https://gloam.trade/docs/sdk/reference)
 - App: [gloam.trade](https://gloam.trade)
-- Source: [github.com/cryptoduke01/gloam](https://github.com/cryptoduke01/gloam)
+- Source: [github.com/gloamtrade/gloam](https://github.com/gloamtrade/gloam)
 - X: [@gloamtrade](https://x.com/gloamtrade)
 - Email: [hello@gloam.trade](mailto:hello@gloam.trade)
 

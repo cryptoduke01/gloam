@@ -7,11 +7,11 @@
   "homepage": "https://gloam.trade/docs/sdk",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cryptoduke01/gloam.git",
+    "url": "git+https://github.com/gloamtrade/gloam.git",
     "directory": "packages/sdk"
   },
   "bugs": {
-    "url": "https://github.com/cryptoduke01/gloam/issues"
+    "url": "https://github.com/gloamtrade/gloam/issues"
   },
   "keywords": [
     "gloam",

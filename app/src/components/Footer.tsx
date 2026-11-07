@@ -126,7 +126,7 @@ export function Footer() {
                   <TelegramIcon />
                 </a>
                 <a
-                  href="https://github.com/cryptoduke01/gloam"
+                  href="https://github.com/gloamtrade/gloam"
                   target="_blank"
                   rel="noreferrer"
                   aria-label="Gloam on GitHub"
