@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/docs/virtuals" },
 };
 
-const REPO = "https://github.com/cryptoduke01/gloam/tree/main";
+const REPO = "https://github.com/gloamtrade/gloam/tree/main";
 const PLUGIN = `${REPO}/packages/game-plugin-gloam`;
 const PROVIDER = `${REPO}/examples/virtuals-acp-provider`;
 

@@ -34,7 +34,7 @@ export default function DocsProductionPage() {
         not done yet. The app proves shield, unshield, and private send in the
         browser, and that is real cryptography. On mainnet the proofs use the
         final keys from the production trusted setup (see the{" "}
-        <a href="https://github.com/cryptoduke01/gloam/releases/tag/ceremony-final">transcript</a>).
+        <a href="https://github.com/gloamtrade/gloam/releases/tag/ceremony-final">transcript</a>).
         The Robinhood Chain and Tempo testnets keep development keys, which
         are <strong>not</strong> safe for mainnet, so they stay testnet only.
         Base Sepolia and Ethereum Sepolia run the final keys.

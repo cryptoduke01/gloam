@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/docs/agents/commitments" },
 };
 
-const REPO = "https://github.com/cryptoduke01/gloam/tree/main";
+const REPO = "https://github.com/gloamtrade/gloam/tree/main";
 const EXAMPLE = `${REPO}/examples/san-verano`;
 
 const CHECKS: { id: string; confirms: string; needs: string }[] = [

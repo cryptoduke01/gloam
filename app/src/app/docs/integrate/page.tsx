@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/docs/integrate" },
 };
 
-const REPO = "https://github.com/cryptoduke01/gloam/tree/main";
+const REPO = "https://github.com/gloamtrade/gloam/tree/main";
 const PACK = `${REPO}/examples/agent-kit-tools`;
 const SELLER_GUIDE = `${PACK}#sell-with-private-x402`;
 

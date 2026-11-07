@@ -107,7 +107,7 @@ quoted amount of USDG to the price's public `payTo` and returns the
 `X-PAYMENT` value (`{ scheme, txHash, quoteId }`, base64 JSON). The payee and
 the amount show on chain; the agent's wallet and private balance do not. The
 tool pack in
-[`examples/agent-kit-tools`](https://github.com/cryptoduke01/gloam/tree/main/examples/agent-kit-tools)
+[`examples/agent-kit-tools`](https://github.com/gloamtrade/gloam/tree/main/examples/agent-kit-tools)
 is built on it.
 
 What the proofs show:

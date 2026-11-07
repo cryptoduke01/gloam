@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     `@gloamtrade/sdk: private balances, private payments and proofs for any app or agent on ${liveMainnetNames()}. Plus an MCP server so AI agents can pay over x402 without showing their treasury.`,
 };
 
-const GITHUB = "https://github.com/cryptoduke01/gloam";
+const GITHUB = "https://github.com/gloamtrade/gloam";
 
 
 /* ---------- line icons (same hand as the landing) ---------- */

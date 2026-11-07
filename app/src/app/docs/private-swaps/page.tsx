@@ -512,7 +512,7 @@ export default function DocsPrivateSwapsPage() {
           SDK (<code>@gloamtrade/sdk</code> 0.5.0): <code>quoteSwap</code>, <code>buildSwapIntent</code>,{" "}
           <code>sendSwap</code>, and <code>readSwapOutcome</code>, <code>buildSwapRefund</code> and{" "}
           <code>buildSwapExit</code> to always get the money back. See the{" "}
-          <a href="https://github.com/cryptoduke01/gloam/tree/main/packages/sdk#private-swaps">SDK README</a>.
+          <a href="https://github.com/gloamtrade/gloam/tree/main/packages/sdk#private-swaps">SDK README</a>.
         </li>
         <li>
           Partner API: action <code>&quot;swap&quot;</code> on <code>POST /api/v1/relay</code>, and a read-only quote at{" "}

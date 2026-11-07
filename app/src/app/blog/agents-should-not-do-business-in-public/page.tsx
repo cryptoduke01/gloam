@@ -77,7 +77,7 @@ export default function AgentsShouldNotDoBusinessInPublicPost() {
             Read the docs
           </Link>
           <a
-            href="https://github.com/cryptoduke01/gloam/tree/main/packages/game-plugin-gloam"
+            href="https://github.com/gloamtrade/gloam/tree/main/packages/game-plugin-gloam"
             target="_blank"
             rel="noreferrer"
             className="btn btn-quiet"

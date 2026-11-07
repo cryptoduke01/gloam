@@ -324,7 +324,7 @@ export const TOOLS: Tool[] = [
     name: "gloam_connect_full_agent",
     title: "Connect the full Gloam agent",
     description:
-      "Commands to install the local Gloam MCP server, which can sign and pay (shield, private pay, x402 and MPP, spending limits) with keys kept on your machine: Claude Code, Codex, Cursor, VS Code, Claude Desktop and any MCP client, plus the plugin marketplace cryptoduke01/gloam-plugins.",
+      "Commands to install the local Gloam MCP server, which can sign and pay (shield, private pay, x402 and MPP, spending limits) with keys kept on your machine: Claude Code, Codex, Cursor, VS Code, Claude Desktop and any MCP client, plus the plugin marketplace gloamtrade/gloam-plugins.",
     inputSchema: {
       type: "object",
       properties: {
@@ -370,7 +370,7 @@ function info(ctx: ToolContext) {
     ],
     status: STATUS,
     whatIsPublic: WHAT_IS_PUBLIC,
-    links: { ...appLinks(ctx.origin), github: "https://github.com/cryptoduke01/gloam", email: "hello@gloam.trade" },
+    links: { ...appLinks(ctx.origin), github: "https://github.com/gloamtrade/gloam", email: "hello@gloam.trade" },
   };
 }
 
@@ -819,8 +819,8 @@ const MPP_TAIL = {
   keys: "Keys, receive keys and notes stay in your own code or the local server. Never paste them into a chat or this hosted server.",
   links: {
     package: "https://www.npmjs.com/package/@gloamtrade/mppx-gloam",
-    readme: "https://github.com/cryptoduke01/gloam/tree/main/packages/mppx-gloam",
-    spec: "https://github.com/cryptoduke01/gloam/blob/main/docs/mpp/draft-gloam-charge-00.md",
+    readme: "https://github.com/gloamtrade/gloam/tree/main/packages/mppx-gloam",
+    spec: "https://github.com/gloamtrade/gloam/blob/main/docs/mpp/draft-gloam-charge-00.md",
   },
 };
 
@@ -946,12 +946,12 @@ function connectFullAgent(args: Args): CallToolResult {
   const local = {
     "claude-code": {
       server: "claude mcp add gloam -- npx -y @gloamtrade/mcp",
-      plugin: ["claude plugin marketplace add cryptoduke01/gloam-plugins", "claude plugin install gloam@gloam"],
+      plugin: ["claude plugin marketplace add gloamtrade/gloam-plugins", "claude plugin install gloam@gloam"],
       setup: "Then run /gloam:gloam-setup to give the agent a capped key.",
     },
     codex: {
       server: "codex mcp add gloam -- npx -y @gloamtrade/mcp",
-      plugin: ["codex plugin marketplace add cryptoduke01/gloam-plugins", "codex plugin add gloam@gloam"],
+      plugin: ["codex plugin marketplace add gloamtrade/gloam-plugins", "codex plugin add gloam@gloam"],
     },
     cursor: {
       install: CURSOR_DEEPLINK,
@@ -973,9 +973,9 @@ function connectFullAgent(args: Args): CallToolResult {
     localServer: LOCAL_SERVER,
     commands: chosen,
     pluginMarketplace: {
-      repo: "https://github.com/cryptoduke01/gloam-plugins",
+      repo: "https://github.com/gloamtrade/gloam-plugins",
       adds: "The local server plus two skills: gloam (pay, get paid and check limits safely) and gloam-setup (connect, and give the agent a capped Tempo access key).",
-      skillsOnly: ["gh skill install cryptoduke01/gloam-plugins gloam", "gh skill install cryptoduke01/gloam-plugins gloam-setup"],
+      skillsOnly: ["gh skill install gloamtrade/gloam-plugins gloam", "gh skill install gloamtrade/gloam-plugins gloam-setup"],
     },
     letItSpend: [
       "Out of the box the local server only reads and plans too. Nothing is signed until it has a key.",
@@ -994,7 +994,7 @@ function connectFullAgent(args: Args): CallToolResult {
       codex: `~/.codex/config.toml: [mcp_servers.gloam-hosted] url = "${MCP_URL}"`,
     },
     docs: `${SITE}/docs/agents`,
-    readme: "https://github.com/cryptoduke01/gloam/tree/main/mcp",
+    readme: "https://github.com/gloamtrade/gloam/tree/main/mcp",
   });
 }
 

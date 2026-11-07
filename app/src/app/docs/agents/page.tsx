@@ -671,7 +671,7 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
         every spend until you set them (or turn them off on purpose). Every
         spend is logged before it is signed, under a lock, so two calls at once
         cannot both squeeze under the daily cap. Configuration lives in the{" "}
-        <a href="https://github.com/cryptoduke01/gloam/tree/main/mcp#spending-limits">
+        <a href="https://github.com/gloamtrade/gloam/tree/main/mcp#spending-limits">
           MCP README
         </a>
         .
