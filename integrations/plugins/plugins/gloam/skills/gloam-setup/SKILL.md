@@ -13,7 +13,7 @@ The `gloam` MCP server runs with `npx -y @gloamtrade/mcp`. With no settings it o
 To execute it needs a key, a note-store key and limits, all read from `~/.gloam/agent.env` (mode
 600), never from the plugin config or the chat.
 
-First ask whether the user wants **mainnet** (beta: `tempo-mainnet`, `robinhood-mainnet`,
+First ask whether the user wants **mainnet** (`tempo-mainnet`, `robinhood-mainnet`,
 `base-mainnet` or `ethereum-mainnet`) or the **testnet** (`tempo`, `robinhood`, `base` or
 `ethereum`).
 Suggest practicing on testnet first if they are new to it. `GLOAM_NETWORK` in the settings file sets

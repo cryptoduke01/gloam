@@ -15,9 +15,9 @@ through the `gloam` MCP server: the public chain sees a shielded transfer, not w
 
 Each chain has a mainnet and a testnet, and tools take a `network`:
 
-- `tempo-mainnet`, `robinhood-mainnet`, `base-mainnet` and `ethereum-mainnet` are **mainnet**
-  (beta). Deposits are capped at 50,000 of a stablecoin (20 ETH, 2,500,000 GLOAM) per deposit during
-  the beta. Direct deposits and private payments are free;
+- `tempo-mainnet`, `robinhood-mainnet`, `base-mainnet` and `ethereum-mainnet` are **mainnet**.
+  Deposits are capped at 50,000 of a stablecoin (20 ETH, 2,500,000 GLOAM) per deposit.
+  Direct deposits and private payments are free;
   cashing out costs 0.5%.
 - `tempo`, `robinhood`, `base` (Base Sepolia) and `ethereum` (Ethereum Sepolia) are the testnets.
 

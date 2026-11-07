@@ -86,7 +86,7 @@ function pickNetwork(fallback: GloamNetworkKey = "robinhood"): GloamNetwork {
   if (net.testnet) {
     console.log(`${networkName(net.chainId)}. Set GLOAM_NETWORK=${net.family}-mainnet to use mainnet.`);
   } else {
-    console.log(`${net.label} mainnet. Gloam is beta software: at most 50,000 per stablecoin deposit.`);
+    console.log(`${net.label} mainnet. Deposit limit: at most 50,000 per stablecoin deposit.`);
   }
   return net;
 }
@@ -171,7 +171,7 @@ async function main() {
 
   console.log(`Agent ${account.address} shielding ${show(amountWei)} into pool ${net.pool}`);
 
-  // 1) Build the shield intent. The SDK checks the asset and the beta limit,
+  // 1) Build the shield intent. The SDK checks the asset and the deposit limit,
   //    mints a Poseidon note, and proves it binds (amount, asset).
   const intent = await buildShieldBoundIntent({
     chainId: net.chainId,

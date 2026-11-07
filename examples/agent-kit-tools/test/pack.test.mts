@@ -154,7 +154,7 @@ test("a shield preview names the calls the wallet signs, and refuses what the wa
   assert.equal((await poor.call("gloam_preview_shield", { amount: "25" })).code, "wallet_short");
   const none = createGloamToolPack({ engine: fakeEngine({ wallet: null }).engine });
   assert.equal((await none.call("gloam_preview_shield", { amount: "1" })).code, "no_wallet");
-  const capped = createGloamToolPack({ engine: fakeEngine({ depositProblem: async () => "Over the vault's beta limit." }).engine });
+  const capped = createGloamToolPack({ engine: fakeEngine({ depositProblem: async () => "Over the vault's deposit limit." }).engine });
   assert.equal((await capped.call("gloam_preview_shield", { amount: "1" })).code, "deposit_limit");
 });
 

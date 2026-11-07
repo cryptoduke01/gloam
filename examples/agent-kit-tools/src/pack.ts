@@ -83,7 +83,7 @@ export interface GloamEngine {
   cashOutFeeBps(): Promise<number>;
   /** What the wallet holds of `asset`, or null without a wallet or when it can't be read. */
   walletHolds(asset: GloamAsset): Promise<bigint | null>;
-  /** Why the vault would refuse this deposit now (its live beta limit), or null. */
+  /** Why the vault would refuse this deposit now (its live deposit limit), or null. */
   depositProblem(asset: GloamAsset, amountWei: bigint): Promise<string | null>;
   /** A claim link this agent made, for owner code only. */
   claimLink?(handle: string): ClaimLinkOut;
