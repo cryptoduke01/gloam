@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { erc20Abi, formatUnits, parseUnits, type Address, type Hex } from "viem";
 import { useAccount, useConfig, useReadContract } from "wagmi";
-import { getAccount, sendTransaction, switchChain, waitForTransactionReceipt } from "wagmi/actions";
+import { getAccount, getTransactionReceipt, sendTransaction, switchChain, waitForTransactionReceipt } from "wagmi/actions";
 import {
   BRIDGE_CHAINS,
   bridgeSources,
@@ -516,7 +516,11 @@ function BridgeSheet({
     const { hash, note, quote } = sentPriv;
     let live = true;
     void (async () => {
-      const rec = await waitForTransactionReceipt(config, { hash, chainId: network.chainId as GloamChainId }).catch(() => null);
+      const chainId = network.chainId as GloamChainId;
+      // wagmi throws on a reverted receipt, so the failed branch below needs the receipt read once more
+      const rec = await waitForTransactionReceipt(config, { hash, chainId }).catch(() =>
+        getTransactionReceipt(config, { hash, chainId }).catch(() => null)
+      );
       if (!live) return;
       if (rec?.status === "reverted") {
         updateLocalNote(note.id, { status: "recovered", sweepPending: false });
@@ -730,7 +734,12 @@ function BridgeSheet({
         if (last) {
           hash = sent;
         } else {
-          const rec = await waitForTransactionReceipt(config, { hash: sent, chainId });
+          // wagmi throws on a reverted receipt, with a reason decoded from raw bytes: read it plainly then
+          const rec = await waitForTransactionReceipt(config, { hash: sent, chainId }).catch(async (e) => {
+            const plain = await getTransactionReceipt(config, { hash: sent, chainId }).catch(() => null);
+            if (plain) return plain;
+            throw e;
+          });
           if (rec.status !== "success") throw new Error("The approval didn't go through.");
           approved = true;
           // Some wallets check the payment against a node that hasn't seen the approval yet
@@ -1347,7 +1356,7 @@ function BridgeSheet({
             {status?.stage === "done" ? (
               <button
                 type="button"
-                onClick={() => onArrived(Number(stage.quote.receive.amount).toFixed(2))}
+                onClick={() => onArrived(floor2(stage.quote.receive.minimum))}
                 className="btn btn-ink btn-lg btn-block mt-4"
               >
                 Add it privately
@@ -1742,7 +1751,7 @@ function SwapReview({
 
       {error && !hash && (
         <p role="alert" className="mt-4 rounded-xl bg-danger-soft px-4 py-3 text-[13px] leading-relaxed text-danger">
-          {cancelled ? "You cancelled it in your wallet. Nothing moved." : error.message.split("\n")[0]}
+          {cancelled ? "You cancelled it in your wallet. Nothing moved." : walletErrorText(error) || "It didn't send. Try again."}
         </p>
       )}
 

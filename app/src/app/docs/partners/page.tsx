@@ -20,7 +20,7 @@ const ERRORS: [string, number | string, string][] = [
   ["rate_limited", 429, "Over 300 requests in a minute for this key. Retry-After says when to retry."],
   ["invalid_json", 400, "The body is not a JSON object."],
   ["bad_request", 400, "A relay field is malformed (proof, root, nullifier, commitments, asset, to, amount, memo). Relayed memos are capped at 2,048 bytes."],
-  ["network", 400, "chainId is not a network the relay serves (4663 or 4217 on mainnet, 46630 or 42431 on testnet)."],
+  ["network", 400, "chainId is not a network the relay serves (4663, 4217, 8453 or 1 on mainnet; 46630, 42431, 84532 or 11155111 on testnet)."],
   ["bad_action", 400, "action is not transfer, unshield, memo, swap or swapExit."],
   ["no_swap, swap_router, swap_asset, same_asset, BadRoute", 400, "Private swaps are not live on that network, or the router, an asset or the route is not one Gloam knows there."],
   ["SwapExpired, swap_router_old", 409, "The swap's time ran out, or it was made for an earlier router. Get a new quote and prove again."],

@@ -303,7 +303,8 @@ function Dashboard({
   const [tab, setTab] = useState<Tab>("overview");
   const [stats, setStats] = useState<Stats | null>(null);
   const [tier, setTier] = useState<"mainnet" | "testnet">("mainnet");
-  const [statsLoading, setStatsLoading] = useState(false);
+  // loading from the start, so the first paint shows the skeleton and not "Could not load"
+  const [statsLoading, setStatsLoading] = useState(true);
   const [keys, setKeys] = useState<KeyView[] | null>(null);
   const [keyMeta, setKeyMeta] = useState({ maxActive: 10, liveKeys: false });
   const [codes, setCodes] = useState<LinkCodeView[] | null>(null);
@@ -451,7 +452,11 @@ function Dashboard({
               loading={statsLoading}
               onQuickstart={() => choose("quickstart")}
               tier={tier}
-              onTier={setTier}
+              onTier={(t) => {
+                // the other tier's figures are hidden until they load: show the skeleton, not an error
+                if (t !== tier) setStatsLoading(true);
+                setTier(t);
+              }}
             />
           )}
           {tab === "links" && (

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { BaseError, formatUnits, type Address, type Hex } from "viem";
+import { WALLET_DECLINED_TEXT, walletDeclined } from "@/lib/walletErrors";
 import { useReadContract, useReadContracts } from "wagmi";
 import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -406,6 +407,16 @@ export function VaultSwapView() {
   // The flip button turns half a circle on each flip.
   const [turns, setTurns] = useState(0);
 
+  // The last swap's error or success belongs to the network it ran on: a switch clears them.
+  const shownNet = useRef(networkKey);
+  useEffect(() => {
+    if (shownNet.current === networkKey || busy) return;
+    shownNet.current = networkKey;
+    setError(null);
+    setDone(null);
+    setReceipt(null);
+  }, [networkKey, busy]);
+
   // Another swap link opened in this tab only changes the fragment: fill that one in.
   // Not while a swap is running: the form stays on the swap being sent.
   useEffect(() => {
@@ -580,7 +591,15 @@ export function VaultSwapView() {
       setAmountInput("");
       setQuote(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The swap failed. Nothing moved.");
+      // What this code threw says what happened; viem's text (a read, a block, a replan)
+      // lists contracts and calls. A swap can stop after its first step, so no "nothing moved".
+      setError(
+        walletDeclined(e)
+          ? WALLET_DECLINED_TEXT
+          : e instanceof Error && !(e instanceof BaseError)
+            ? e.message
+            : "The swap didn't finish. Refresh your private balance and check it before you try again."
+      );
     } finally {
       setBusy(false);
       setStatus(null);

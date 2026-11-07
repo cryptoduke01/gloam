@@ -852,7 +852,7 @@ function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): 
             : { import: "ETHEREUM_USDC", line: "      currency: ETHEREUM_USDC, decimals: 6,               // or ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD" }
           : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN, RH_MAINNET_PONS, RH_MAINNET_CASHCAT with decimals: 18" };
   const getter = n.testnet ? "testnetNetwork" : "mainnetNetwork";
-  const sdkVersion = "0.5.1";
+  const sdkVersion = "0.6.0";
   const netLines = `const net = ${getter}("${family}");                   // null until the pool is published
 if (!net) throw new Error("${where} pool not published yet");`;
   const charge = {

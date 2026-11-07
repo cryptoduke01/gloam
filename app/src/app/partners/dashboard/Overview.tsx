@@ -208,7 +208,11 @@ export function Overview({
   const mainnetLive = useMainnetLive();
   if (!stats) {
     return (
-      <div aria-busy="true" className="space-y-3">
+      <div aria-busy={loading} className="space-y-3">
+        {/* the switch stays, so a tier that fails to load can be switched back */}
+        <div className="flex">
+          <TierSwitch tier={tier} onTier={onTier} />
+        </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="gl-card h-[118px] motion-safe:animate-pulse" />
@@ -307,7 +311,7 @@ export function Overview({
         stats={stats}
         days={stats.days ?? 14}
         notMatched={stats.notMatched}
-        csv={{ daily: "/api/partners/export?type=daily", transactions: "/api/partners/export?type=transactions" }}
+        csv={{ daily: `/api/partners/export?type=daily&tier=${stats.tier}`, transactions: `/api/partners/export?type=transactions&tier=${stats.tier}` }}
       />
 
       {stats.byAsset.length > 0 && (

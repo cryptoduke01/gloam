@@ -107,7 +107,7 @@ import { PaymentTicketShare } from "./PaymentTicketShare";
 import { SentLinks } from "./SentLinks";
 import { makeSentLink, paymentNullifier, type SentLink } from "@/lib/sentLinks";
 import { removeSentLink, saveSentLink } from "@/lib/sentLinksStore";
-import { surelyNotSent } from "@/lib/walletErrors";
+import { surelyNotSent, walletErrorForPeople } from "@/lib/walletErrors";
 import {
   cancelCashOut,
   dismissReturnedCashOut,
@@ -288,6 +288,15 @@ export function MoveView() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
   const [busy, setBusy] = useState(false);
+  /** A cash out's checks (screening, the live fee) run before busy is set: one click at a time. */
+  const cashOutGate = useRef(false);
+  const [cashOutChecking, setCashOutChecking] = useState(false);
+  /** Opening a claim code (PBKDF2, spent check, tree sync) before it is saved: one at a time. */
+  const claimGate = useRef(false);
+  const [claimOpening, setClaimOpening] = useState(false);
+  /** The newest inbox scan: Check now waits for it, and an older one never ends its spinner. */
+  const scanRun = useRef(0);
+  const [scanning, setScanning] = useState(false);
   const [claimPreview, setClaimPreview] = useState<{ text: string; note?: string } | null>(null);
   const [payStyle, setPayStyle] = useState<PayStyle>("direct");
   const [recipientTag, setRecipientTag] = useState(() => request?.to ?? "");
@@ -425,6 +434,11 @@ export function MoveView() {
       setMode("send");
       setSelectedId(null);
       setRecipientTag(r.to ?? "");
+      // a request names who to pay: never turn it into a claim link the tab had chosen before
+      if (r.to) {
+        setPayStyle("direct");
+        setSendPassphrase("");
+      }
       setSendAmount(r.amount ?? "");
       setPayNote(r.note ?? "");
       setNoteOpen(Boolean(r.note));
@@ -1024,6 +1038,19 @@ export function MoveView() {
     savePrivatePref({ on });
   }
 
+  /** The cash out button: its checks run before busy is set, so a second click waits for the first. */
+  async function startCashOut() {
+    if (cashOutGate.current) return;
+    cashOutGate.current = true;
+    setCashOutChecking(true);
+    try {
+      await (planActive ? onPrivateCashOut() : onCashOut());
+    } finally {
+      cashOutGate.current = false;
+      setCashOutChecking(false);
+    }
+  }
+
   async function onCashOut() {
     if (!selected || !address || !network.pool || !poseidonMode) return;
     // never prove or send a balance of another chain (several vaults share one address)
@@ -1076,6 +1103,9 @@ export function MoveView() {
 
     setBusy(true);
     setPaidPrivately(false);
+    // the last payment's claim code (kept under Sent links) is not this cash out's success
+    setShareBlob(null);
+    setMemoPosted(false);
     reset();
     setRelayHash(undefined);
     handledHash.current = null;
@@ -1174,7 +1204,7 @@ export function MoveView() {
       });
       // cash out is intentional exit, no onboarding mark
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Cash out failed";
+      const msg = walletErrorForPeople(e, "The cash out didn't go through. Try again.");
       // The first step landed: the amount is its own note in the balance now.
       setError(splitDone ? `${msg} The amount is set aside in your private balance, so you can cash it out from there.` : msg);
       setBusy(false);
@@ -1290,6 +1320,8 @@ export function MoveView() {
     const note = selected;
     setBusy(true);
     setPaidPrivately(false);
+    setShareBlob(null);
+    setMemoPosted(false);
     reset();
     setRelayHash(undefined);
     handledHash.current = null;
@@ -1355,7 +1387,7 @@ export function MoveView() {
       });
     } catch (e) {
       // Refused before anything moved.
-      setError(e instanceof Error ? e.message : "Cash out failed");
+      setError(walletErrorForPeople(e, "The cash out didn't go through. Try again."));
     } finally {
       setPlanRun(null);
       setRunNote(null);
@@ -1657,7 +1689,7 @@ export function MoveView() {
         );
       } else {
         forgetUnsent();
-        setError(e instanceof Error ? e.message : "Private send failed");
+        setError(walletErrorForPeople(e, "The payment didn't go through. Try again."));
       }
       keptBeforeSend.current = null;
       setBusy(false);
@@ -1681,6 +1713,8 @@ export function MoveView() {
     // the board, the vault reads and the list below are all of the network shown
     const scanKey = networkKey;
     if (noteNetworkProblem({ chainId: network.chainId, pool: network.pool }, network)) return;
+    const run = ++scanRun.current;
+    setScanning(true);
     setInboxStatus("Checking for payments to your Gloam address…");
     setInbox([]);
     try {
@@ -1730,8 +1764,13 @@ export function MoveView() {
           ? `Found ${hits.length} ${hits.length === 1 ? "payment" : "payments"} for you.`
           : "No new payments yet."
       );
-    } catch (e) {
-      setInboxStatus(e instanceof Error ? e.message : "Could not check for payments.");
+    } catch {
+      // an RPC error's text names the endpoint and the request: no use to read
+      if (shownNetworkKey.current === scanKey) {
+        setInboxStatus("Couldn't check for payments right now. Try again in a moment.");
+      }
+    } finally {
+      if (run === scanRun.current) setScanning(false);
     }
   }
 
@@ -1967,6 +2006,9 @@ export function MoveView() {
   }
 
   async function onImportNote() {
+    if (claimGate.current) return;
+    claimGate.current = true;
+    setClaimOpening(true);
     setError(null);
     setImportOk(null);
     try {
@@ -1988,7 +2030,10 @@ export function MoveView() {
       }
       await secureNote(r.local, { claimed: true, note: r.note });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Import failed");
+      setError(walletErrorForPeople(e, "Couldn't open this payment. Check the code and try again."));
+    } finally {
+      claimGate.current = false;
+      setClaimOpening(false);
     }
   }
 
@@ -2611,7 +2656,7 @@ export function MoveView() {
                               <>
                                 <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
                                   Gloam pays it from your private balance. It arrives in their wallet like a normal
-                                  transfer, and it doesn&apos;t show which Gloam balance paid it. The amount is public.
+                                  transfer, and it doesn&apos;t show which Gloam balance paid it. The amount and their address are public.
                                 </p>
                                 <button
                                   type="button"
@@ -2801,7 +2846,7 @@ export function MoveView() {
                 <div className="mt-6 space-y-4">
                   <div className="rounded-[16px] bg-warn-soft px-4 py-3.5 text-[13px] leading-relaxed">
                     <p className="font-medium text-warn">
-                      Cashing out makes this amount public
+                      Cashing out makes the amount and where it goes public
                     </p>
                     <p className="mt-1 text-soft">
                       A round amount, a later time or a fresh wallet makes it
@@ -3209,6 +3254,7 @@ export function MoveView() {
                         treeLoading ||
                         !relayChecked ||
                         working ||
+                        cashOutChecking ||
                         selected?.leafIndex == null ||
                         cashOutInventoryShort ||
                         cashOutFeeUnknown ||
@@ -3217,13 +3263,18 @@ export function MoveView() {
                         sweepHold ||
                         (planActive ? !piecesReady : cashOutWhen !== "now" && !relayAvailable)
                       }
-                      onClick={() => void (planActive ? onPrivateCashOut() : onCashOut())}
+                      onClick={() => void startCashOut()}
                       className="btn btn-ink btn-lg btn-block"
                     >
                       {working && busyAction === "cashout" ? (
                         <>
                           <Spinner />
                           <span className="truncate">{status || "Working…"}</span>
+                        </>
+                      ) : cashOutChecking ? (
+                        <>
+                          <Spinner />
+                          <span className="truncate">Checking…</span>
                         </>
                       ) : cashOutInventoryShort ? (
                         "Not enough in the vault yet"
@@ -3424,9 +3475,17 @@ export function MoveView() {
                   <button
                     type="button"
                     onClick={() => void scanInbox()}
+                    disabled={scanning}
                     className="btn btn-ghost btn-sm"
                   >
-                    Check now
+                    {scanning ? (
+                      <>
+                        <Spinner />
+                        Checking…
+                      </>
+                    ) : (
+                      "Check now"
+                    )}
                   </button>
                 </div>
                 <p className="mt-1 text-[13px] leading-relaxed text-mute">
@@ -3550,13 +3609,18 @@ export function MoveView() {
                     <button
                       type="button"
                       onClick={() => void onImportNote()}
-                      disabled={!importText.trim() || !isConnected || working}
+                      disabled={!importText.trim() || !isConnected || working || claimOpening}
                       className="btn btn-ink btn-lg btn-block"
                     >
                       {securingId ? (
                         <>
                           <Spinner />
                           <span className="truncate">{status || "Securing…"}</span>
+                        </>
+                      ) : claimOpening ? (
+                        <>
+                          <Spinner />
+                          <span className="truncate">Opening the payment…</span>
                         </>
                       ) : (
                         "Claim and secure"
@@ -3574,7 +3638,7 @@ export function MoveView() {
               role="alert"
               className="mt-5 break-words rounded-xl bg-danger-soft px-4 py-3 text-[13.5px] leading-relaxed text-danger"
             >
-              {error || writeError?.message.slice(0, 200)}
+              {error || walletErrorForPeople(writeError)}
             </p>
           )}
           {txHash && !isSuccess && (
@@ -3743,7 +3807,7 @@ export function MoveView() {
               {cashOutDest === "other"
                 ? "The money is on its way to that address."
                 : "The money is back in your wallet."}{" "}
-              That amount is public on the explorer, so only cash out when you
+              The amount and the address it went to are public on the explorer, so only cash out when you
               need it in the open.
             </p>
           )
