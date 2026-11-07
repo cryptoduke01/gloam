@@ -24,7 +24,7 @@ export { packageVersion };
 type Env = Record<string, string | undefined>;
 
 export const HELP = `gloam-mcp {version}: Gloam's MCP server for AI agents. Private stablecoin payments on Tempo and
-Robinhood Chain (x402 and MPP), with spending limits. Mainnet (beta) and testnet.
+Robinhood Chain (x402 and MPP), with spending limits. Mainnet and testnet.
 
 Usage
   gloam-mcp                         Start the MCP server on stdio. This is what MCP clients run.

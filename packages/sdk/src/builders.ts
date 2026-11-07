@@ -142,7 +142,7 @@ export interface ShieldBoundIntentParams extends ShieldIntentParams {
    */
   prover: Prover;
   /**
-   * Reads the vault's live beta limits (a viem PublicClient on this chain), so a
+   * Reads the vault's live deposit limits (a viem PublicClient on this chain), so a
    * deposit over them is refused before any proof is made. Left out, or when
    * the read fails, the amount is not checked here and the vault enforces it.
    */
@@ -155,7 +155,7 @@ export interface ShieldBoundIntentParams extends ShieldIntentParams {
  * (amount, asset), then resolves shieldBound(asset, amount, commitment, proof).
  * Use this on every live Gloam pool, mainnet and testnet: plain shield()
  * reverts there (ShieldProofRequired). On mainnet, the asset must be one the
- * pool lists and the amount within its beta limits; with a `client`, both are
+ * pool lists and the amount within its deposit limits; with a `client`, both are
  * read live from the vault before any proof is made.
  */
 export async function buildShieldBoundIntent(
