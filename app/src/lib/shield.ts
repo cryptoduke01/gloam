@@ -93,7 +93,7 @@ export const shieldPoolAbi = [
     inputs: [{ name: "asset", type: "address" }],
     outputs: [{ type: "uint256" }],
   },
-  // Beta deposit limits (ShieldPoolCore). Pools deployed before them lack these
+  // Deposit limits (ShieldPoolCore). Pools deployed before them lack these
   // reads, so a failed read means no limits.
   {
     type: "function",

@@ -154,7 +154,7 @@ export async function POST(req: Request) {
   const screen = await screenAddresses([recipient], { chainId: network.chainId, asset, flow: "deposit" });
   if (!screen.allowed) return fail(403, screen.message ?? SCREEN_BLOCKED_MESSAGE);
 
-  // The vault's own checks, read before anyone pays: room under the beta
+  // The vault's own checks, read before anyone pays: room under the deposit
   // limits, a commitment it hasn't seen, and a proof its verifier accepts.
   const client = createPublicClient({ chain: network.chain, ccipRead: false, transport: serverTransport(network, { retryCount: 2 }) });
   const pool = network.pool as Address;
@@ -170,13 +170,13 @@ export async function POST(req: Request) {
       // A side set to type(uint128).max is no limit (isNoLimit): never checked or shown.
       const [perDeposit, total] = limit;
       if (!isNoLimit(perDeposit) && amount > perDeposit) {
-        return fail(400, `During the beta, one private deposit can be up to ${units(perDeposit, dest.token.decimals)} ${dest.token.symbol}.`);
+        return fail(400, `One private deposit can be up to ${units(perDeposit, dest.token.decimals)} ${dest.token.symbol}.`);
       }
       if (!isNoLimit(total) && deposited + amount > total) {
         const room = total > deposited ? total - deposited : BigInt(0);
         return fail(400, room > BigInt(0)
-          ? `The vault has room for ${units(room, dest.token.decimals)} ${dest.token.symbol} more during the beta.`
-          : `The vault is at its beta limit for ${dest.token.symbol}. Try again later.`);
+          ? `The vault has room for ${units(room, dest.token.decimals)} ${dest.token.symbol} more right now.`
+          : `The vault is at its deposit limit for ${dest.token.symbol}. Try again later.`);
       }
     }
     if (seen) return fail(400, "That private deposit was already used. Start over.");

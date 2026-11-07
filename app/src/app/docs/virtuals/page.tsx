@@ -497,7 +497,7 @@ GLOAM_LIMITS_FILE=./limits.json
                 <code>robinhood-mainnet</code>
               </td>
               <td>Robinhood Chain mainnet</td>
-              <td>Live, beta limits</td>
+              <td>Live, deposit limits</td>
               <td>USDG, GLOAM, PONS, CASHCAT, ETH, AI and ORBIO</td>
             </tr>
             <tr>
@@ -505,7 +505,7 @@ GLOAM_LIMITS_FILE=./limits.json
                 <code>base-mainnet</code>
               </td>
               <td>Base mainnet</td>
-              <td>{BASE_MAINNET_LIVE ? "Live, beta limits" : "Next. Refused until its vault is live"}</td>
+              <td>{BASE_MAINNET_LIVE ? "Live, deposit limits" : "Next. Refused until its vault is live"}</td>
               <td>USDC, EURC, USDT, ETH</td>
             </tr>
             <tr>
@@ -521,7 +521,7 @@ GLOAM_LIMITS_FILE=./limits.json
                 <code>tempo-mainnet</code>
               </td>
               <td>Tempo mainnet</td>
-              <td>Live, beta limits</td>
+              <td>Live, deposit limits</td>
               <td>USDC.e, pathUSD, USDT0, OUSD</td>
             </tr>
           </tbody>
@@ -529,7 +529,7 @@ GLOAM_LIMITS_FILE=./limits.json
       </div>
       <ul>
         <li>
-          <strong>Beta limits on mainnet:</strong> 50,000 of a stablecoin per
+          <strong>Deposit limits on mainnet:</strong> 50,000 of a stablecoin per
           deposit and 2,500,000 in total per stablecoin.
         </li>
         <li>
@@ -592,7 +592,7 @@ GLOAM_LIMITS_FILE=./limits.json
       </p>
       <h3>Is mainnet ready for my agent?</h3>
       <p>
-        Mainnet is beta software with deposit limits. The code was reviewed
+        Mainnet is live with deposit limits. The code was reviewed
         internally before launch, and Kann Audits reviewed the vault contracts (<Link href="/security">report, 1 November 2026</Link>) and
         found no Critical, High or Medium issues. The plugin, SDK and relay were not part of that
         review. Start an agent on small limits and raise them

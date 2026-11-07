@@ -265,7 +265,7 @@ export function ShieldView() {
     poolData?.[6]?.status === "success"
       ? (poolData[6].result as string)
       : null;
-  // Beta deposit limits. Pools from before them fail this read: no limits.
+  // Deposit limits. Pools from before them fail this read: no limits.
   const limitsOn = poolData?.[7]?.status === "success" && poolData[7].result === true;
   const limit =
     limitsOn && poolData?.[8]?.status === "success"
@@ -565,19 +565,19 @@ export function ShieldView() {
     return `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${symbol}`;
   }
 
-  /** Why the vault's beta limits refuse this amount, or null. */
+  /** Why the vault's deposit limits refuse this amount, or null. */
   function limitProblem(value: bigint): string | null {
     if (!limitsOn) return null;
     if (!limit || limit[1] === BigInt(0)) {
       return `${symbol} deposits are closed right now. Private payments and cash out still work.`;
     }
     if (limitPer !== null && value > limitPer) {
-      return `During the beta, one deposit can be up to ${limitText(limitPer)}.`;
+      return `One deposit can be up to ${limitText(limitPer)}.`;
     }
     if (limitRoom !== null && value > limitRoom) {
       return limitRoom === BigInt(0)
-        ? `The vault is at its beta limit for ${symbol}. Try again later.`
-        : `The vault has room for ${limitText(limitRoom)} more during the beta.`;
+        ? `The vault is at its deposit limit for ${symbol}. Try again later.`
+        : `The vault has room for ${limitText(limitRoom)} more right now.`;
     }
     return null;
   }
@@ -1078,7 +1078,7 @@ export function ShieldView() {
             : liveLimit
               ? limit && limit[1] === BigInt(0)
                 ? `${symbol} deposits are closed`
-                : "Over the beta limit"
+                : "Over the deposit limit"
               : null;
   const faucet = network.testnet ? faucetFor(network.key) : null;
   // A long list reads worse than a short one: name the first two and say there are more.
@@ -1264,7 +1264,7 @@ export function ShieldView() {
             </div>
             {limitsOn && limitPer !== null && limitPer > BigInt(0) && (
               <div className="flex h-11 items-center justify-between gap-3">
-                <dt className="text-mute">Beta limit</dt>
+                <dt className="text-mute">Deposit limit</dt>
                 <dd className="tnum text-foreground">{limitText(limitPer)} per deposit</dd>
               </div>
             )}
@@ -1328,7 +1328,7 @@ export function ShieldView() {
             >
               {formError ||
                 (writeError?.message.includes("OverDepositLimit")
-                  ? "This deposit is over the vault's beta limit. Try a smaller amount."
+                  ? "This deposit is over the vault's deposit limit. Try a smaller amount."
                   : walletErrorForPeople(writeError))}
             </p>
           )}

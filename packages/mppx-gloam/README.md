@@ -4,7 +4,7 @@ Private payments for the [Machine Payments Protocol](https://mpp.dev) (MPP).
 
 MPP is HTTP 402 done properly: a server answers `WWW-Authenticate: Payment …`, the client pays and retries with `Authorization: Payment …`, and gets a `Payment-Receipt`. Every method so far (tempo, evm, stripe, solana) settles in public, so the ledger shows which agent paid which service, how much, how often.
 
-This package adds the **`gloam`** method. A charge is paid with a private transfer inside a Gloam shielded pool on Tempo, Robinhood Chain, Base or Ethereum, on mainnet (beta) or testnet:
+This package adds the **`gloam`** method. A charge is paid with a private transfer inside a Gloam shielded pool on Tempo, Robinhood Chain, Base or Ethereum, on mainnet or testnet:
 
 - the payment note is sealed to the payee's receive tag, so only the payee can open it;
 - the server checks it binds the price, that it is the payment output of a `Transferred` event in the official pool, and that the credential is bound to this exact challenge;
@@ -132,7 +132,7 @@ Gloam's vault has one address on every chain, and ETH is `0x0` on all of them. A
 
 ## Status
 
-Mainnet (beta) on Tempo, Robinhood Chain, Base and Ethereum (Base and Ethereum need a build with SDK 0.4.1 or later), payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, and Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The testnets stay up.
+Mainnet on Tempo, Robinhood Chain, Base and Ethereum (Base and Ethereum need a build with SDK 0.4.1 or later), payments only, with the trusted setup's final keys and deposit limits on the pools; reviewed internally before launch, and Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The testnets stay up.
 
 ## Tests
 

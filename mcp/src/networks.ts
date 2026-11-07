@@ -8,7 +8,7 @@
  * SDK stays transport-agnostic.
  *
  * Robinhood Chain and Tempo, each on mainnet (the ceremony's final keys,
- * payments only, beta deposit limits) and testnet (dev keys); Base and
+ * payments only, deposit limits) and testnet (dev keys); Base and
  * Ethereum, each on mainnet and on a testnet (Base Sepolia, Ethereum Sepolia)
  * that runs the mainnet pool and final keys. A network with a pool
  * to publish (every mainnet, Base Sepolia, Ethereum Sepolia) only exists here

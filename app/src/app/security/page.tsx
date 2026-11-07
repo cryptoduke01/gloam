@@ -137,7 +137,7 @@ export default function SecurityPage() {
           <h1 className="t-display-xl">Security</h1>
           <p className="mt-6 max-w-[52ch] text-pretty text-[18px] leading-relaxed text-soft sm:text-[20px]">
             Kann Audits reviewed the vault contracts (report, 1 November 2026) and found no Critical, High or Medium
-            issues. The review covered the vault contracts only, and Gloam is still beta software.
+            issues. The review covered the vault contracts only.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-4">
             {REPORT_LIVE ? (
@@ -196,9 +196,9 @@ export default function SecurityPage() {
         <Section id="limits" title="What it does not change">
           <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
             <div className="border-t border-foreground pt-5">
-              <p className="text-[18px] leading-snug tracking-[-0.01em]">Still beta</p>
+              <p className="text-[18px] leading-snug tracking-[-0.01em]">Deposit limits</p>
               <p className="mt-3 text-[14px] leading-relaxed text-mute">
-                Mainnet is beta software with deposit limits. A review lowers risk. It does not remove it.
+                Mainnet has deposit limits. A review lowers risk. It does not remove it.
               </p>
             </div>
             <div className="border-t border-foreground pt-5">

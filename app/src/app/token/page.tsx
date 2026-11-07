@@ -129,7 +129,7 @@ const PHASES: Phase[] = [
     title: "Mainnet",
     items: [
       "Gloam goes live on Tempo and Robinhood Chain mainnet",
-      "Shield $GLOAM in the Robinhood Chain pool: the beta limits sit above the 500,000 supply, so they don't cap a deposit",
+      "Shield $GLOAM in the Robinhood Chain pool: the deposit limits sit above the 500,000 supply, so they don't cap a deposit",
       "Fees switch on, and half of them start buying back $GLOAM",
       "The first holder vote, held in the open",
     ],
@@ -158,7 +158,7 @@ const LIVE_USES: typeof USES = [
   RH_MAINNET
     ? {
         ...USES[2],
-        body: "The Robinhood Chain mainnet pool lists $GLOAM next to USDG. Shield it (the beta limits sit above the 500,000 supply) and your balance leaves the public record, and you can still prove it to someone when you need to.",
+        body: "The Robinhood Chain mainnet pool lists $GLOAM next to USDG. Shield it (the deposit limits sit above the 500,000 supply) and your balance leaves the public record, and you can still prove it to someone when you need to.",
         when: "Live on mainnet",
       }
     : USES[2],
@@ -190,7 +190,7 @@ const LIVE_PHASES: Phase[] = [
     done: true,
     items: [
       `Gloam live on ${liveMainnetNames()} mainnet`,
-      ...(RH_MAINNET ? ["Shield $GLOAM in the Robinhood Chain pool: the beta limits sit above the 500,000 supply, so they don't cap a deposit"] : []),
+      ...(RH_MAINNET ? ["Shield $GLOAM in the Robinhood Chain pool: the deposit limits sit above the 500,000 supply, so they don't cap a deposit"] : []),
       "Fees on: direct deposits and payments free, 0.5% on cash-outs, and half of Gloam's fees set to buy back $GLOAM",
     ],
   },

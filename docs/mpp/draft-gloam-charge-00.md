@@ -382,7 +382,7 @@ it says. At the time of writing the official pools are:
 | Tempo Moderato (testnet) | 42431 | `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` |
 | Robinhood Chain (testnet) | 46630 | `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740` |
 
-The mainnet pools are in beta: each accepts
+The mainnet pools have deposit limits: each accepts
 deposits only of the assets it lists, within per-deposit and total
 limits. Limits apply to deposits only; transfers, and so gloam
 charges, are never limited. Deposits and transfers carry no pool fee,

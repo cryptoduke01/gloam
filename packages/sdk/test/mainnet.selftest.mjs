@@ -227,7 +227,7 @@ for (const [family, chainId, key, assets, native, memo] of [
   assert(net.assets.map((a) => a.address).join() === assets.join(), `${key} assets`);
   assert(live[0].testnet === false, "mainnets come first");
   assert(poolForChainId(chainId) === filled.pool, `${key} pool by chain id`);
-  // Deposits: listed assets only, within the beta per-deposit limit, never native.
+  // Deposits: listed assets only, within the per-deposit limit, never native.
   const usd = net.assets[0];
   assertDepositAllowed(chainId, usd.address, usd.depositLimit.perDeposit);
   assertDepositAllowed(chainId, usd.address, usd.depositLimit.perDeposit + 1n); // amounts are read live, never from this table

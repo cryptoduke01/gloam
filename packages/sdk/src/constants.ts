@@ -210,7 +210,7 @@ export function cashOutFee(amount: bigint, bps: number = CASH_OUT_FEE_BPS): bigi
 export type CeremonyKind = "dev" | "production";
 
 /**
- * Beta deposit limit for one asset, in its base units, as it was at launch.
+ * Deposit limit for one asset, in its base units, as it was at launch.
  * The vault's owner changes limits through its timelock: read the current ones
  * with readDepositLimit (lib limits). The live read wins, and a live value of
  * type(uint128).max means no limit (isNoLimit).
@@ -226,7 +226,7 @@ export interface GloamAsset {
   /** Token address; the zero address (NATIVE_ASSET) for the chain's native coin. */
   address: Address;
   decimals: number;
-  /** Beta deposit limit on the payments pools (mainnet, Base Sepolia); null where none is set (the older testnets). */
+  /** Deposit limit on the payments pools (mainnet, Base Sepolia); null where none is set (the older testnets). */
   depositLimit: DepositLimit | null;
 }
 
@@ -352,7 +352,7 @@ const stableLimit: DepositLimit = { perDeposit: units(50_000n, 6), total: units(
 const sepoliaStableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
 
 /**
- * Robinhood Chain mainnet pool assets and their beta deposit limits. USDG,
+ * Robinhood Chain mainnet pool assets and their deposit limits. USDG,
  * GLOAM, PONS and CASHCAT are the limits read on chain on 2026-11-02. GRIFT
  * opens with no limit once its timelocked change lands; 0 on chain until then,
  * so the vault refuses it and assertDepositWithinLiveLimit says so.
@@ -373,7 +373,7 @@ export const RH_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "ORBIO", address: RH_MAINNET_ORBIO, decimals: 18, depositLimit: { perDeposit: units(1_000_000n, 18), total: units(10_000_000n, 18) } },
 ];
 
-/** Tempo mainnet pool assets (TIP-20, 6 decimals) and their beta deposit limits. */
+/** Tempo mainnet pool assets (TIP-20, 6 decimals) and their deposit limits. */
 export const TEMPO_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDC.e", address: TEMPO_USDCE, decimals: 6, depositLimit: stableLimit },
   { symbol: "pathUSD", address: TEMPO_PATHUSD, decimals: 6, depositLimit: stableLimit },
@@ -398,7 +398,7 @@ const sepoliaEthLimit: DepositLimit = { perDeposit: 2n * 10n ** 17n, total: unit
  */
 const bdxLimit: DepositLimit = { perDeposit: (1n << 128n) - 1n, total: (1n << 128n) - 1n };
 
-/** Base mainnet pool assets and their beta deposit limits. Native ETH is listed, then BDX. */
+/** Base mainnet pool assets and their deposit limits. Native ETH is listed, then BDX. */
 export const BASE_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDC", address: BASE_USDC, decimals: 6, depositLimit: stableLimit },
   { symbol: "EURC", address: BASE_EURC, decimals: 6, depositLimit: stableLimit },
@@ -407,7 +407,7 @@ export const BASE_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "BDX", address: BASE_BDX, decimals: 9, depositLimit: bdxLimit },
 ];
 
-/** Ethereum mainnet pool assets and their beta deposit limits: five stablecoins, ETH with Base's limit, then BDX. */
+/** Ethereum mainnet pool assets and their deposit limits: five stablecoins, ETH with Base's limit, then BDX. */
 export const ETHEREUM_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDC", address: ETHEREUM_USDC, decimals: 6, depositLimit: stableLimit },
   { symbol: "USDT", address: ETHEREUM_USDT, decimals: 6, depositLimit: stableLimit },
@@ -474,7 +474,7 @@ export interface GloamNetwork {
    */
   historyRpc: HistoryRpc | null;
   explorerUrl: string;
-  /** Assets the pool takes, with beta deposit limits on the payments pools. */
+  /** Assets the pool takes, with deposit limits on the payments pools. */
   assets: GloamAsset[];
 }
 
@@ -585,7 +585,7 @@ const MAINNETS: Partial<Record<GloamChainFamily, GloamNetwork | null>> = {
 /**
  * Base Sepolia, or null while BASE_SEPOLIA_POOL is not filled in. A testnet,
  * but on the mainnet pool: ShieldPoolPayments on the final keys, payments only,
- * the same listed assets as Base mainnet, its own beta limits, the cash-out fee.
+ * the same listed assets as Base mainnet, its own deposit limits, the cash-out fee.
  */
 const BASE_TESTNET: GloamNetwork | null = (() => {
   const p = baseSepoliaPool();
@@ -612,7 +612,7 @@ const BASE_TESTNET: GloamNetwork | null = (() => {
 /**
  * Ethereum Sepolia, or null while ETHEREUM_SEPOLIA_POOL is not filled in. A
  * testnet on the mainnet pool: ShieldPoolPayments on the final keys, payments
- * only, beta deposit limits, the cash-out fee, and its payment-message board.
+ * only, deposit limits, the cash-out fee, and its payment-message board.
  */
 const ETHEREUM_TESTNET: GloamNetwork | null = (() => {
   const p = ethereumSepoliaPool();
@@ -638,7 +638,7 @@ const ETHEREUM_TESTNET: GloamNetwork | null = (() => {
 
 /**
  * A chain's MAINNET network, or null while its pool is not in
- * this SDK version. Mainnet pools are ShieldPoolPayments: payments only, beta
+ * this SDK version. Mainnet pools are ShieldPoolPayments: payments only,
  * deposit limits, the ceremony's final keys, a 0.5% cash-out fee.
  */
 export function mainnetNetwork(family: GloamChainFamily): GloamNetwork | null {
@@ -691,7 +691,7 @@ export function isMainnetChainId(chainId: number): boolean {
 /**
  * True where the pool is ShieldPoolPayments, pool or not: every mainnet, Base
  * Sepolia and Ethereum Sepolia. Deposits there need a proof, assets are listed
- * with beta limits, a cash out pays the fee and there is no private trading.
+ * with deposit limits, a cash out pays the fee and there is no private trading.
  */
 export function isPaymentsPoolChainId(chainId: number): boolean {
   return isMainnetChainId(chainId) || chainId === BASE_SEPOLIA_CHAIN_ID || chainId === ETHEREUM_SEPOLIA_CHAIN_ID;
@@ -742,7 +742,7 @@ export function poolForChainId(chainId: number): Address {
  * explicitly) are not checked, nor are the older testnets, whose pools list
  * nothing.
  *
- * The amount is not checked here: the beta limits change through the vault's
+ * The amount is not checked here: the deposit limits change through the vault's
  * timelock, so the `depositLimit` on each asset is only a snapshot. Read
  * them live with assertDepositWithinLiveLimit (lib limits), which
  * buildShieldBoundIntent does when given a `client`. `amount` is kept so

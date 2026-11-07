@@ -2,7 +2,7 @@
 
 **Private stablecoin payments for apps and agents on Robinhood Chain, Tempo, Base and Ethereum, as a package.**
 
-Add shielded balances, private payments, and selective disclosure to any app or agent on Robinhood Chain, Tempo, Base or Ethereum. Live on all four mainnets (beta), on the trusted setup's final keys. Real zero-knowledge proofs, no proving stack to build from scratch.
+Add shielded balances, private payments, and selective disclosure to any app or agent on Robinhood Chain, Tempo, Base or Ethereum. Live on all four mainnets, on the trusted setup's final keys. Real zero-knowledge proofs, no proving stack to build from scratch.
 
 [![npm version](https://img.shields.io/npm/v/@gloamtrade/sdk?color=0B0C0E&label=npm)](https://www.npmjs.com/package/@gloamtrade/sdk)
 [![license](https://img.shields.io/npm/l/@gloamtrade/sdk?color=0B0C0E)](https://github.com/cryptoduke01/gloam/blob/main/LICENSE)
@@ -77,7 +77,7 @@ That scaffolds a Next.js app already wired to the SDK. See [create-gloam-app](ht
 
 Gloam runs on four chains, each with a mainnet and a testnet. They are separate pools of the same design, not a bridge. Robinhood Chain and Tempo mainnet are live since 21 October 2026, Base and Ethereum mainnet since 26 October 2026 (from 0.4.1).
 
-| Network | Key | Chain id | Pool | Assets (beta limit per deposit / total) | Keys |
+| Network | Key | Chain id | Pool | Assets (deposit limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- | --- |
 | Robinhood Chain | `robinhood-mainnet` | `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `94194599`) | USDG (50,000 / 2,500,000), $GLOAM (2,500,000 / 25,000,000), PONS (390,000 / 9,800,000), CASHCAT (960,000 / 24,000,000); once its timelocked limit lands: ETH (11 / 110), AI (400,000 / 4,000,000), ORBIO (1,000,000 / 10,000,000), GRIFT (no limit) | Final |
 | Tempo | `tempo-mainnet` | `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `45172561`) | USDC.e, pathUSD, USDT0, OUSD (50,000 / 2,500,000 each) | Final |
@@ -101,7 +101,7 @@ What is different on mainnet:
 
 - **Final keys.** The mainnet verifiers hold the final keys of the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`). The testnets keep the single-party dev keys. A proof made with one set never verifies against the other, so prove with `circuitArtifactUrls(circuit, chainId)`, which picks the right set for the chain.
 - **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps go through a separate router, on the mainnets listed in the [docs](https://gloam.trade/docs/private-swaps); from 0.5.0 this SDK builds them too ([Private swaps](#private-swaps)). On Robinhood Chain mainnet, stock tokens go in and out of the private balance through those swaps; this SDK does not list them as deposit assets. Robinhood Chain mainnet takes no native ETH deposit until its timelocked limit lands (below).
-- **Beta deposit limits.** 50,000 per deposit and 2,500,000 in total for each stablecoin, 20 and 1,000 for ETH on Base and Ethereum, 2,500,000 and 25,000,000 for $GLOAM. On Robinhood Chain, ETH (11 per deposit, 110 in total), AI (400,000 and 4,000,000) and ORBIO (1,000,000 and 10,000,000) opened on 3 November 2026. From 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`); the `depositLimit` on each asset holds the limit read on chain on 2 November 2026. Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
+- **Deposit limits.** 50,000 per deposit and 2,500,000 in total for each stablecoin, 20 and 1,000 for ETH on Base and Ethereum, 2,500,000 and 25,000,000 for $GLOAM. On Robinhood Chain, ETH (11 per deposit, 110 in total), AI (400,000 and 4,000,000) and ORBIO (1,000,000 and 10,000,000) opened on 3 November 2026. From 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`); the `depositLimit` on each asset holds the limit read on chain on 2 November 2026. Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
 - **Fees.** Deposits and private payments are free. A cash out costs 0.5% (0.25% until 3 November 2026): the pool keeps `cashOutFee(amount, bps)` and sends the rest. The owner can change the fee through the vault's timelock, so from 0.5.0 `readCashOutFeeBps(client, pool)` reads it live; the swap planner always does, and `buildUnshieldIntent` does when you pass `client`.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
 
@@ -111,18 +111,18 @@ The builders still default to Robinhood Chain testnet when you pass no `chainId`
 
 Base is the third chain. Base mainnet is live since 26 October 2026: from 0.4.1, `mainnetNetwork("base")` returns its vault (`0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194`, deploy block `53109632`). Base Sepolia, the testnet, is in 0.3.0: `testnetNetwork("base")` returns its vault (`0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`) and its payment-message board, and it runs the mainnet pool and final keys.
 
-| Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
+| Network | Key | Chain id | Assets (deposit limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
 | Base | `base-mainnet` | `8453` | USDC, EURC, USDT (50,000 / 2,500,000 each), ETH (20 / 1,000), BDX (no limit once its timelocked change lands) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
-Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets as Base mainnet, its own beta limits and a 0.25% cash-out fee (Base mainnet's is 0.5%), so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). The bridge (through Relay) brings USDC into Base mainnet since 26 October 2026; private swaps on Base come later.
+Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets as Base mainnet, its own deposit limits and a 0.25% cash-out fee (Base mainnet's is 0.5%), so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). The bridge (through Relay) brings USDC into Base mainnet since 26 October 2026; private swaps on Base come later.
 
 ### Ethereum
 
 Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `mainnetNetwork("ethereum")` returns its vault (`0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194`, deploy block `26276183`) and its payment-message board (`payMemoBoardFor(1)`). Its testnet is Ethereum Sepolia (below), `testnetNetwork("ethereum")`.
 
-| Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
+| Network | Key | Chain id | Assets (deposit limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
 | Ethereum | `ethereum-mainnet` | `1` | USDC, USDT, USDG, PYUSD, EURC (50,000 / 2,500,000 each), ETH (20 / 1,000), BDX (no limit once its timelocked change lands) | Final |
 
@@ -133,7 +133,7 @@ Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `m
 - The bridge (through Relay) brings USDC into Ethereum, as into Base. Private swaps there follow the next router: see the [docs](https://gloam.trade/docs/private-swaps).
 ### Ethereum Sepolia
 
-| Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
+| Network | Key | Chain id | Assets (deposit limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
 | Ethereum Sepolia | `ethereum` | `11155111` | Test USDC and EURC (Circle), test USDG and PYUSD (Paxos), 500 / 25,000 each; ETH (0.2 / 10) | Final |
 
@@ -164,7 +164,7 @@ const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const wallet = createWalletClient({ account, chain: net.chain, transport: http(net.rpcUrl) });
 // Reads at the chain head, and old logs from a full-history RPC where the network names one (net.historyRpc).
 const publicClient = createPublicClient({ chain: net.chain, transport: gloamReadTransport(net) });
-const amount = parseUnits("25", 6);           // 25 USDC.e, within the vault's beta limit (read live below)
+const amount = parseUnits("25", 6);           // 25 USDC.e, within the vault's deposit limit (read live below)
 
 // 1. Mint the note and generate the shield proof with the mainnet (final) keys.
 const intent = await buildShieldBoundIntent({
@@ -173,7 +173,7 @@ const intent = await buildShieldBoundIntent({
   asset: TEMPO_USDCE,
   amountWei: amount,
   prover: artifactProver(circuitArtifactUrls("shield", net.chainId)),
-  client: publicClient, // checks the vault's live beta limits before proving
+  client: publicClient, // checks the vault's live deposit limits before proving
 });
 
 // 2. Let the pool pull the token, then sign the resolved shieldBound(asset, amount, commitment, proof) call.
@@ -606,7 +606,7 @@ circuitArtifactUrls(circuit, chainId, base?)                // { wasm, zkey } fo
 circuitArtifactFiles(circuit, ceremony), CIRCUIT_SHA256     // relative paths and SHA-256 to check a download
 GLOAM_ARTIFACTS_URL                                         // https://www.gloam.trade/circuits
 assertDepositAllowed(chainId, asset, amount)                // listed asset, no native on mainnet (amounts: read live, below)
-readDepositLimit(client, pool, asset)                       // the vault's live beta limit: { on, perDeposit, total, deposited, room, unlimited } (0.4.2)
+readDepositLimit(client, pool, asset)                       // the vault's live deposit limit: { on, perDeposit, total, deposited, room, unlimited } (0.4.2)
 isNoLimit(value), NO_LIMIT_THRESHOLD                        // a perDeposit or total of 2^127 or more (the owner sets uint128 max) is no limit
 assertDepositWithinLiveLimit(client, chainId, asset, amount, pool?)  // refuses over the live limit; refuses nothing if the vault can't be read
 CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 50 bps on mainnet, rounded down like the pool
@@ -617,7 +617,7 @@ BASE_SEPOLIA_POOL, baseSepoliaPool()                        // the Base Sepolia 
 ETHEREUM_SEPOLIA_POOL, ethereumSepoliaPool(), ethereumSepoliaPayMemo()  // Ethereum Sepolia's pool and board (0.4.0), null until in
 RH_MAINNET_CHAIN, TEMPO_MAINNET_CHAIN, RH_TESTNET_CHAIN, TEMPO_TESTNET_CHAIN  // viem chains
 BASE_MAINNET_CHAIN, BASE_SEPOLIA_CHAIN                      // viem's Base chains, on RPCs that serve eth_getLogs
-RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS                     // assets with beta deposit limits
+RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS                     // assets with deposit limits
 BASE_MAINNET_ASSETS, BASE_SEPOLIA_ASSETS                    // Base: USDC, EURC, USDT (mainnet only), ETH
 RH_MAINNET_USDG, GLOAM_TOKEN, TEMPO_USDCE, TEMPO_USDT0, TEMPO_PATHUSD, TEMPO_OUSD
 RH_MAINNET_GRIFT, RH_MAINNET_PONS, RH_MAINNET_CASHCAT, RH_MAINNET_AI, RH_MAINNET_ORBIO  // 18 decimals each (the last four from 0.4.5)
@@ -823,7 +823,7 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 
 ## Guardrails and honesty
 
-- **Mainnet is beta.** Robinhood Chain (`4663`), Tempo (`4217`), Base (`8453`) and Ethereum (`1`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open. Kann Audits then reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues. The circuits and this SDK were not part of that review. Start small.
+- **Mainnet.** Robinhood Chain (`4663`), Tempo (`4217`), Base (`8453`) and Ethereum (`1`) run on the final keys of the 13-contributor trusted setup, with deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open. Kann Audits then reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues. The circuits and this SDK were not part of that review.
 - **A new pool has a small crowd.** Privacy depends on how many notes you hide among. On a brand new mainnet pool that crowd is thin at first, so do not treat a quick deposit and cash out of the same amount as unlinkable.
 - **Testnet runs on dev keys.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys. Base Sepolia (`84532`) and Ethereum Sepolia (`11155111`) are testnets too, but on the final keys.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.

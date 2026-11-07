@@ -64,7 +64,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Mainnet",
-            body: `Live on Robinhood Chain and Tempo since 21 October 2026, 13:00 UTC${LATER ? `, and on ${LATER} since 26 October 2026` : ""}, on the same vault, the final ceremony keys and beta deposit limits. Direct deposits and private payments are free; a cash out costs 0.5%.`,
+            body: `Live on Robinhood Chain and Tempo since 21 October 2026, 13:00 UTC${LATER ? `, and on ${LATER} since 26 October 2026` : ""}, on the same vault, the final ceremony keys and deposit limits. Direct deposits and private payments are free; a cash out costs 0.5%.`,
           },
           {
             n: "●",
@@ -74,7 +74,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Shield",
-            body: `Mainnet: USDG, $GLOAM, PONS, CASHCAT, ETH, AI and ORBIO on Robinhood Chain; USDC.e, pathUSD, USDT0 and OUSD on Tempo${BASE_LIVE ? "; USDC, EURC, USDT and ETH on Base" : ""}${ETHEREUM_LIVE ? "; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum" : ""}, under beta deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.`,
+            body: `Mainnet: USDG, $GLOAM, PONS, CASHCAT, ETH, AI and ORBIO on Robinhood Chain; USDC.e, pathUSD, USDT0 and OUSD on Tempo${BASE_LIVE ? "; USDC, EURC, USDT and ETH on Base" : ""}${ETHEREUM_LIVE ? "; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum" : ""}, under deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.`,
           },
           {
             n: "●",
@@ -149,7 +149,7 @@ export default function DocsProductPage() {
         <li>No fake “private success” screens</li>
         <li>No claims past what the contracts actually do</li>
         <li>
-          Mainnet only on the final ceremony keys, under beta limits, and
+          Mainnet only on the final ceremony keys, under deposit limits, and
           with what is still ahead said plainly
         </li>
       </ul>

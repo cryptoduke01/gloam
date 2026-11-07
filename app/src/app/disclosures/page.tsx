@@ -24,11 +24,11 @@ export default function DisclosuresPage() {
         Upgrades, admin keys, oracles, bridges, and sequencers introduce
         additional risk. Audits do not eliminate risk.
       </p>
-      <h2>Mainnet is beta</h2>
+      <h2>Mainnet</h2>
       <p>
         Since Gloam&apos;s mainnet launch on 21 October 2026, the mainnet pools
         on Robinhood Chain and Tempo have been live, and since 26 October 2026
-        the pools on Base and Ethereum. They are beta software.
+        the pools on Base and Ethereum.
         The contracts were reviewed internally before launch. Kann Audits then
         reviewed the vault contracts (<Link href="/security">report, 1 November
         2026</Link>) and found no Critical, High or Medium issues. Its findings
@@ -36,7 +36,7 @@ export default function DisclosuresPage() {
         swap routers, circuits, app and relay were not part of that review.
       </p>
       <p>
-        Deposits are capped during the beta: 50,000 per deposit and 2,500,000
+        Deposits have limits: 50,000 per deposit and 2,500,000
         in total for each stablecoin, 20 per deposit and 1,000 in total for ETH
         on Base and Ethereum, and 2,500,000 per deposit and 25,000,000 in total
         for $GLOAM. Cash outs and private payments are never limited.

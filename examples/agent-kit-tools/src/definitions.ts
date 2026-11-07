@@ -89,7 +89,7 @@ export const GLOAM_TOOL_DEFINITIONS: readonly GloamToolDefinition[] = [
     title: "Preview: add to the private balance",
     kind: "preview",
     description:
-      "Plan a deposit from the agent's wallet into its private balance (USDG on Robinhood Chain mainnet, or another asset the vault takes). The deposit is public: the wallet, the asset and the amount show on chain. Who can spend the note it makes does not. Deposits are free; the wallet pays gas. Mainnet is in beta with deposit limits." +
+      "Plan a deposit from the agent's wallet into its private balance (USDG on Robinhood Chain mainnet, or another asset the vault takes). The deposit is public: the wallet, the asset and the amount show on chain. Who can spend the note it makes does not. Deposits are free; the wallet pays gas. Mainnet has deposit limits." +
       PREVIEW_TAIL,
     inputSchema: obj({ amount: amount("How much to deposit"), asset }, ["amount"]),
   },

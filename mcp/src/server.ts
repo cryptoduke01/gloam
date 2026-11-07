@@ -2,7 +2,7 @@
  * The Gloam MCP tools.
  *
  * Gives an AI agent private payment tools across Gloam's networks: Robinhood
- * Chain and Tempo, each on mainnet (the ceremony's final keys, beta deposit
+ * Chain and Tempo, each on mainnet (the ceremony's final keys, deposit
  * limits, payments only) and testnet (dev keys). Tools take
  * a `network` (default: GLOAM_NETWORK, else Robinhood Chain testnet), and the
  * 402 payment tools settle on whatever network the price names. Private swaps
@@ -375,7 +375,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       .enum(NETWORK_KEYS)
       .default(defaultNet)
       .describe(
-        `${what} ${NETWORK_KEYS.map((k) => `"${k}"`).join(", ")}. The -mainnet ones are the mainnets (beta deposit limits); ${testnetKeys} are the testnets. Default here: "${defaultNet}".`
+        `${what} ${NETWORK_KEYS.map((k) => `"${k}"`).join(", ")}. The -mainnet ones are the mainnets (deposit limits); ${testnetKeys} are the testnets. Default here: "${defaultNet}".`
       );
   /** Old behavior: secrets in tool results and arguments. Read once; restart to change. */
   const legacy = env.GLOAM_EXPOSE_NOTE_SECRETS?.trim() === "1";
@@ -465,7 +465,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         })),
         defaultNetwork: defaultNet,
         mainnet:
-          `Mainnet is beta. Private payments on every mainnet, and private swaps where the network has a swap router (gloam_swap_quote says), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
+          `Mainnet is live. Private payments on every mainnet, and private swaps where the network has a swap router (gloam_swap_quote says), with deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
             ethNativeLimitText()
           }). Direct deposits and private payments are free; cashing out costs 0.5%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
         tools: [
@@ -584,7 +584,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const dec = decimals ?? (asset ? assetInfo(net.chainId, assetAddr).decimals : net.defaultAssetDecimals);
       const amountWei = parseUnits(String(amount), dec);
       const isNative = assetAddr.toLowerCase() === NATIVE_ASSET.toLowerCase();
-      // Mainnet pools list their assets and cap each deposit during the beta: say so before anything is reserved or signed.
+      // Mainnet pools list their assets and cap each deposit: say so before anything is reserved or signed.
       // The caps are read live from the vault (they change through its timelock); a vault that can't be read refuses nothing here.
       try {
         assertDepositAllowed(net.chainId, assetAddr, amountWei);

@@ -99,7 +99,7 @@ class GloamPlugin {
     return new GameFunction({
       name: "gloam_add_privately",
       description:
-        "Move money from the agent's wallet into its private balance. The deposit is public (wallet, asset and amount show); what the agent does with the money afterwards is private. Each deposit is capped during the beta: 50,000 of a stablecoin on mainnet, 500 on Base Sepolia.",
+        "Move money from the agent's wallet into its private balance. The deposit is public (wallet, asset and amount show); what the agent does with the money afterwards is private. Each deposit is capped: 50,000 of a stablecoin on mainnet, 500 on Base Sepolia.",
       args: [
         { name: "amount", description: "How much, in the asset's units, for example 25.", type: "string" },
         { name: "asset", description: "The asset symbol, for example USDC on Base or USDG on Robinhood Chain. Default: the network's first asset.", type: "string", optional: true },

@@ -193,7 +193,7 @@ export function Footer() {
             <p className="text-[12.5px] text-mute">
               © {year} Gloam.{" "}
               <MainnetCopy
-                live="Beta software."
+                live="Live on mainnet."
                 before="Testnet software."
               />{" "}
               Not investment, legal or tax advice.

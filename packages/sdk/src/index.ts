@@ -40,9 +40,9 @@
  *   commerce  pay privately and put a receipt leaf in a merkle root you publish;
  *             the calls an agent signs, for a signing allowlist
  *   constants pool + verifier addresses, chain ids, networks (mainnet and
- *             testnet), assets + launch beta limits, cash-out fee and recipient
+ *             testnet), assets + launch deposit limits, cash-out fee and recipient
  *             check, circuit files
- *   limits    the vault's beta deposit limits, read live
+ *   limits    the vault's deposit limits, read live
  *   mainnet   MAINNET_POOLS, BASE_SEPOLIA_POOL and ETHEREUM_SEPOLIA_POOL, the
  *             one place those pool addresses live
  *

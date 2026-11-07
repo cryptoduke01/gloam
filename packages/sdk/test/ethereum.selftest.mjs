@@ -5,7 +5,7 @@
  * MAINNET_POOLS[1]. This file checks that state, then runs itself again in a
  * child process with a placeholder pool put in before the SDK loads, so the
  * rest of the SDK can be checked against it: the final keys, payments only, the
- * five listed stablecoins and ETH with their beta limits, no testnet, and no
+ * five listed stablecoins and ETH with their deposit limits, no testnet, and no
  * memo board until the real deploy fills one in next to the vault. USDT's
  * approve rule is checked in both.
  *

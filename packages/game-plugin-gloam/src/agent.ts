@@ -965,7 +965,7 @@ export class GloamAgent {
         chainId: this.network.chainId,
         poolAddress: this.network.pool,
         prover: await this.prover("shield"),
-        // the vault's live beta limits, checked before proving (they change through its timelock)
+        // the vault's live deposit limits, checked before proving (they change through its timelock)
         client: this.publicClient,
       });
       held = this.keep(

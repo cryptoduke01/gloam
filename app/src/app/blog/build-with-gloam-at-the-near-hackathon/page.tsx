@@ -150,7 +150,7 @@ export default function BuildWithGloamAtTheNearHackathonPost() {
         </li>
         <li>
           Private payments are free. Cash outs carry a 0.5% fee on mainnet, and
-          deposits have beta limits.
+          deposit limits apply.
         </li>
         <li>
           You can try everything first on <Link href="/docs/testnet">testnet</Link>.

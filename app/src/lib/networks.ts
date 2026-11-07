@@ -97,7 +97,7 @@ export interface GloamNetwork {
   stocks: boolean;
   /**
    * The pool is ShieldPoolPayments, the mainnet contract: it takes only the
-   * assets it lists, each with a beta deposit limit, a cash out pays the fee,
+   * assets it lists, each with a deposit limit, a cash out pays the fee,
    * and there is no private trade. Every mainnet, and Base Sepolia, which runs
    * the mainnet pool with test funds. The older testnets (Robinhood Chain and
    * Tempo) run ShieldPoolPoseidon: anything can go in, no limits, no fee.
@@ -352,7 +352,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
   },
   // Base Sepolia: the testnet for Base, with test funds but the
   // mainnet pool (ShieldPoolPayments on the ceremony's final keys, payments
-  // only, the same assets as Base mainnet, its own beta deposit limits, the
+  // only, the same assets as Base mainnet, its own deposit limits, the
   // cash-out fee), so Base mainnet ships on code proven here. Pool from BASE_SEPOLIA_POOL
   // (lib/mainnet.ts), deployed 2026-10-24.
   base: {
@@ -381,7 +381,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerAddress: (addr) => `${baseTestnet.blockExplorers.default.url}/address/${addr}`,
   },
   // Ethereum Sepolia: Ethereum's testnet, run like Base Sepolia on the mainnet
-  // pool (ShieldPoolPayments on the ceremony's final keys, payments only, beta
+  // pool (ShieldPoolPayments on the ceremony's final keys, payments only,
   // deposit limits, the cash-out fee). Hidden until
   // ETHEREUM_SEPOLIA_POOL (lib/mainnet.ts) is filled in after its deploy.
   ethereum: {
@@ -412,7 +412,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerAddress: (addr) => `${ethereumTestnet.blockExplorers.default.url}/address/${addr}`,
   },
   // Mainnet: ShieldPoolPayments with the ceremony's final keys, payments only
-  // (no sealed swap), beta deposit limits on, and a payment-memo board (payMemo).
+  // (no sealed swap), deposit limits on, and a payment-memo board (payMemo).
   "robinhood-mainnet": {
     key: "robinhood-mainnet",
     label: "Robinhood Chain",

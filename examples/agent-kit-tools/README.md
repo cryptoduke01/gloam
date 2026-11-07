@@ -100,8 +100,8 @@ then, run it from this repo.
 | `gloam_execute` | execute | Run a preview by its `previewId` (and `digest`) | What the preview said |
 | `gloam_verify_proof` | read | Check a `gloamfunds1:` or `gloampay1:` proof against the chain | Nothing |
 
-Deposits and private payments are free; a cash out costs 0.5%. Mainnet is in
-beta, with deposit limits (50,000 of a stablecoin per deposit).
+Deposits and private payments are free; a cash out costs 0.5%. Mainnet has
+deposit limits (50,000 of a stablecoin per deposit).
 
 ## Preview, then execute
 
@@ -365,7 +365,7 @@ Cash the swept notes out with the pack's `gloam_preview_cash_out`, or in the
 
 ## What is public, and what was reviewed
 
-Robinhood Chain, Tempo, Base and Ethereum mainnets are live in beta with
+Robinhood Chain, Tempo, Base and Ethereum mainnets are live with
 deposit limits. A deposit and a cash out are public (wallet or recipient, asset,
 amount); a private payment shows only that a shielded transfer happened.
 Privacy grows with the number of notes in a vault, so a quick deposit and cash

@@ -29,7 +29,7 @@ export default function WhitepaperPage() {
         { label: "Networks", value: `Mainnet ${MAINNET_IDS}; testnet 46630 · 42431 · 84532 · 11155111` },
         { label: "Live", value: "Shield · pay · payroll · proofs · swaps" },
         { label: "Private swaps", value: "Mainnet; amounts public" },
-        { label: "Mainnet", value: "Live since 21 Oct 2026, beta" },
+        { label: "Mainnet", value: "Live since 21 Oct 2026" },
       ]}
       quickLinks={[
         { href: "/docs", label: "Documentation" },
@@ -151,7 +151,7 @@ export default function WhitepaperPage() {
           <strong>Mainnet only when ready.</strong> Production capital
           requires production ceremonies, reviews, and operational maturity.
           Mainnet opened on the final ceremony keys, after an internal review,
-          with beta deposit limits.
+          with deposit limits.
         </li>
       </ul>
 
@@ -343,7 +343,7 @@ export default function WhitepaperPage() {
           {
             n: "2",
             title: "Shield",
-            body: "Deposit USDG or $GLOAM (Robinhood Chain); USDC.e, pathUSD, USDT0 or OUSD (Tempo); USDC, EURC, USDT or ETH (Base); or USDC, USDT, USDG, PYUSD, EURC or ETH (Ethereum), into the vault, under beta limits. The Robinhood Chain testnet also takes ETH and faucet stocks.",
+            body: "Deposit USDG or $GLOAM (Robinhood Chain); USDC.e, pathUSD, USDT0 or OUSD (Tempo); USDC, EURC, USDT or ETH (Base); or USDC, USDT, USDG, PYUSD, EURC or ETH (Ethereum), into the vault, under deposit limits. The Robinhood Chain testnet also takes ETH and faucet stocks.",
           },
           {
             n: "3",
@@ -622,11 +622,11 @@ export default function WhitepaperPage() {
       <h2 id="roadmap">11. Roadmap</h2>
       <ol>
         <li>
-          <strong>Live on mainnet (beta):</strong> Robinhood Chain and Tempo
+          <strong>Live on mainnet:</strong> Robinhood Chain and Tempo
           since 21 October 2026, Base and Ethereum since 26 October 2026, all
           on the same vault and the final ceremony keys: proof-bound
           shield, unshield, private send, the Gloam relay, payroll, proofs of
-          funds, payment, and payroll totals, private agent payments, beta
+          funds, payment, and payroll totals, private agent payments,
           deposit limits, and pools with no admin withdraw and timelocked rule
           changes. Private swaps from the private balance run on Robinhood
           Chain and Tempo, through a router per chain, and on Robinhood Chain
@@ -661,7 +661,7 @@ export default function WhitepaperPage() {
       <h2 id="risks">12. Risks and limitations</h2>
       <ul>
         <li>
-          Beta software on mainnet; beta deposit limits cap
+          On mainnet, deposit limits cap
           what the pools take
         </li>
         <li>
@@ -700,7 +700,7 @@ export default function WhitepaperPage() {
 
       <h2 id="non-claims">13. Explicit non-claims</h2>
       <p>
-        Gloam is live on mainnet as beta software. It does not claim a full
+        Gloam is live on mainnet. It does not claim a full
         external audit (the Kann Audits review covers the vault contracts only),
         insurance of funds, legal immunity, or invisibility
         from investigation. Nothing in
@@ -715,7 +715,7 @@ export default function WhitepaperPage() {
         exactly what is needed, without printing every private calculation to
         the street.
       </p>
-      <div className="t-label pt-4">gloam.trade · mainnet beta · hello@gloam.trade · @gloamtrade</div>
+      <div className="t-label pt-4">gloam.trade · live on mainnet · hello@gloam.trade · @gloamtrade</div>
     </DocsLayout>
   );
 }

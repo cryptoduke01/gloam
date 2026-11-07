@@ -1,5 +1,5 @@
 /**
- * Live beta deposit limits self-test.
+ * Live deposit limits self-test.
  *
  * The vault's limits change through its timelock, so the SDK reads them from
  * the vault: depositLimitsOn(), depositLimit(asset) and deposited(asset). A

@@ -529,7 +529,7 @@ export function VaultSwapView() {
   const priceError = shownPlan ? null : quoteError;
   const waitingQuote = Boolean(quoteKey) && !shownPlan && !priceError;
 
-  // The vault's beta deposit limits apply to what lands. A token it has no
+  // The vault's deposit limits apply to what lands. A token it has no
   // limit for at all is one it doesn't take yet.
   const vaultClosed = Boolean(limit && limit[0] === 0n && limit[1] === 0n);
   const room = limit && typeof inVault === "bigint" ? depositRoom({ perDeposit: limit[0], total: limit[1], deposited: inVault }) : null;
