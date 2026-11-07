@@ -11,7 +11,7 @@ import { GLOAM_OWNER, GLOAM_RELAYERS, GLOAM_TREASURY, MAINNET_POSEIDON_T3 } from
 export const metadata: Metadata = {
   title: "Networks",
   description:
-    "Gloam runs one private core on four mainnets, Robinhood Chain, Tempo, Base and Ethereum, each with a testnet. Chain IDs, RPCs, pools, assets, beta limits, and the integration details for each chain.",
+    "Gloam runs one private core on four mainnets, Robinhood Chain, Tempo, Base and Ethereum, each with a testnet. Chain IDs, RPCs, pools, assets, deposit limits, and the integration details for each chain.",
 };
 
 /** A mainnet pool address, or a placeholder until it is filled in on deploy day. */
@@ -80,7 +80,7 @@ export default function DocsNetworksPage() {
       <p>
         Gloam went live on Robinhood Chain and Tempo mainnet on 21 October 2026,
         13:00 UTC, and on Base and Ethereum mainnet on 26 October 2026. The
-        vault has the same address on all four. This is beta software. The mainnet pools
+        vault has the same address on all four. The mainnet pools
         (<code>ShieldPoolPayments</code>) take shield, private send, cash out
         and proofs, and have no swap code.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link>{" "}
@@ -218,7 +218,7 @@ export default function DocsNetworksPage() {
         </table>
       </div>
 
-      <h3>Assets and beta limits</h3>
+      <h3>Assets and deposit limits</h3>
       <div className="overflow-x-auto">
         <table>
           <thead>
@@ -287,7 +287,7 @@ export default function DocsNetworksPage() {
       </div>
       <ul>
         <li>
-          <strong>Beta deposit limits.</strong> Each stablecoin: 50,000 per
+          <strong>Deposit limits.</strong> Each stablecoin: 50,000 per
           deposit and 2,500,000 in total. ETH on Base and Ethereum: 20 per
           deposit and 1,000 in total. $GLOAM: 2,500,000 per deposit and
           25,000,000 in total. PONS: 390,000 and 9,800,000. CASHCAT: 960,000 and
@@ -378,7 +378,7 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Mainnet assets</strong>, USDG, $GLOAM, PONS and CASHCAT to add
-          privately, with beta limits of 390,000 PONS per deposit and 9,800,000 in
+          privately, with deposit limits of 390,000 PONS per deposit and 9,800,000 in
           total, and 960,000 CASHCAT per deposit and 24,000,000 in total, the limits
           live now. Stock tokens, WETH and the other swap tokens come in through a
           private swap.
@@ -522,12 +522,12 @@ export default function DocsNetworksPage() {
       <p>
         Base is an Ethereum L2 (OP Stack) where a lot of USDC already moves.
         Gloam on Base is the same vault as on the other mainnets:{" "}
-        <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
+        <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys,
         deposit limits and the 0.5% cash-out fee. Base Sepolia, the testnet,
         went live on 24 October 2026 and Base mainnet on 26 October 2026, on
         the same code.{" "}
         {BASE_MAINNET_LIVE
-          ? "Both are live: Base mainnet is beta software, Base Sepolia is its testnet."
+          ? "Both are live: Base mainnet, and Base Sepolia as its testnet."
           : BASE_SEPOLIA_LIVE
             ? "Base Sepolia is live as a testnet. Base mainnet is not deployed yet, so the app does not offer it."
             : "Neither is deployed yet, so the app does not offer Base. This section is what to expect."}
@@ -582,11 +582,11 @@ export default function DocsNetworksPage() {
           not on Robinhood Chain mainnet)
         </li>
         <li>
-          <strong>Beta limits on Base mainnet</strong>, each stablecoin 50,000
+          <strong>Deposit limits on Base mainnet</strong>, each stablecoin 50,000
           per deposit and 2,500,000 in total; ETH 20 per deposit and 1,000 in total
         </li>
         <li>
-          <strong>Beta limits on Base Sepolia</strong>, each stablecoin 500 per
+          <strong>Deposit limits on Base Sepolia</strong>, each stablecoin 500 per
           deposit and 25,000 in total; ETH 0.2 per deposit and 10 in total
         </li>
         <li>
@@ -633,11 +633,11 @@ export default function DocsNetworksPage() {
       <h2 id="ethereum">Ethereum</h2>
       <p>
         Gloam on Ethereum mainnet is the same vault as on the other mainnets:{" "}
-        <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
+        <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys,
         deposit limits and the 0.5% cash-out fee. Its testnet is
         Ethereum Sepolia, below, on the same contract and keys.{" "}
         {ETHEREUM_LIVE
-          ? "Ethereum mainnet is live as beta software."
+          ? "Ethereum mainnet is live."
           : "It is not deployed yet, so the app does not offer it. This section is what to expect."}
       </p>
       <ul>
@@ -660,7 +660,7 @@ export default function DocsNetworksPage() {
           Tether&apos;s, USDG and PYUSD are issued by Paxos.
         </li>
         <li>
-          <strong>Beta limits</strong>, each stablecoin 50,000 per deposit and
+          <strong>Deposit limits</strong>, each stablecoin 50,000 per deposit and
           2,500,000 in total; ETH 20 per deposit and 1,000 in total
         </li>
         <li>
@@ -715,7 +715,7 @@ export default function DocsNetworksPage() {
       <p>
         Ethereum Sepolia is Ethereum&apos;s testnet. Gloam runs it like Base
         Sepolia: the mainnet vault (<code>ShieldPoolPayments</code>, the
-        ceremony&apos;s final keys, beta deposit limits and the 0.25% cash-out
+        ceremony&apos;s final keys, deposit limits and the 0.25% cash-out
         fee), deployed from the same address and nonce as the other chains,
         so the vault sits at the same address.{" "}
         {ETHEREUM_SEPOLIA
@@ -753,7 +753,7 @@ export default function DocsNetworksPage() {
           Faucets are in the <Link href="/docs/testnet#ethereum">testnet guide</Link>.
         </li>
         <li>
-          <strong>Beta limits</strong>, each stablecoin 500 per deposit and
+          <strong>Deposit limits</strong>, each stablecoin 500 per deposit and
           25,000 in total; ETH 0.2 per deposit and 10 in total
         </li>
       </ul>
@@ -797,9 +797,9 @@ export default function DocsNetworksPage() {
 
       <h2>Honest status</h2>
       <p>
-        Mainnet on all four chains is beta software. It uses
+        Mainnet is live on all four chains. It uses
         the final keys from the multi-party ceremony that closed on 17 October
-        with 13 contributors, and beta deposit limits cap what the pools take.
+        with 13 contributors, and deposit limits cap what the pools take.
         The code was reviewed internally before launch; that review finished on
         20 October with no Critical or High findings open. Kann Audits then
         reviewed the vault contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High

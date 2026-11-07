@@ -78,7 +78,7 @@ export default function DocsPayrollPage() {
           <strong>Add it privately.</strong> In{" "}
           <AppLink href="/app/vault?tab=shield">Vault, Shield</AppLink>, move the
           total you want to pay into your private balance. On testnet, one
-          deposit that covers the whole run is simplest. On mainnet, beta limits
+          deposit that covers the whole run is simplest. On mainnet, deposit limits
           allow 50,000 per deposit (and 2,500,000 in total for each stablecoin), so
           fund a bigger run with several deposits. Payments themselves are never
           limited.

@@ -1213,7 +1213,7 @@ export function refundAmountFor(amount: bigint, feeBps?: number): bigint {
   return amount - vaultFeeOf(amount, feeBps) - amount / 1_000n;
 }
 
-/** One asset's beta deposit limits in the vault, and what it holds of it now. */
+/** One asset's deposit limits in the vault, and what it holds of it now. */
 export type VaultRoom = { perDeposit: bigint; total: bigint; deposited: bigint };
 
 /** The most one deposit of the asset can bring in right now: 0 when the vault doesn't take it or is full. */

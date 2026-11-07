@@ -179,7 +179,7 @@ export const RH_MAINNET_SWAP_TOKENS: OnchainToken[] = [
 
 /**
  * Tempo mainnet (4217): the four TIP-20 stablecoins the mainnet pool lists, 6
- * decimals each. Beta limits: 50,000 per deposit / 2,500,000 in total for each.
+ * decimals each. Deposit limits: 50,000 per deposit / 2,500,000 in total for each.
  */
 export const TEMPO_MAINNET_TOKENS: OnchainToken[] = [
   { id: "usdce", symbol: "USDC.e", name: "Bridged USDC", address: "0x20c000000000000000000000b9537d11c60e8b50", decimals: 6, yahoo: "", kind: "stablecoin" },
@@ -213,7 +213,7 @@ const BDX: OnchainToken = {
  * Base mainnet (8453): the stablecoins the mainnet pool lists, 6 decimals each,
  * checked on chain 2026-10-24. USDC and EURC are Circle's own (Circle can
  * blacklist an address); USDT is Tether bridged from Ethereum over Base's
- * standard bridge. Native ETH is listed too (supportsNativeShield). Beta limits:
+ * standard bridge. Native ETH is listed too (supportsNativeShield). Deposit limits:
  * 50,000 per deposit / 2,500,000 in total for each stablecoin, 20 / 1,000 ETH. Then BDX,
  * taken once its limit lands.
  */
@@ -226,7 +226,7 @@ export const BASE_MAINNET_TOKENS: OnchainToken[] = [
 
 /**
  * Base Sepolia (84532): Circle's test USDC and EURC (faucet.circle.com), 6
- * decimals, checked on chain 2026-10-24. Beta limits: 500 per deposit / 25,000 in
+ * decimals, checked on chain 2026-10-24. Deposit limits: 500 per deposit / 25,000 in
  * total for each, 0.2 / 10 ETH. There is no USDT on Base Sepolia to list.
  */
 export const BASE_SEPOLIA_TOKENS: OnchainToken[] = [
@@ -240,7 +240,7 @@ export const BASE_SEPOLIA_TOKENS: OnchainToken[] = [
  * Circle's, USDT is Tether's, USDG and PYUSD are Paxos's (PYUSD for PayPal); every
  * issuer can freeze an address. USDT's approve() and transfer() return nothing,
  * and approve() refuses to change one non-zero allowance into another. Native ETH
- * is listed too (supportsNativeShield). Beta limits: 50,000 per deposit / 2,500,000 in
+ * is listed too (supportsNativeShield). Deposit limits: 50,000 per deposit / 2,500,000 in
  * total for each stablecoin, 20 / 1,000 ETH. Then BDX (9 decimals), taken once its
  * limit lands.
  */

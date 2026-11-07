@@ -783,8 +783,8 @@ fieldToBytes32(field: bigint | string): Hex`}</code>
       <p>
         Mainnet (<code>4663</code>, <code>4217</code>
         {mainnetPool(8453) ? <>, <code>8453</code></> : null}
-        {mainnetPool(1) ? <>, <code>1</code></> : null}) is beta software,
-        on the final ceremony keys, with beta deposit limits and a
+        {mainnetPool(1) ? <>, <code>1</code></> : null}) runs
+        on the final ceremony keys, with deposit limits and a
         0.5% cash-out fee. The Robinhood Chain and Tempo testnets (
         <code>46630</code>, <code>42431</code>) run on dev-ceremony keys with
         test funds; Base Sepolia (<code>84532</code>) and Ethereum Sepolia (

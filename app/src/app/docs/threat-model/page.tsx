@@ -91,7 +91,7 @@ export default function DocsThreatModelPage() {
       title="Threat model"
       lede="Who we defend against, what each of them can and cannot do, what we assume, and the gaps we know about. Written for security researchers. If you just want to know what an explorer shows, start with What stays private."
       glance={[
-        { label: "Network", value: "Mainnet, in beta" },
+        { label: "Network", value: "Live on mainnet" },
         { label: "Bounty", value: "None yet, credit by name" },
         { label: "Report to", value: "hello@gloam.trade" },
         { label: "Fork tests", value: "Welcome" },
@@ -244,7 +244,7 @@ export default function DocsThreatModelPage() {
       </p>
       <p>
         <strong>Limits and blocks.</strong> The new note and the refund note are deposits,
-        so the beta deposit limits apply. If the vault is full for that token, a refund
+        so the deposit limits apply. If the vault is full for that token, a refund
         waits at the escrow until there is room. The app shows it as held, outside the
         balance, and keeps trying on each sync. If a token issuer blocks the treasury,
         what it cannot take stays in the router; it never stops a swap or a refund.
@@ -339,8 +339,8 @@ export default function DocsThreatModelPage() {
       <h2 id="gaps">Known gaps</h2>
       <ul>
         <li>
-          <strong>Beta software.</strong> Mainnet is new. Beta deposit
-          limits cap what each pool can take while it is young.
+          <strong>Deposit limits.</strong> Mainnet is new. Deposit limits
+          cap what each pool can take while it is young.
         </li>
         <li>
           <strong>External review covers the vault only.</strong> Kann Audits reviewed the vault

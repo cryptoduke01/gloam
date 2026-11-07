@@ -7,7 +7,7 @@
  * relay, the MCP server, Glim and proofs all act as if it does not exist.
  *
  * BASE_SEPOLIA_POOL is the same for Base Sepolia, Base's testnet: it
- * runs the mainnet pool (ShieldPoolPayments, final keys, beta limits) with test
+ * runs the mainnet pool (ShieldPoolPayments, final keys, deposit limits) with test
  * funds, so it is filled in the same way after its deploy (DEPLOY-BASE.md) and
  * hidden until then.
  *

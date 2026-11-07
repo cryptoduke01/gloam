@@ -246,7 +246,7 @@ export default function DocsPrivateSwapsPage() {
         nothing moves.
       </p>
       <p>
-        Beta deposit limits apply to what lands, because the new note is a
+        Deposit limits apply to what lands, because the new note is a
         deposit. One swap brings in at most 50,000 of a stablecoin, or 2,500,000
         $GLOAM, and only while the vault has room under its total.
         {V2 &&

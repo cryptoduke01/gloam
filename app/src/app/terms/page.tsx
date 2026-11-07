@@ -20,7 +20,7 @@ export default function TermsPage() {
       <p>
         Gloam runs on mainnet and on testnets. On mainnet (Robinhood Chain and
         Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) you use
-        real assets, and you can lose them. Mainnet is beta software: deposits
+        real assets, and you can lose them. On mainnet, deposits
         have limits, a cash out costs 0.5% of its amount, and the contracts
         were reviewed internally before launch. Kann Audits then reviewed the
         vault contracts (<Link href="/security">report, 1 November 2026</Link>)
@@ -44,7 +44,7 @@ export default function TermsPage() {
       </p>
       <h2>2. Experimental software</h2>
       <p>
-        Gloam is early-stage, beta software for interacting with blockchain
+        Gloam is early-stage software for interacting with blockchain
         networks, including Robinhood Chain, Tempo, Base and Ethereum. Features
         such as private balances, private payments, payroll, proofs and
         private swaps may be incomplete, unavailable, or change without notice. Stock tokens are on

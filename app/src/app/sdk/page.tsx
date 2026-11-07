@@ -568,8 +568,8 @@ export default function SdkPage() {
             <div className="grid grid-cols-1 gap-10 sm:grid-cols-3">
               {[
                 {
-                  title: "Mainnet, in beta",
-                  body: `Live on ${liveMainnetNames()} mainnet, under beta deposit limits. The testnets stay open.`,
+                  title: "Live on mainnet",
+                  body: `Live on ${liveMainnetNames()} mainnet, under deposit limits. The testnets stay open.`,
                 },
                 {
                   title: "Keys",

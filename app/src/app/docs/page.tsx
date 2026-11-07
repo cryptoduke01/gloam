@@ -41,8 +41,8 @@ export default function DocsOverviewPage() {
         <Link href="/docs/compare">how Gloam compares</Link>.
       </p>
       <p>
-        Mainnet is <strong>beta software</strong>. It uses
-        the final keys from a 13-contributor trusted setup, and beta deposit
+        Mainnet is <strong>live</strong>. It uses
+        the final keys from a 13-contributor trusted setup, and deposit
         limits cap what goes in. The code was reviewed internally before
         launch, and Kann Audits has since reviewed the vault contracts (
         <Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. Deposits and private payments are
@@ -102,7 +102,7 @@ export default function DocsOverviewPage() {
       <ul>
         <li>Connect wallet, portfolio, markets</li>
         <li>
-          Mainnet on {MAINNETS}, with the final ceremony keys and beta deposit
+          Mainnet on {MAINNETS}, with the final ceremony keys and deposit
           limits
         </li>
         <li>

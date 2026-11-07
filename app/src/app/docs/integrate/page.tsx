@@ -462,7 +462,7 @@ export async function verifyGloamCashout(args: {
         </li>
         <li>Deposits and private payments are free. A cash out costs 0.5%.</li>
         <li>
-          Mainnets: Robinhood Chain, Tempo, Base and Ethereum, in beta with
+          Mainnets: Robinhood Chain, Tempo, Base and Ethereum, with
           deposit limits (50,000 of a stablecoin per deposit). Every network
           has a testnet; see <Link href="/docs/chain">Networks</Link>.
         </li>

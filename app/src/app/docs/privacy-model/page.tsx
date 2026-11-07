@@ -421,8 +421,7 @@ export default function DocsPrivacyPage() {
 
       <h2>Before you use mainnet</h2>
       <p>
-        Mainnet is beta software. These are the honest gaps
-        to know about first:
+        These are the honest gaps to know about first:
       </p>
       <ul>
         <li>
@@ -438,7 +437,7 @@ export default function DocsPrivacyPage() {
           The swap routers, circuits, app and relay were not part of it. Before
           that came several internal rounds, with fixes deployed, and a review
           before launch that finished on 20 October with no Critical or High
-          findings open. Beta deposit limits cap how much each pool can hold: 50,000 per
+          findings open. Deposit limits cap how much each pool can hold: 50,000 per
           deposit and 2,500,000 in total for each stablecoin, and 2,500,000 per
           deposit and 25,000,000 in total for $GLOAM.
         </li>

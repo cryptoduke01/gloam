@@ -369,7 +369,7 @@ export function AppShell({
               {!networkSettled
                 ? "Gloam. Not investment, legal or tax advice."
                 : !network.testnet
-                ? `Gloam on ${network.label} mainnet. Beta software. Not investment, legal or tax advice.`
+                ? `Gloam on ${network.label} mainnet. Not investment, legal or tax advice.`
                 : isTempo
                   ? "Gloam on Tempo testnet. Private stablecoin payments for people and agents."
                   : `Gloam on ${network.label} testnet. Not investment, legal or tax advice.`}

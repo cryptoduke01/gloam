@@ -623,7 +623,7 @@ await test("mainnet live: Glim says so, still never another date, and its facts 
   const post = systemPrompt({ persona: "Glim", testingOpen: false, admins: [], mainnetLive: true });
   assert.ok(pre.includes("Never say or hint that the app is live on mainnet"));
   assert.ok(!post.includes("Never say or hint that the app is live on mainnet"));
-  assert.ok(post.includes("Gloam is live on four mainnets, on Robinhood Chain and Tempo since Wednesday 21 October, 13:00 UTC, and on Base and Ethereum since 26 October, with beta deposit limits."), "the live mainnet rule");
+  assert.ok(post.includes("Gloam is live on four mainnets, on Robinhood Chain and Tempo since Wednesday 21 October, 13:00 UTC, and on Base and Ethereum since 26 October, with deposit limits."), "the live mainnet rule");
   const team = teamSystemPrompt({ persona: "Glim", testingOpen: false, admins: [], mainnetLive: true });
   assert.ok(team.includes("drafts included") && !team.includes("testnet only)"));
 

@@ -125,7 +125,7 @@ npm install snarkjs   # optional peer, for proving`}</code>
           <code>TEMPO_OUSD</code>.
         </li>
         <li>
-          Beta deposit limits: 50,000 per deposit and 2,500,000 in total for
+          Deposit limits: 50,000 per deposit and 2,500,000 in total for
           each stablecoin; $GLOAM 2,500,000 per deposit and 25,000,000 in total.
           Each network&apos;s <code>assets</code> carry a snapshot in{" "}
           <code>depositLimit</code>; <code>readDepositLimit</code> reads the
@@ -179,7 +179,7 @@ const intent = await buildShieldBoundIntent({
   chainId: net.chainId,
   poolAddress: net.pool,
   asset: TEMPO_USDCE,
-  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); beta cap is 50,000 per deposit
+  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); the limit is 50,000 per deposit
   prover: artifactProver(circuitArtifactUrls("shield", net.chainId)),
 });
 
@@ -435,7 +435,7 @@ for (const p of payments) {
 
       <h2>Guardrails</h2>
       <p>
-        Mainnet ({MAINNET_IDS}) is beta software: final ceremony keys, beta
+        Mainnet ({MAINNET_IDS}) runs on the final ceremony keys, with
         deposit limits, a 0.5% cash-out fee. It was reviewed internally before
         launch, and Kann Audits has since reviewed the vault contracts (
         <Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The SDK was

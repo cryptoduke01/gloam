@@ -19,8 +19,8 @@ export default function PrivacyPage() {
       <h2>1. Mainnet and testnet</h2>
       <p>
         Gloam runs on two kinds of network. On mainnet (Robinhood Chain and
-        Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) it is
-        beta software, with deposit limits, and it was
+        Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) it has
+        deposit limits, and it was
         reviewed internally before launch. Kann Audits then reviewed the vault
         contracts (<Link href="/security">report, 1 November 2026</Link>) and
         found no Critical, High or Medium issues. On

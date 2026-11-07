@@ -713,8 +713,8 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
         ceremony; testnet runs on dev-ceremony keys. The code was reviewed
         internally before launch, and Kann Audits reviewed the vault contracts
         (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The SDK
-        and the MCP server were not part of that review. Mainnet is
-        beta software, so start an agent on small limits.
+        and the MCP server were not part of that review. Start an agent on
+        small limits and raise them as you go.
       </p>
     </DocsLayout>
   );

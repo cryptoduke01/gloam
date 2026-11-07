@@ -530,7 +530,7 @@ export function TimelineArt() {
 export function ChecklistArt() {
   const items: [string, boolean][] = [
     ["Final keys", true],
-    ["Beta limits", true],
+    ["Deposit limits", true],
     ["Internal review", true],
     ["Multisig owner", false],
   ];
